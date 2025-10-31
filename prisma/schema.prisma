@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//enums
+enum EmployeeRoleName {
+  MANAGER
+  WORKER
+  INTERN
+}
+
+enum ContactMethod {
+  WHATSAPP
+  EMAIL
+  IMO
+  TELEGRAM
+}
+
+enum SupplierRoleName {
+  SALES_MAN
+  OWNER
+  DISTRIBUTOR
+  DEALER
+  WHOLESALER
+  RETAILER
+  MANUFACTURER
+  IMPORTER
+  REPRESENTATIVE
+}
+
+enum SupplyType {
+  MEDICINE
+  FEED
+  HUSK
+  HARDWARE
+  MEDICAL_EQUIPMENT
+  LAB_EQUIPMENT
+  OFFICE_SUPPLIES
+  CLEANING_SUPPLIES
+  IT_HARDWARE
+  SOFTWARE
+  IT_EQUEPMENT
+  INTERNET
+  ELECTRICAL_EQUIPMENT
+  OTHER
+}
+
+enum TransactionType {
+  PURCHASE
+  SALE
+  RETURN
+  ADJUSTMENT
+  DAMAGE
+}
+
+enum SoldItemType {
+  BIRDS
+  LITTER
+}
+
+enum Unit {
+  PER_BIRD
+  PER_KG
+  PER_LITER
+  PER_BAG
+  PER_BOX
+  PER_UNIT
+  OTHER
+}
+
+enum ExpensesCategory {
+  FEED
+  MEDICINE
+  SALARY
+  UTILITIES
+  MAINTENANCE
+  TRANSPORTATION
+  HARDWARE
+  ELEXTRICITY
+  WATER
+  HUSK
+  OTHER
+}
+
+enum TimePeriod {
+  MORNING
+  NOON
+  AFTERNOON
+  EVENING
+  NIGHT
+  MIDNIGHT
+  LATENIGHT
+}
+
+enum BirdBreed {
+  CLASSIC
+    HIBREED
+    PAKISTHANI
+    KEDERNATH
+    FAOMI
+    TIGER
+}
+
+//models
+model Employee {
+  id             String           @id @default(uuid())
+  email          String?           @unique
+  name           String
+  mobile         String
+  address        String?
+  online_contact ContactMethod[]
+  salary         Float?
+  join_date      DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+  rating         Float?           @default(0)
+  role           EmployeeRoleName
+  avatar_id      String?          @unique
+  avatar         Images?          @relation(fields: [avatar_id], references: [id])
+}
+
+model Admin {
+  id     String @id @default(uuid())
+  email  String @unique
+  name   String
+  mobile String
+
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @updatedAt
+  avatar_id   String?       @unique
+  avatar      Images?       @relation(fields: [avatar_id], references: [id])
+  Vaccination Vaccination[]
+  Medications Medications[]
+}
+
+model Customer {
+  id      String  @id @default(uuid())
+  name    String
+  email   String? @unique
+  mobile  String
+  address String?
+
+  rating         Float?          @default(0)
+  online_contact ContactMethod[]
+  company        String?
+  is_registered  Boolean         @default(false)
+  created_at     DateTime        @default(now())
+  updated_at     DateTime        @updatedAt
+  avatar_id      String?         @unique
+  avatar         Images?         @relation(fields: [avatar_id], references: [id])
+  Sales          Sales[]
+}
+
+model Supplier {
+  id               String             @id @default(uuid())
+  name             String
+  email            String?            @unique
+  mobile           String
+  address          String?
+  rating           Float?             @default(0)
+  online_contact   ContactMethod[]
+  type             SupplyType[]
+  company          String?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
+  avatar_id        String?            @unique
+  avatar           Images?            @relation(fields: [avatar_id], references: [id])
+  Batch            Batch[]
+  StockTransaction StockTransaction[]
+  role             SupplierRoleName
+}
+
+model Doctor {
+  id             String          @id @default(uuid())
+  name           String
+  email          String?         @unique
+  mobile         String
+  address        String?
+  rating         Float?          @default(0)
+  online_contact ContactMethod[]
+  specialty      String?
+  position       String?
+  degrees        String[]
+  sector         String?
+  institution    String?
+  is_registered  Boolean         @default(false)
+  created_at     DateTime        @default(now())
+  updated_at     DateTime        @updatedAt
+  avatar_id      String?         @unique
+  avatar         Images?         @relation(fields: [avatar_id], references: [id])
+  Medications    Medications[]
+  Vaccination    Vaccination[]
+}
+
+model Pharmacist {
+  id             String          @id @default(uuid())
+  name           String
+  email          String?         @unique
+  mobile         String
+  address        String?
+  rating         Float?          @default(0)
+  online_contact ContactMethod[]
+  institution    String?
+  is_registered  Boolean         @default(false)
+  created_at     DateTime        @default(now())
+  updated_at     DateTime        @updatedAt
+  avatar_id      String?         @unique
+  avatar         Images?         @relation(fields: [avatar_id], references: [id])
+}
+
+model StockTransaction {
+  id               String          @id @default(uuid())
+  item_id          String
+  batch_id         String
+  quantity         Int
+  transaction_type TransactionType
+  date             DateTime        @default(now())
+  unit_price       Float
+  total_price      Float
+  supplier_id      String?
+  remarks          String?
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+  item             Item            @relation(fields: [item_id], references: [id])
+  batch            Batch           @relation(fields: [batch_id], references: [id])
+  supplier         Supplier?       @relation(fields: [supplier_id], references: [id])
+}
+
+model Item {
+  id             String             @id @default(uuid())
+  name           String
+  description    String?
+  category       String
+  unit_price     Float
+  stock_quantity Int                @default(0)
+  reorder_level  Int                @default(0)
+  is_consumable  Boolean            @default(true)
+  created_at     DateTime           @default(now())
+  updated_at     DateTime           @updatedAt
+  transactions   StockTransaction[]
+}
+
+model Batch {
+  id                String             @id @default(uuid())
+  batch_name        String             @unique
+  start_date        DateTime           @default(now())
+  expected_end_date DateTime
+  breed             BirdBreed
+  received_quantity Int
+  supplier_id       String
+  is_from_registerd_supplier Boolean
+  house_no          Int
+  created_at        DateTime           @default(now())
+  updated_at        DateTime           @updatedAt
+  transactions      StockTransaction[]
+  supplier          Supplier?          @relation(fields: [supplier_id], references: [id])
+  Medications       Medications[]
+  Vaccination       Vaccination[]
+  Sales             Sales[]
+  Expenses          Expenses[]
+  DailyRecords      DailyRecords[]
+  Environment       Environment[]
+}
+
+model Medications {
+  id                 String   @id @default(uuid())
+  batch_id           String
+  date               DateTime @default(now())
+  medication_details String
+  administered_by    String
+  medicine_name      String
+  dosage             String
+  cause              String?
+  period             String?
+  doctor_id          String?
+  remarks            String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+  batch              Batch    @relation(fields: [batch_id], references: [id])
+  doctor             Doctor?  @relation(fields: [doctor_id], references: [id])
+  admin              Admin?   @relation(fields: [administered_by], references: [id])
+}
+
+model Vaccination {
+  id              String   @id @default(uuid())
+  batch_id        String
+  date            DateTime @default(now())
+  vaccine_details String?
+  administered_by String
+  vaccine_name    String
+  dosage          Int
+  cause           String?
+  period          String?
+  doctor_id       String?
+  remarks         String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  batch           Batch    @relation(fields: [batch_id], references: [id])
+  doctor          Doctor?  @relation(fields: [doctor_id], references: [id])
+  admin           Admin?   @relation(fields: [administered_by], references: [id])
+}
+
+model Sales {
+  id             String       @id @default(uuid())
+  batch_id       String
+  date           DateTime     @default(now())
+  delay_for_sale Int?
+  sold_item_type SoldItemType
+  quantity       Int
+  unit_price     Float
+  total_price    Float
+  customer_id    String?
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt
+  batch          Batch        @relation(fields: [batch_id], references: [id])
+  customer       Customer?    @relation(fields: [customer_id], references: [id])
+}
+
+model Expenses {
+  id          String           @id @default(uuid())
+  batch_id    String?
+  date        DateTime         @default(now())
+  amount      Float
+  unit        Unit
+  category    ExpensesCategory
+  description String?
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+  remarks     String?
+  batch       Batch?           @relation(fields: [batch_id], references: [id])
+}
+
+model DailyRecords {
+  id                   String   @id @default(uuid())
+  date                 DateTime @unique @default(now())
+  batch_id             String
+  mortality            Int      @default(0)
+  feed_consumed_bags   Float?   @default(0)
+  water_consumed_l     Float?   @default(0)
+  avarage_weight_grams Float?   @default(0)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  batch                Batch    @relation(fields: [batch_id], references: [id])
+}
+
+model Environment {
+  id               String     @id @default(uuid())
+  batch_id         String
+  house_no         Int
+  temperature_c    Float
+  humidity_percent Float
+  ammonia_ppm      Float
+  co2_ppm          Float
+  air_pressure_hpa Float
+  time_period      TimePeriod
+  recorded_at      DateTime   @default(now())
+  batch            Batch      @relation(fields: [batch_id], references: [id])
+}
+
+model Images {
+  id         String      @id @default(uuid())
+  public_id  String
+  image_url  String
+  createdAt  DateTime    @default(now())
+  Employee   Employee?
+  Pharmacist Pharmacist?
+  Doctor     Doctor?
+  Supplier   Supplier?
+  Customer   Customer?
+  Admin      Admin?
+}

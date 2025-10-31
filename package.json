@@ -1,0 +1,33 @@
+{
+  "name": "server",
+  "module": "server.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run server.ts",
+    "dev": "bun run --watch server.ts",
+    "db:migrt": "bunx prisma migrate dev",
+    "db:gen": "bunx prisma generate",
+    "db:std": "bunx prisma studio",
+    "db:gen:prod": "bunx prisma generate --no-engine"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "prettier": "^3.6.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.17.0",
+    "@prisma/extension-accelerate": "^2.0.2",
+    "cloudinary": "^2.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "prisma": "^6.17.0"
+  }
+}
