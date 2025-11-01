@@ -80,7 +80,10 @@ export async function findTableData(req: Request, res: Response) {
             data = await prisma.batch.findMany({
                 select: {
                     id: true,
-                    batch_name: true,
+                    batch_id: true,
+                    farm_code: true,
+                    sector_code: true,
+                    product_code: true,
                     breed: true,
                     start_date: true,
                     expected_end_date: true,
@@ -88,12 +91,6 @@ export async function findTableData(req: Request, res: Response) {
                         select: {
                             name: true,
                             id: true,
-                            avatar: {
-                                select: {
-                                    image_url: true,
-                                    public_id: true,
-                                },
-                            },
                         },
                     },
                     is_from_registerd_supplier: true,

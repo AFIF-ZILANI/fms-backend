@@ -110,6 +110,5 @@ export interface IBatch {
     breed: BirdBreed;
     received_quantity: number;
     supplier_id: string;
-    is_from_registerd_supplier: boolean;
     house_no: 1 | 2;
 }

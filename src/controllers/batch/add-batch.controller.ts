@@ -1,5 +1,6 @@
 import { BirdBreed, type IBatch } from "@/types";
 import { sendSuccessResponse } from "@/utils/apiResponse";
+import { generateBatchId, getLastBatchNumber } from "@/utils/batch-utils";
 import { prisma } from "@/utils/db";
 import { throwError } from "@/utils/error";
 import type { Request, Response } from "express";
@@ -7,18 +8,16 @@ import type { Request, Response } from "express";
 export async function AddBatch(req: Request, res: Response) {
     const body = req.body;
     const {
-        batch_name,
         breed,
         expected_end_date,
         received_quantity,
         start_date,
         supplier_id,
         house_no,
-        is_from_registerd_supplier,
     }: IBatch = body;
 
+    console.log();
     if (
-        !batch_name ||
         !breed ||
         !expected_end_date ||
         !received_quantity ||
@@ -31,25 +30,28 @@ export async function AddBatch(req: Request, res: Response) {
         });
     }
 
-    if (!supplier_id && is_from_registerd_supplier) {
-        throwError({
-            message:
-                "Supplier id is missing or incorrect 'is_from_registerd_supplier' field",
-        });
-    }
-
     if (!Object.values(BirdBreed).includes(breed)) {
         throwError({ message: "invalid breed", statusCode: 400 });
     }
 
     const s_date = new Date(start_date);
     const e_date = new Date(expected_end_date);
-    if (!s_date || e_date) {
-        throwError({ message: "invalid Date time", statusCode: 400 });
+
+    // Check if either date is invalid
+    if (isNaN(s_date.getTime()) || isNaN(e_date.getTime())) {
+        throwError({ message: "Invalid date time", statusCode: 400 });
     }
 
-    if (supplier_id && !is_from_registerd_supplier) {
-        const existSupplier = await prisma.supplier.findMany({
+    // Optional: check logical order
+    if (e_date <= s_date) {
+        throwError({
+            message: "expected_end_date must be after start_date",
+            statusCode: 400,
+        });
+    }
+
+    if (supplier_id) {
+        const existSupplier = await prisma.supplier.findUnique({
             where: {
                 id: supplier_id,
             },
@@ -60,23 +62,42 @@ export async function AddBatch(req: Request, res: Response) {
         }
     }
 
+    // currnly the farmCode and sectorCode is hard coded
+    const farmCode = "F01";
+    const sectorCode = "POU";
+    const productCode = breed.slice(0, 3);
+    console.log(productCode)
+    const lastBatchNo = await getLastBatchNumber(
+        farmCode,
+        sectorCode,
+        productCode
+    );
+    const batch_id = generateBatchId(
+        farmCode,
+        sectorCode,
+        productCode,
+        lastBatchNo
+    );
     const newBatch = await prisma.batch.create({
         data: {
-            batch_name,
+            batch_id,
+            farm_code: farmCode,
+            sector_code: sectorCode,
+            product_code: productCode,
             breed,
-            start_date,
-            expected_end_date,
+            start_date: s_date,
+            expected_end_date: e_date,
             supplier: supplier_id
                 ? { connect: { id: supplier_id } }
                 : undefined,
-            is_from_registerd_supplier,
+            is_from_registerd_supplier: !!supplier_id,
             house_no,
             received_quantity,
         },
     });
 
     if (!newBatch) {
-        throwError({ message: "Faild to create Batch", statusCode: 500 });
+        throwError({ message: "Failed to create Batch", statusCode: 500 });
     }
 
     return sendSuccessResponse({

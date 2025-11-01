@@ -1,42 +1,47 @@
-
 /**
- * Utility function to send standardized API responses.
- * Ensures consistent response structure across all API endpoints.
- * Reduces repetitive code in controllers and centralizes response formatting.
+ * Send a standardized **successful API response**.
  *
- * Usage:
- *   sendResponse({
- *     response,
- *     success: true,
- *     message: "Operation successful",
- *     data: result,
- *     statusCode: 201
- *   });
+ * This utility ensures consistent structure for all success responses
+ * across your API — improving maintainability, readability, and front-end predictability.
  *
- * Response format:
+ * ✅ **Usage Example:**
+ * ```ts
+ * sendSuccessResponse({
+ *   response,
+ *   message: "Operation successful",
+ *   data: result,
+ *   statusCode: 201
+ * });
+ * ```
+ *
+ * ✅ **Standard Response Format:**
+ * ```json
  * {
- *   success: boolean,
- *   message?: string,
- *   data?: any
+ *   "success": true,
+ *   "message": "Operation successful",
+ *   "data": { ... }
  * }
+ * ```
+ *
+ * @param {object} options - Configuration object.
+ * @param {Response} options.response - Express response object.
+ * @param {string} [options.message] - Optional message describing the result.
+ * @param {any} [options.data=null] - Optional response payload (default: null).
+ * @param {number} [options.statusCode=200] - HTTP status code (default: 200).
+ *
+ * @returns {Response} Express JSON response with `{ success, message, data }` structure.
  */
-
-import type { Response } from "express";
-
-interface ApiResponseOptions {
-    response: Response;
-    success?: boolean;
-    message?: string;
-    data?: any;
-    statusCode?: number;
-}
-
 export function sendSuccessResponse({
     response,
     message,
     data = null,
     statusCode = 200,
-}: ApiResponseOptions) {
+}: {
+    response: import("express").Response;
+    message?: string;
+    data?: any;
+    statusCode?: number;
+}) {
     return response.status(statusCode).json({
         success: true,
         message,

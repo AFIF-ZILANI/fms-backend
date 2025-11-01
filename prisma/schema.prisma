@@ -99,17 +99,17 @@ enum TimePeriod {
 
 enum BirdBreed {
   CLASSIC
-    HIBREED
-    PAKISTHANI
-    KEDERNATH
-    FAOMI
-    TIGER
+  HIBREED
+  PAKISTHANI
+  KEDERNATH
+  FAOMI
+  TIGER
 }
 
 //models
 model Employee {
   id             String           @id @default(uuid())
-  email          String?           @unique
+  email          String?          @unique
   name           String
   mobile         String
   address        String?
@@ -245,25 +245,29 @@ model Item {
 }
 
 model Batch {
-  id                String             @id @default(uuid())
-  batch_name        String             @unique
-  start_date        DateTime           @default(now())
-  expected_end_date DateTime
-  breed             BirdBreed
-  received_quantity Int
-  supplier_id       String
+  id                         String             @id @default(uuid())
+  batch_id                   String             @unique
+  farm_code                  String
+  sector_code                String
+  product_code               String
+  start_date                 DateTime           @default(now())
+  expected_end_date          DateTime
+  breed                      BirdBreed
+  received_quantity          Int
+  supplier_id                String?
   is_from_registerd_supplier Boolean
-  house_no          Int
-  created_at        DateTime           @default(now())
-  updated_at        DateTime           @updatedAt
-  transactions      StockTransaction[]
-  supplier          Supplier?          @relation(fields: [supplier_id], references: [id])
-  Medications       Medications[]
-  Vaccination       Vaccination[]
-  Sales             Sales[]
-  Expenses          Expenses[]
-  DailyRecords      DailyRecords[]
-  Environment       Environment[]
+  house_no                   Int
+  created_at                 DateTime           @default(now())
+  updated_at                 DateTime           @updatedAt
+  transactions               StockTransaction[]
+  supplier                   Supplier?          @relation(fields: [supplier_id], references: [id])
+  Medications                Medications[]
+  Vaccination                Vaccination[]
+  Sales                      Sales[]
+  Expenses                   Expenses[]
+  DailyRecords               DailyRecords[]
+  Environment                Environment[]
+  @@index([farm_code, sector_code, product_code, batch_id])
 }
 
 model Medications {

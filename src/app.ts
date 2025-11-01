@@ -1,9 +1,4 @@
-import type {
-    Application,
-    Request,
-    Response,
-    NextFunction,
-} from "express";
+import type { Application, Request, Response, NextFunction } from "express";
 import express from "express";
 import cors from "cors";
 // import morgan from "morgan";
@@ -20,7 +15,8 @@ import { findTableData } from "./controllers/get-table-data.controller";
 import AddBatchRouter from "./routers/batch/add-batch.route";
 import RemoveSuppliersRouter from "./routers/supplier/remove-suppliers.route";
 import RemoveTemtAvatarRouter from "./routers/remove-avatar.route";
-import AddEmployeeRouter from "./routers/employee/add-employee.route"
+import AddEmployeeRouter from "./routers/employee/add-employee.route";
+import RemoveBatchRouter from "./routers/batch/remove-batch.route";
 import helmet from "helmet";
 
 // Initialize Express app
@@ -56,6 +52,7 @@ app.use(`${BASE_API_PATH}/suppliers`, RemoveSuppliersRouter);
 
 // batch routes
 app.use(`${BASE_API_PATH}/batches`, AddBatchRouter);
+app.use(`${BASE_API_PATH}/batches`, RemoveBatchRouter);
 
 // employee routes
 app.use(`${BASE_API_PATH}/employee`, AddEmployeeRouter);

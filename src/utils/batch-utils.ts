@@ -1,3 +1,5 @@
+import { prisma } from "./db";
+
 /**
  * Generate a standardized, unique batch ID for ZeroD Farms.
  *
@@ -71,8 +73,37 @@ export function validateBatchId(id: string): boolean {
     return regex.test(id);
 }
 
-// --- Example Usage ---
-const newId = generateBatchId("F01", "POU", "BRL", 12);
-console.log(newId); // ZF-F01-POU-BRL-20251031-013
+export async function getLastBatchNumber(
+    farmCode: string,
+    sectorCode: string,
+    // productCode: string /** Currently Unnessery in small scale */
+): Promise<number> {
+    const lastBatch = await prisma.batch.findFirst({
+        where: {
+            farm_code: farmCode,
+            sector_code: sectorCode,
+            // product_code: productCode, /** Currently Unnessery in small scale */
+        },
+        orderBy: {
+            created_at: "desc",
+        },
+        select: {
+            batch_id: true,
+        },
+    });
 
-console.log(validateBatchId(newId)); // true
+    if (!lastBatch?.batch_id) return 0;
+
+    const parts = lastBatch.batch_id.split("-");
+
+    // parts[4] might still be undefined, so default to "0"
+    const batchNo = parseInt(parts[5] ?? "0");
+
+    return batchNo;
+}
+
+// // --- Example Usage ---
+// const newId = generateBatchId("F01", "POU", "BRL", 12);
+// console.log(newId); // ZF-F01-POU-BRL-20251031-013
+
+// console.log(validateBatchId(newId)); // true
