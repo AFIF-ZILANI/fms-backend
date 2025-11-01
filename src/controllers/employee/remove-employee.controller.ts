@@ -1,9 +1,9 @@
 import { sendSuccessResponse } from "@/utils/apiResponse";
 import { throwError } from "@/utils/error";
-import type { Request, Response } from "express";
 import { RemoveUsers } from "@/utils/remove-users";
+import type { Request, Response } from "express";
 
-export async function RemoveSuppliers(req: Request, res: Response) {
+export async function RemoveEmployee(req: Request, res: Response) {
     const { ids }: { ids: string[] } = req.body;
 
     if (!ids || !ids.length) {
@@ -15,16 +15,16 @@ export async function RemoveSuppliers(req: Request, res: Response) {
 
     console.log(ids);
     try {
-        RemoveUsers(ids, "supplier");
+        RemoveUsers(ids, "employee");
 
         return sendSuccessResponse({
             response: res,
-            message: "Suppliers removed successfully",
+            message: "Employees removed successfully",
         });
     } catch (error) {
         console.error(error);
         throwError({
-            message: "Failed to remove suppliers",
+            message: "Failed to remove employees",
             statusCode: 500,
         });
     }

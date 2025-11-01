@@ -17,6 +17,7 @@ import RemoveSuppliersRouter from "./routers/supplier/remove-suppliers.route";
 import RemoveTemtAvatarRouter from "./routers/remove-avatar.route";
 import AddEmployeeRouter from "./routers/employee/add-employee.route";
 import RemoveBatchRouter from "./routers/batch/remove-batch.route";
+import RemoveEmployeeRouter from "./routers/employee/remove-employee.route";
 import helmet from "helmet";
 
 // Initialize Express app
@@ -56,6 +57,7 @@ app.use(`${BASE_API_PATH}/batches`, RemoveBatchRouter);
 
 // employee routes
 app.use(`${BASE_API_PATH}/employee`, AddEmployeeRouter);
+app.use(`${BASE_API_PATH}/employee`, RemoveEmployeeRouter);
 
 //other routes
 app.get(`${BASE_API_PATH}/get-table-data`, asyncHandler(findTableData));
