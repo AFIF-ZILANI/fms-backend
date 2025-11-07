@@ -1,0 +1,68 @@
+export enum EmployeeRole {
+    WORKER = "WORKER",
+    MANAGER = "MANAGER",
+    INTERN = "INTERN",
+}
+export enum ContactMethod {
+    WHATSAPP = "WHATSAPP",
+    EMAIL = "EMAIL",
+    IMO = "IMO",
+    TELEGRAM = "TELEGRAM",
+}
+
+export enum SupplierRole {
+    SALES_MAN = "SALES_MAN",
+    OWNER = "OWNER",
+    DISTRIBUTOR = "DISTRIBUTOR",
+    DEALER = "DEALER",
+    WHOLESALER = "WHOLESALER",
+    RETAILER = "RETAILER",
+    MANUFACTURER = "MANUFACTURER",
+    IMPORTER = "IMPORTER",
+    REPRESENTATIVE = "REPRESENTATIVE",
+}
+
+export enum SupplierSupplyCategory {
+    FEED = "FEED",
+    MEDICINE = "MEDICINE",
+    CHICKS = "CHICKS",
+    HUSK = "HUSK",
+    EQUIPMENT = "EQUIPMENT",
+    UTILITIES = "UTILITIES",
+    TRANSPORTATION = "TRANSPORTATION",
+    CLEANING_SUPPLIES = "CLEANING_SUPPLIES",
+    OTHER = "OTHER",
+}
+
+export enum BirdBreed {
+    CLASSIC = "CLASSIC",
+    HIBREED = "HIBREED",
+    PAKISTHANI = "PAKISTHANI",
+    KEDERNATH = "KEDERNATH",
+    FAOMI = "FAOMI",
+    TIGER = "TIGER",
+}
+
+export enum ResourceCategory {
+  FEED = "FEED",
+  MEDICINE = "MEDICINE",
+  CHICKS = "CHICKS",
+  HUSK = "HUSK",
+  EQUIPMENT = "EQUIPMENT",
+  UTILITIES = "UTILITIES",
+  SALARY = "SALARY",
+  TRANSPORTATION = "TRANSPORTATION",
+  MAINTENANCE = "MAINTENANCE",
+  CLEANING_SUPPLIES = "CLEANING_SUPPLIES",
+  OTHER = "OTHER",
+}
+
+export enum Unit {
+  BIRD = "BIRD",
+  KG = "KG",
+  LITER = "LITER",
+  BAG = "BAG",
+  BOX = "BOX",
+  UNIT = "UNIT",
+  OTHER = "OTHER"
+}
