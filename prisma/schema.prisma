@@ -7,147 +7,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//enums
-enum EmployeeRoleName {
-  MANAGER
-  WORKER
-  INTERN
-}
-
-enum ContactMethod {
-  WHATSAPP
-  EMAIL
-  IMO
-  TELEGRAM
-}
-
-enum SupplierRoleName {
-  SALES_MAN
-  OWNER
-  DISTRIBUTOR
-  DEALER
-  WHOLESALER
-  RETAILER
-  MANUFACTURER
-  IMPORTER
-  REPRESENTATIVE
-}
-
-enum SupplyType {
-  MEDICINE
-  FEED
-  HUSK
-  HARDWARE
-  MEDICAL_EQUIPMENT
-  LAB_EQUIPMENT
-  OFFICE_SUPPLIES
-  CLEANING_SUPPLIES
-  IT_HARDWARE
-  SOFTWARE
-  IT_EQUEPMENT
-  INTERNET
-  ELECTRICAL_EQUIPMENT
-  OTHER
-}
-
-enum TransactionType {
-  PURCHASE
-  SALE
-  RETURN
-  ADJUSTMENT
-  DAMAGE
-}
-
-enum SoldItemType {
-  BIRDS
-  LITTER
-}
-
-enum Unit {
-  PER_BIRD
-  PER_KG
-  PER_LITER
-  PER_BAG
-  PER_BOX
-  PER_UNIT
-  OTHER
-}
-
-enum ExpensesCategory {
-  FEED
-  MEDICINE
-  SALARY
-  UTILITIES
-  MAINTENANCE
-  TRANSPORTATION
-  HARDWARE
-  ELEXTRICITY
-  WATER
-  HUSK
-  OTHER
-}
-
-enum TimePeriod {
-  MORNING
-  NOON
-  AFTERNOON
-  EVENING
-  NIGHT
-  MIDNIGHT
-  LATENIGHT
-}
-
-enum BirdBreed {
-  CLASSIC
-  HIBREED
-  PAKISTHANI
-  KEDERNATH
-  FAOMI
-  TIGER
-}
-
-//models
 model Employee {
   id             String           @id @default(uuid())
   email          String?          @unique
   name           String
   mobile         String
   address        String?
-  online_contact ContactMethod[]
   salary         Float?
   join_date      DateTime         @default(now())
   updated_at     DateTime         @updatedAt
   rating         Float?           @default(0)
+  online_contact ContactMethod[]
   role           EmployeeRoleName
   avatar_id      String?          @unique
   avatar         Images?          @relation(fields: [avatar_id], references: [id])
 }
 
 model Admin {
-  id     String @id @default(uuid())
-  email  String @unique
-  name   String
-  mobile String
-
+  id          String        @id @default(uuid())
+  email       String        @unique
+  name        String
+  mobile      String
   created_at  DateTime      @default(now())
   updated_at  DateTime      @updatedAt
   avatar_id   String?       @unique
   avatar      Images?       @relation(fields: [avatar_id], references: [id])
-  Vaccination Vaccination[]
   Medications Medications[]
+  Vaccination Vaccination[]
 }
 
 model Customer {
-  id      String  @id @default(uuid())
-  name    String
-  email   String? @unique
-  mobile  String
-  address String?
-
+  id             String          @id @default(uuid())
+  name           String
+  email          String?         @unique
+  mobile         String
+  address        String?
   rating         Float?          @default(0)
-  online_contact ContactMethod[]
   company        String?
   is_registered  Boolean         @default(false)
+  online_contact ContactMethod[]
   created_at     DateTime        @default(now())
   updated_at     DateTime        @updatedAt
   avatar_id      String?         @unique
@@ -156,22 +54,24 @@ model Customer {
 }
 
 model Supplier {
-  id               String             @id @default(uuid())
+  id               String                   @id @default(uuid())
   name             String
-  email            String?            @unique
+  email            String?                  @unique
   mobile           String
   address          String?
-  rating           Float?             @default(0)
-  online_contact   ContactMethod[]
-  type             SupplyType[]
+  rating           Float?                   @default(0)
+  role             SupplierRoleName
+  type             SupplierSupplyCategory[]
   company          String?
-  created_at       DateTime           @default(now())
-  updated_at       DateTime           @updatedAt
-  avatar_id        String?            @unique
-  avatar           Images?            @relation(fields: [avatar_id], references: [id])
+  online_contact   ContactMethod[]
+  created_at       DateTime                 @default(now())
+  updated_at       DateTime                 @updatedAt
+  avatar_id        String?                  @unique
   Batch            Batch[]
   StockTransaction StockTransaction[]
-  role             SupplierRoleName
+  avatar           Images?                  @relation(fields: [avatar_id], references: [id])
+  Items            Item[]
+   @@index([name])
 }
 
 model Doctor {
@@ -180,14 +80,14 @@ model Doctor {
   email          String?         @unique
   mobile         String
   address        String?
-  rating         Float?          @default(0)
-  online_contact ContactMethod[]
   specialty      String?
   position       String?
   degrees        String[]
+  rating         Float?          @default(0)
   sector         String?
   institution    String?
   is_registered  Boolean         @default(false)
+  online_contact ContactMethod[]
   created_at     DateTime        @default(now())
   updated_at     DateTime        @updatedAt
   avatar_id      String?         @unique
@@ -203,9 +103,9 @@ model Pharmacist {
   mobile         String
   address        String?
   rating         Float?          @default(0)
-  online_contact ContactMethod[]
   institution    String?
   is_registered  Boolean         @default(false)
+  online_contact ContactMethod[]
   created_at     DateTime        @default(now())
   updated_at     DateTime        @updatedAt
   avatar_id      String?         @unique
@@ -225,8 +125,8 @@ model StockTransaction {
   remarks          String?
   created_at       DateTime        @default(now())
   updated_at       DateTime        @updatedAt
-  item             Item            @relation(fields: [item_id], references: [id])
   batch            Batch           @relation(fields: [batch_id], references: [id])
+  item             Item            @relation(fields: [item_id], references: [id])
   supplier         Supplier?       @relation(fields: [supplier_id], references: [id])
 }
 
@@ -234,39 +134,44 @@ model Item {
   id             String             @id @default(uuid())
   name           String
   description    String?
-  category       String
+  category       ResourceCategory
+  unit_name      Unit
   unit_price     Float
   stock_quantity Int                @default(0)
   reorder_level  Int                @default(0)
   is_consumable  Boolean            @default(true)
+  supplier_id    String?
   created_at     DateTime           @default(now())
   updated_at     DateTime           @updatedAt
   transactions   StockTransaction[]
+  supplier       Supplier?          @relation(fields: [supplier_id], references: [id])
+  Sales          Sales[]
 }
 
 model Batch {
   id                         String             @id @default(uuid())
-  batch_id                   String             @unique
-  farm_code                  String
-  sector_code                String
-  product_code               String
   start_date                 DateTime           @default(now())
   expected_end_date          DateTime
-  breed                      BirdBreed
   received_quantity          Int
   supplier_id                String?
-  is_from_registerd_supplier Boolean
   house_no                   Int
   created_at                 DateTime           @default(now())
   updated_at                 DateTime           @updatedAt
-  transactions               StockTransaction[]
+  is_from_registerd_supplier Boolean
+  breed                      BirdBreed
+  batch_id                   String             @unique
+  farm_code                  String
+  product_code               String
+  sector_code                String
   supplier                   Supplier?          @relation(fields: [supplier_id], references: [id])
-  Medications                Medications[]
-  Vaccination                Vaccination[]
-  Sales                      Sales[]
-  Expenses                   Expenses[]
   DailyRecords               DailyRecords[]
   Environment                Environment[]
+  Expenses                   Expenses[]
+  Medications                Medications[]
+  Sales                      Sales[]
+  transactions               StockTransaction[]
+  Vaccination                Vaccination[]
+
   @@index([farm_code, sector_code, product_code, batch_id])
 }
 
@@ -284,9 +189,9 @@ model Medications {
   remarks            String?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
+  admin              Admin    @relation(fields: [administered_by], references: [id])
   batch              Batch    @relation(fields: [batch_id], references: [id])
   doctor             Doctor?  @relation(fields: [doctor_id], references: [id])
-  admin              Admin?   @relation(fields: [administered_by], references: [id])
 }
 
 model Vaccination {
@@ -303,25 +208,26 @@ model Vaccination {
   remarks         String?
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
+  admin           Admin    @relation(fields: [administered_by], references: [id])
   batch           Batch    @relation(fields: [batch_id], references: [id])
   doctor          Doctor?  @relation(fields: [doctor_id], references: [id])
-  admin           Admin?   @relation(fields: [administered_by], references: [id])
 }
 
 model Sales {
-  id             String       @id @default(uuid())
-  batch_id       String
-  date           DateTime     @default(now())
+  id             String    @id @default(uuid())
+  batch_id       String?
+  item_id        String?
+  date           DateTime  @default(now())
   delay_for_sale Int?
-  sold_item_type SoldItemType
   quantity       Int
   unit_price     Float
   total_price    Float
   customer_id    String?
-  created_at     DateTime     @default(now())
-  updated_at     DateTime     @updatedAt
-  batch          Batch        @relation(fields: [batch_id], references: [id])
-  customer       Customer?    @relation(fields: [customer_id], references: [id])
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  batch          Batch?    @relation(fields: [batch_id], references: [id])
+  item           Item?     @relation(fields: [item_id], references: [id])
+  customer       Customer? @relation(fields: [customer_id], references: [id])
 }
 
 model Expenses {
@@ -330,7 +236,7 @@ model Expenses {
   date        DateTime         @default(now())
   amount      Float
   unit        Unit
-  category    ExpensesCategory
+  category    ResourceCategory
   description String?
   created_at  DateTime         @default(now())
   updated_at  DateTime         @updatedAt
@@ -370,10 +276,100 @@ model Images {
   public_id  String
   image_url  String
   createdAt  DateTime    @default(now())
+  Admin      Admin?
+  Customer   Customer?
+  Doctor     Doctor?
   Employee   Employee?
   Pharmacist Pharmacist?
-  Doctor     Doctor?
   Supplier   Supplier?
-  Customer   Customer?
-  Admin      Admin?
+}
+
+enum EmployeeRoleName {
+  MANAGER
+  WORKER
+  INTERN
+}
+
+enum ContactMethod {
+  WHATSAPP
+  EMAIL
+  IMO
+  TELEGRAM
+}
+
+enum SupplierRoleName {
+  SALES_MAN
+  OWNER
+  DISTRIBUTOR
+  DEALER
+  WHOLESALER
+  RETAILER
+  MANUFACTURER
+  IMPORTER
+  REPRESENTATIVE
+}
+
+enum TransactionType {
+  PURCHASE
+  SALE
+  RETURN
+  ADJUSTMENT
+  DAMAGE
+}
+
+enum Unit {
+  BIRD
+  KG
+  LITER
+  BAG
+  BOX
+  UNIT
+  OTHER
+}
+
+enum TimePeriod {
+  MORNING
+  NOON
+  AFTERNOON
+  EVENING
+  NIGHT
+  MIDNIGHT
+  LATENIGHT
+}
+
+enum BirdBreed {
+  CLASSIC
+  HIBREED
+  PAKISTHANI
+  KEDERNATH
+  FAOMI
+  TIGER
+}
+
+enum ResourceCategory {
+  FEED
+  MEDICINE
+  CHICKS
+  HUSK
+  EQUIPMENT
+  UTILITIES
+  SALARY
+  TRANSPORTATION
+  MAINTENANCE
+  CLEANING_SUPPLIES
+  OTHER
+}
+
+enum SupplierSupplyCategory {
+  FEED
+  MEDICINE
+  CHICKS
+  HUSK
+  EQUIPMENT
+  UTILITIES
+  TRANSPORTATION
+  CLEANING_SUPPLIES
+  OFFICE_SUPPLIES
+  SOFTWARE
+  OTHER
 }
