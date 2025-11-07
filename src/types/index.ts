@@ -1,35 +1,13 @@
-export enum EmployeeRole {
-    WORKER = "WORKER",
-    MANAGER = "MANAGER",
-    INTERN = "INTERN",
-}
-export enum ContactMethod {
-    WHATSAPP = "WHATSAPP",
-    EMAIL = "EMAIL",
-    IMO = "IMO",
-    TELEGRAM = "TELEGRAM",
-}
-
-export enum SupplierRole {
-    SALES_MAN = "SALES_MAN",
-    OWNER = "OWNER",
-    DISTRIBUTOR = "DISTRIBUTOR",
-    DEALER = "DEALER",
-    WHOLESALER = "WHOLESALER",
-    RETAILER = "RETAILER",
-    MANUFACTURER = "MANUFACTURER",
-    IMPORTER = "IMPORTER",
-    REPRESENTATIVE = "REPRESENTATIVE",
-}
-
-export enum BirdBreed {
-    CLASSIC = "CLASSIC",
-    HIBREED = "HIBREED",
-    PAKISTHANI = "PAKISTHANI",
-    KEDERNATH = "KEDERNATH",
-    FAOMI = "FAOMI",
-    TIGER = "TIGER",
-}
+import type {
+    BirdBreed,
+    ContactMethod,
+    EmployeeRole,
+    // ResourceCategory,
+    SupplierRole,
+    SupplierSupplyCategory,
+    // Unit,
+} from "./enum.type";
+import { ResourceCategory, Unit } from "@prisma/client";
 
 interface User {
     id?: string;
@@ -64,31 +42,8 @@ export interface IEmployee extends User {
 
 export interface ISupplier extends User {
     company: string;
-    role:
-        | "SALES_MAN"
-        | "OWNER"
-        | "DISTRIBUTOR"
-        | "DEALER"
-        | "WHOLESALER"
-        | "RETAILER"
-        | "MANUFACTURER"
-        | "IMPORTER"
-        | "REPRESENTATIVE";
-    type:
-        | "MEDICINE"
-        | "FEED"
-        | "HUSK"
-        | "HARDWARE"
-        | "MEDICAL_EQUIPMENT"
-        | "LAB_EQUIPMENT"
-        | "OFFICE_SUPPLIES"
-        | "CLEANING_SUPPLIES"
-        | "IT_HARDWARE"
-        | "SOFTWARE"
-        | "IT_EQUEPMENT"
-        | "INTERNET"
-        | "ELECTRICAL_EQUIPMENT"
-        | "OTHER";
+    role: SupplierRole;
+    type: SupplierSupplyCategory;
 }
 
 export interface ICustomer extends User {
@@ -111,4 +66,49 @@ export interface IBatch {
     received_quantity: number;
     supplier_id: string;
     house_no: 1 | 2;
+}
+
+export interface IAvatar {
+    id: string;
+    public_id: string;
+    image_url: string;
+    createdAt: Date;
+}
+
+export interface StockSummary {
+    total_stock_value: number;
+    total_items_in_stock: number;
+    low_stock_alerts: number;
+    total_purchases: number;
+    total_sales: number;
+    critical_items: number;
+}
+export interface IItem {
+    id: string;
+    name: string;
+    description: string | null;
+    category: ResourceCategory;
+    unit_name: Unit;
+    unit_price: number;
+    stock_quantity: number;
+    supplier: {
+        id: string;
+        name: string;
+    } | null;
+    reorder_level: number;
+    is_consumable: boolean;
+    created_at?: Date;
+    updated_at?: Date;
+}
+
+export interface UrgentItem {
+    id: string;
+    name: string;
+    category: ResourceCategory;
+    unit_name: Unit;
+    unit_price: number;
+    stock_quantity: number;
+    reorder_level: number;
+    shortfall: number;
+    suggested_order: number;
 }

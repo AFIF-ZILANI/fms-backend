@@ -1,40 +1,64 @@
-import { throwError } from "@/utils/error";
-import { prisma } from "@/utils/db";
 import { cloudinary } from "@/config/cloudinary";
+import type { IAvatar } from "@/types";
+import { PrismaClient } from "@prisma/client";
 
-export async function RemoveUsers(ids: string[], placeholder: string) {
-    await Promise.all(
-        ids.map(async (id) => {
-            // Fetch supplier with avatar
-            const user = await prisma.supplier.findUnique({
-                where: { id },
-                include: { avatar: true }, // adjust relation name if needed
-            });
+const prisma = new PrismaClient();
 
-            // console.log(user)
-            if (!user) {
-                throwError({
-                    message: `Invalid ${placeholder} Id`,
-                    statusCode: 400,
-                });
+export async function removeRecords<
+    T extends keyof Omit<
+        PrismaClient,
+        | "$connect"
+        | "$disconnect"
+        | "$on"
+        | "$transaction"
+        | "$use"
+        | "$extends"
+    >,
+>({
+    table,
+    ids,
+    placeholder,
+    includeRelations,
+}: {
+    table: T;
+    ids: string[];
+    placeholder: string;
+    includeRelations?: any;
+}) {
+    // @ts-ignore dynamic access to Prisma model
+    const model = prisma[table] as any;
+    if (!model || typeof model.findUnique !== "function") {
+        throw new Error(`Invalid Prisma table: ${String(table)}`);
+    }
+
+    for (const id of ids) {
+        console.log(`Deleting ${placeholder}: ${id}`);
+
+        const record = await model.findUnique({
+            where: { id },
+            include: {
+                avatar: true,
+                ...includeRelations,
+            },
+        });
+
+        if (!record) {
+            throw new Error(`Invalid ${placeholder} ID: ${id}`);
+        }
+        console.log("[record]", record);
+
+        const avatar: IAvatar = (record as any).avatar;
+        if (avatar && avatar.public_id) {
+            try {
+                await cloudinary.uploader.destroy(avatar.public_id);
+                await prisma.images.delete({ where: { id: avatar.id } });
+            } catch (err) {
+                console.error("Cloudinary/Image delete failed:", err);
             }
+        }
 
-            // Delete avatar from Cloudinary if exists
-            if (user.avatar?.public_id) {
-                await cloudinary.uploader.destroy(user.avatar.public_id);
-            }
+        await model.delete({ where: { id } });
+    }
 
-            // Delete avatar record from DB
-            if (user.avatar) {
-                await prisma.images.delete({
-                    where: { id: user.avatar.id },
-                });
-            }
-
-            // Delete supplier record
-            await prisma.supplier.delete({
-                where: { id },
-            });
-        })
-    );
+    console.log(`✅ Successfully deleted ${ids.length} ${placeholder}(s)`);
 }
