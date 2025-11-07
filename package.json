@@ -21,6 +21,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.1.0",
     "@prisma/client": "^6.17.0",
     "@prisma/extension-accelerate": "^2.0.2",
     "cloudinary": "^2.8.0",
