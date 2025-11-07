@@ -1,7 +1,7 @@
 import { sendSuccessResponse } from "@/utils/apiResponse";
 import { throwError } from "@/utils/error";
 import type { Request, Response } from "express";
-import { RemoveUsers } from "@/utils/remove-users";
+import { removeRecords } from "@/utils/remove-users";
 
 export async function RemoveSuppliers(req: Request, res: Response) {
     const { ids }: { ids: string[] } = req.body;
@@ -15,7 +15,7 @@ export async function RemoveSuppliers(req: Request, res: Response) {
 
     console.log(ids);
     try {
-        RemoveUsers(ids, "supplier");
+        removeRecords({table:"supplier", ids, placeholder: "supplier"})
 
         return sendSuccessResponse({
             response: res,

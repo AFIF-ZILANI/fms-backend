@@ -1,8 +1,9 @@
 import { prisma } from "@/utils/db";
-import { ContactMethod, EmployeeRole, type IEmployee } from "@/types";
+import type { IEmployee } from "@/types";
 import { throwError } from "@/utils/error";
 import type { Request, Response } from "express";
 import { sendSuccessResponse } from "@/utils/apiResponse";
+import { ContactMethod, EmployeeRole } from "@/types/enum.type";
 
 export async function AddEmployee(req: Request, res: Response) {
     const {

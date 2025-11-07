@@ -1,11 +1,14 @@
 import { prisma } from "@/utils/db";
-import { ContactMethod, type ISupplier } from "../../types/index";
+import type { ISupplier } from "@/types/index";
 import { throwError } from "@/utils/error";
 import type { Request, Response } from "express";
 import { sendSuccessResponse } from "@/utils/apiResponse";
-import { SupplierRoleName, SupplyType } from "@prisma/client";
 import { cloudinary } from "@/config/cloudinary";
-import { ENV } from "@/config/env";
+import {
+    ContactMethod,
+    SupplierRole,
+    SupplierSupplyCategory,
+} from "@/types/enum.type";
 
 export async function AddSupplier(req: Request, res: Response) {
     const body: ISupplier = req.body;
@@ -26,7 +29,7 @@ export async function AddSupplier(req: Request, res: Response) {
     if (!name || !mobile || !role || !online_contact || !company || !type) {
         throwError({ statusCode: 400, message: "Missing required fields" });
     }
-    if (!Object.values(SupplierRoleName).includes(role)) {
+    if (!Object.values(SupplierRole).includes(role)) {
         throwError({ statusCode: 400, message: "Invalid role" });
     }
     online_contact.forEach((method) => {
@@ -35,7 +38,7 @@ export async function AddSupplier(req: Request, res: Response) {
         }
     });
 
-    if (!Object.values(SupplyType).includes(type)) {
+    if (!Object.values(SupplierSupplyCategory).includes(type)) {
         throwError({ message: "Invalid supplier type", statusCode: 400 });
     }
 
@@ -57,7 +60,7 @@ export async function AddSupplier(req: Request, res: Response) {
 
     let imageId;
     if (photo?.image_url && photo.public_id) {
-        console.log("photo: ==>",photo)
+        console.log("photo: ==>", photo);
         // const newPublicId = photo.public_id.replace(
         //     ENV.TEMP_CLOUDINARY_UPLOAD_PRESET,
         //     `${ENV.CLOUDINARY_UPLOAD_PRESET_BASE}${ENV.SUPPLIER_CLOUDINARY_UPLOAD_PRESET}`
@@ -95,7 +98,7 @@ export async function AddSupplier(req: Request, res: Response) {
             role,
             online_contact,
             company,
-            type: type ? [type as SupplyType] : undefined,
+            type: type ? [type as SupplierSupplyCategory] : undefined,
             avatar: imageId ? { connect: { id: imageId } } : undefined,
         },
     });

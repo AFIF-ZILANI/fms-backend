@@ -1,6 +1,6 @@
 import { sendSuccessResponse } from "@/utils/apiResponse";
 import { throwError } from "@/utils/error";
-import { RemoveUsers } from "@/utils/remove-users";
+import { removeRecords } from "@/utils/remove-users";
 import type { Request, Response } from "express";
 
 export async function RemoveEmployee(req: Request, res: Response) {
@@ -12,10 +12,14 @@ export async function RemoveEmployee(req: Request, res: Response) {
             statusCode: 400,
         });
     }
-
+    console.log("Hello");
     console.log(ids);
     try {
-        RemoveUsers(ids, "employee");
+        await removeRecords({
+            table: "employee",
+            ids,
+            placeholder: "employee",
+        });
 
         return sendSuccessResponse({
             response: res,

@@ -1,4 +1,5 @@
-import { BirdBreed, type IBatch } from "@/types";
+import type { IBatch } from "@/types";
+import { BirdBreed } from "@/types/enum.type";
 import { sendSuccessResponse } from "@/utils/apiResponse";
 import { generateBatchId, getLastBatchNumber } from "@/utils/batch-utils";
 import { prisma } from "@/utils/db";
@@ -66,11 +67,11 @@ export async function AddBatch(req: Request, res: Response) {
     const farmCode = "F01";
     const sectorCode = "POU";
     const productCode = breed.slice(0, 3);
-    console.log(productCode)
+    console.log(productCode);
     const lastBatchNo = await getLastBatchNumber(
         farmCode,
-        sectorCode,
-        productCode
+        sectorCode
+        // productCode
     );
     const batch_id = generateBatchId(
         farmCode,
