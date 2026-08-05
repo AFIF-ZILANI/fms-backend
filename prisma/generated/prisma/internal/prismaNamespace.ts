@@ -3465,6 +3465,7 @@ export const HousesScalarFieldEnum = {
   type: 'type',
   number: 'number',
   capacity: 'capacity',
+  is_active: 'is_active',
   created_at: 'created_at',
   updated_at: 'updated_at'
 } as const

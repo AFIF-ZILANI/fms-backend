@@ -13,7 +13,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 1   | **Admins**                              | `Profiles` (role=ADMIN), `Admins`                                                                          | 0                   | ✅                                                                                                                                |
 | 2   | Employees                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                    | 0                   | ✅                                                                                                                                |
 | 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                        | 0                   | ✅                                                                                                                                |
-| 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ⬜                                                                                                                                |
+| 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ✅                                                                                                                                |
 | 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`                              | 0                   | ⬜                                                                                                                                |
 | 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ⬜                                                                                                                                |
 | 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                 | 3, 5, 6             | ⬜                                                                                                                                |
@@ -29,31 +29,30 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 
 ## Current step
 
-**Phase 3 (Suppliers / Customers / Doctors) — done.** Branch
-`feat/suppliers-customers-doctors-api`, ready to merge.
+**Phase 4 (Houses) — done.** Branch `feat/houses-api`, ready to merge.
+Working continuously through phases now (per user instruction) — brief
+per-phase notes below instead of a full stop-and-report each time.
 
-- [x] `Suppliers` module: full CRUD + deactivate/reactivate. Filterable by
-      `role` and `supplies` (array-contains). `supplies` requires at least
-      one category.
-- [x] `Customers` module: full CRUD + deactivate/reactivate, plus `rating`
-      updates.
-- [x] `Doctors` module: create + list + get only, per the agreed reduced
-      scope (no dedicated FEATURES.md page, no `is_active` field on the
-      model — nothing to deactivate against).
-- [x] **Key difference from Admins/Employees**: `Suppliers.is_active` and
-      `Customers.is_active` are the model's own fields, not
-      `Profiles.is_active` — deactivate/reactivate targets the domain
-      table directly. Verified in both tests and a live smoke test that
-      deactivating a supplier leaves `profile.is_active` untouched.
-- [x] 15 tests written and passing (28 total across all modules so far)
-- [x] Dev server smoke-tested end to end: create/validate/filter/deactivate
-      for all three, confirmed the is_active-table distinction live
+- [x] **Schema gap closed**: `Houses` was the one model missing the
+      `is_active` soft-delete flag every other people/business-record model
+      has (Profiles, Item, Customers, Suppliers). Added it now, before
+      Batches (Phase 6) starts attaching mortality/allocation/environment
+      history to houses that would make hard deletion unsafe. Migration
+      `20260805194604_add_houses_is_active` applied.
+- [x] `Houses` module: CRUD + deactivate/reactivate, filterable by
+      `type`/`is_active`. No linked Profile — simplest module so far, no
+      transaction needed on create, no unique-constraint handling (no
+      `@@unique` on the model).
+- [x] 7 tests passing (35 total across all modules)
+- [x] Dev server smoke-tested (create, invalid-type validation, filter,
+      deactivate)
 - [ ] Merged to `main`
 
-**Next up: Phase 4 (Houses)** — smaller than the last two: no linked
-Profile/actor, just `Houses` CRUD (name, type, number, capacity) plus an
-occupancy view once Phase 6 (Batches) exists to read `BatchHouseBalance`
-from.
+**Next up: Phase 5 (Inventory)** — meaningfully bigger: `Item` catalog,
+`Warehouses`, `Organization`/`ItemOrganization`, `StockUnit` (the
+QR-code-per-unit tracking), `Asset`. First module with the coded-unit
+lifecycle (`UNASSIGNED → IN_STOCK → IN_USE → CONSUMED/DISPOSED`) from
+`inventory-tracking-design.md`.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -90,3 +89,6 @@ lands and every request has a real caller.
   Doctors (create+list+get) built and verified. Confirmed
   Suppliers/Customers deactivate their own `is_active`, not
   `Profiles.is_active` — the one real shape difference from Phase 1/2.
+- 2026-08-06 — Phase 4 done. Added `Houses.is_active` (schema gap, closed
+  before Batches needs it), built Houses CRUD. User asked to proceed
+  through phases continuously rather than stopping after each one.

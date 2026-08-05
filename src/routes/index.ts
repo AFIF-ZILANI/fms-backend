@@ -4,6 +4,7 @@ import { employeeRoutes } from "@routes/employee.routes";
 import { supplierRoutes } from "@routes/supplier.routes";
 import { customerRoutes } from "@routes/customer.routes";
 import { doctorRoutes } from "@routes/doctor.routes";
+import { houseRoutes } from "@routes/house.routes";
 
 export const appRoutes = new Hono();
 
@@ -12,3 +13,4 @@ appRoutes.route("/employees", employeeRoutes);
 appRoutes.route("/suppliers", supplierRoutes);
 appRoutes.route("/customers", customerRoutes);
 appRoutes.route("/doctors", doctorRoutes);
+appRoutes.route("/houses", houseRoutes);
