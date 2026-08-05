@@ -1,6 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
-import { handleUniqueConstraint } from "@lib/prisma-errors";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     CreateEmployeeInput,
@@ -59,7 +59,7 @@ export const EmployeeService = {
                 });
             });
         } catch (err) {
-            return handleUniqueConstraint(err);
+            return handlePrismaWriteError(err);
         }
     },
 
@@ -99,7 +99,7 @@ export const EmployeeService = {
                 include,
             });
         } catch (err) {
-            return handleUniqueConstraint(err);
+            return handlePrismaWriteError(err);
         }
     },
 

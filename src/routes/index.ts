@@ -5,6 +5,11 @@ import { supplierRoutes } from "@routes/supplier.routes";
 import { customerRoutes } from "@routes/customer.routes";
 import { doctorRoutes } from "@routes/doctor.routes";
 import { houseRoutes } from "@routes/house.routes";
+import { itemRoutes } from "@routes/item.routes";
+import { warehouseRoutes } from "@routes/warehouse.routes";
+import { organizationRoutes, itemOrganizationRoutes } from "@routes/organization.routes";
+import { stockUnitRoutes } from "@routes/stock-unit.routes";
+import { assetRoutes } from "@routes/asset.routes";
 
 export const appRoutes = new Hono();
 
@@ -14,3 +19,9 @@ appRoutes.route("/suppliers", supplierRoutes);
 appRoutes.route("/customers", customerRoutes);
 appRoutes.route("/doctors", doctorRoutes);
 appRoutes.route("/houses", houseRoutes);
+appRoutes.route("/items", itemRoutes);
+appRoutes.route("/warehouses", warehouseRoutes);
+appRoutes.route("/organizations", organizationRoutes);
+appRoutes.route("/item-organizations", itemOrganizationRoutes);
+appRoutes.route("/stock-units", stockUnitRoutes);
+appRoutes.route("/assets", assetRoutes);
