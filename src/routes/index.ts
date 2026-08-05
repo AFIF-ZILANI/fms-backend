@@ -29,6 +29,8 @@ import { paymentInstrumentRoutes } from "@routes/payment-instrument.routes";
 import { paymentRoutes } from "@routes/payment.routes";
 import { expenseRoutes } from "@routes/expense.routes";
 import { assetDepreciationRoutes } from "@routes/asset-depreciation.routes";
+import { performanceScoreEntryRoutes } from "@routes/performance-score-entry.routes";
+import { payrollRecordRoutes } from "@routes/payroll-record.routes";
 
 export const appRoutes = new Hono();
 
@@ -64,3 +66,5 @@ appRoutes.route("/payment-instruments", paymentInstrumentRoutes);
 appRoutes.route("/payments", paymentRoutes);
 appRoutes.route("/expenses", expenseRoutes);
 appRoutes.route("/asset-depreciations", assetDepreciationRoutes);
+appRoutes.route("/performance-score-entries", performanceScoreEntryRoutes);
+appRoutes.route("/payroll-records", payrollRecordRoutes);

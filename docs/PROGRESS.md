@@ -21,7 +21,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                                          | 3, 5, 6             | ✅                                                                                                                                |
 | 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ✅                                                                                                                                |
 | 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ✅                                                                                                                                |
-| 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ⬜                                                                                                                                |
+| 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ✅                                                                                                                                |
 | 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ⬜                                                                                                                                |
 | 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                              | 15                  | ⬜                                                                                                                                |
 | 15  | Auth & permission enforcement           | —                                                                                                                       | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
@@ -205,7 +205,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
 - [x] `BirdSale`: decrements `BatchHouseBalance` in the same transaction as
       the row insert, same pattern as `MortalityLog`. Deliberately
       **narrow** about what gets server-computed: `total_amount = net_weight
-  × price_per_kg` and `due_amount` are unambiguous, so those are
+× price_per_kg` and `due_amount` are unambiguous, so those are
       computed. Every regional field (`dholta_in_g`, `total_katha`,
       `avg_wt_per_katha_kg`, `avg_weight_g`) is accepted exactly as the
       client sends it, not derived — `full-schema-analysis.md` explicitly
@@ -261,7 +261,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       batch's `Consumption` rows." Wired into `BatchService.close()`
       (modifying already-merged Phase 6 code, not a new endpoint): for each
       distinct `ACTIVE` asset found that way, `amount = purchase_cost /
-      useful_life_batches` (the formula named in
+    useful_life_batches` (the formula named in
       `inventory-tracking-design.md`), written via `upsert` on
       `(asset_id, batch_id)` so a retried close can't double-compute.
       `AssetDepreciation` itself stays **read-only** from the client's
@@ -276,9 +276,37 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
 - [x] 6 new tests (122 total).
 - [ ] Merged to `main`
 
-**Next up: Phase 12 (Payroll)** — `PerformanceScoreEntry`, `PayrollRecord`.
-Point-ledger scoring (already scoped by `Employees` in Phase 2) feeding a
-monthly clamp-and-compute payroll run, per `employee-payroll-design.md`.
+**Phase 12 (Payroll) — done.** Branch `feat/payroll-api`, ready to merge.
+
+- [x] `PerformanceScoreEntry`: fixed point value per criterion, looked up
+      server-side from `@lib/performance-criteria.ts` (a plain constant
+      map, not a DB table — matches "criteria list is fixed for v1" in the
+      design doc). The client **cannot** set `points` for a fixed criterion
+      — verified live that submitting `points: 999` against
+      `EARLY_PROBLEM_REPORT` still snapshotted `3`. `OTHER` is the one
+      exception: client-supplied, validator-bounded to ±1–5 excluding 0.
+      (Caught the same missing-`idempotency_key` mistake as Phase 8's
+      `InventoryAdjustment` here too — this table was always on the
+      original 9-table list, just missed on the first pass.)
+- [x] `PayrollRecord.generate`: the "manual month-end action vs. automated
+      job" question the design doc left open is resolved the same way
+      `Batches.close()` was — manual, admin-triggered. Sums the month's
+      `PerformanceScoreEntry` points, clamps to `[-10, +20]`, applies to
+      the employee's *current* baseline salary, locks the result
+      (`@@unique([employee_id, month])` — regenerating throws 409, matching
+      "even if the baseline changes later, past months stay correct").
+- [x] **Verified against the design doc's own worked examples**, not just
+      hand-picked numbers: "great month" (+8 → 16200), "bad month" (-12
+      floors at -10% → 13500), "runaway great month" (+24 ceilings at
+      +20% → 18000) — all three landed exactly on the documented figures,
+      both in tests and live over HTTP.
+- [x] 9 new tests (131 total).
+- [ ] Merged to `main`
+
+**Next up: Phase 13 (Alerts)** — the last write-bearing phase before Audit
+Log (14, needs Auth) and Analytics (16, needs everything). `Alerts` +
+trigger rules across everything built so far (low stock, mortality spikes,
+expiring stock, payroll due, negative-performance patterns).
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -350,3 +378,7 @@ lands and every request has a real caller.
   Consumption exists to link an asset's StockUnit back to a batch.
   Verified 40000/10=4000 exactly over both tests and live HTTP, plus no
   regression in Phase 6's existing close() tests.
+- 2026-08-06 — Phase 12 done. PerformanceScoreEntry (fixed points per
+  criterion, server-computed, OTHER as the bounded escape hatch) and
+  PayrollRecord (manual generate, clamp [-10,+20]) built. Verified against
+  all three of the design doc's worked examples exactly (16200/13500/18000).
