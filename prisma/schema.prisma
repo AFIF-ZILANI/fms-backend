@@ -243,6 +243,7 @@ enum PaymentRefType {
   BIRD_SALE
   PURCHASE
   EXPENSE
+  PAYROLL
 }
 
 enum PerformanceCriterion {
@@ -434,6 +435,7 @@ model Houses {
   name       String
   type       HouseType
   number     Int
+  capacity   Int? // max birds this house can hold; null = no limit tracked
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 
@@ -482,19 +484,20 @@ model Batches {
 }
 
 model BatchHouseAllocation {
-  id             String           @id @default(uuid())
-  batch_id       String
-  batch          Batches          @relation(fields: [batch_id], references: [id], onDelete: Cascade)
-  from_house_id  String?
-  from_house     Houses?          @relation("FromHouse", fields: [from_house_id], references: [id], onDelete: SetNull)
-  to_house_id    String?
-  to_house       Houses?          @relation("ToHouse", fields: [to_house_id], references: [id], onDelete: SetNull)
-  quantity       Int // birds moved in THIS event (always positive) — stagger a multi-day shift as several rows
-  reason         AllocationReason
-  recorded_by_id String
-  recorded_by    Profiles         @relation(fields: [recorded_by_id], references: [id])
-  occurred_at    DateTime         @default(now())
-  created_at     DateTime         @default(now())
+  id              String           @id @default(uuid())
+  batch_id        String
+  batch           Batches          @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+  from_house_id   String?
+  from_house      Houses?          @relation("FromHouse", fields: [from_house_id], references: [id], onDelete: SetNull)
+  to_house_id     String?
+  to_house        Houses?          @relation("ToHouse", fields: [to_house_id], references: [id], onDelete: SetNull)
+  quantity        Int // birds moved in THIS event (always positive) — stagger a multi-day shift as several rows
+  reason          AllocationReason
+  recorded_by_id  String
+  recorded_by     Profiles         @relation(fields: [recorded_by_id], references: [id])
+  occurred_at     DateTime         @default(now())
+  created_at      DateTime         @default(now())
+  idempotency_key String           @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id])
   @@index([from_house_id])
@@ -519,17 +522,18 @@ model BatchHouseBalance {
 }
 
 model MortalityLog {
-  id             String   @id @default(uuid())
-  batch_id       String
-  batch          Batches  @relation(fields: [batch_id], references: [id])
-  house_id       String
-  house          Houses   @relation(fields: [house_id], references: [id])
-  count_died     Int
-  cause_note     String?
-  date           DateTime
-  recorded_by_id String
-  recorded_by    Profiles @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime @default(now())
+  id              String   @id @default(uuid())
+  batch_id        String
+  batch           Batches  @relation(fields: [batch_id], references: [id])
+  house_id        String
+  house           Houses   @relation(fields: [house_id], references: [id])
+  count_died      Int
+  cause_note      String?
+  date            DateTime
+  recorded_by_id  String
+  recorded_by     Profiles @relation(fields: [recorded_by_id], references: [id])
+  created_at      DateTime @default(now())
+  idempotency_key String   @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id])
   @@index([house_id, date])
@@ -662,21 +666,22 @@ model AssetDepreciation {
 // ════════════════════════════════════════════════════════════════════
 
 model Consumption {
-  id             String     @id @default(uuid())
-  batch_id       String?
-  batch          Batches?   @relation(fields: [batch_id], references: [id])
-  house_id       String
-  house          Houses     @relation(fields: [house_id], references: [id])
-  item_id        String
-  item           Item       @relation(fields: [item_id], references: [id])
-  stock_unit_id  String? // set when drawn from a specific coded unit (medicine/vaccine/equipment)
-  stock_unit     StockUnit? @relation(fields: [stock_unit_id], references: [id])
-  quantity       Decimal    @db.Decimal(10, 3) // feed: allocation amount; medicine: dose drawn; equipment: 1 (non-depleting)
-  date           DateTime
-  note           String?
-  recorded_by_id String
-  recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime   @default(now())
+  id              String     @id @default(uuid())
+  batch_id        String?
+  batch           Batches?   @relation(fields: [batch_id], references: [id])
+  house_id        String
+  house           Houses     @relation(fields: [house_id], references: [id])
+  item_id         String
+  item            Item       @relation(fields: [item_id], references: [id])
+  stock_unit_id   String? // set when drawn from a specific coded unit (medicine/vaccine/equipment)
+  stock_unit      StockUnit? @relation(fields: [stock_unit_id], references: [id])
+  quantity        Decimal    @db.Decimal(10, 3) // feed: allocation amount; medicine: dose drawn; equipment: 1 (non-depleting)
+  date            DateTime
+  note            String?
+  recorded_by_id  String
+  recorded_by     Profiles   @relation(fields: [recorded_by_id], references: [id])
+  created_at      DateTime   @default(now())
+  idempotency_key String     @unique // client-generated; prevents double-insert on offline sync retry
 
   medications  Medications[]
   vaccinations Vaccinations[]
@@ -703,6 +708,7 @@ model Medications {
   remarks            String?
   date               DateTime     @default(now())
   created_at         DateTime     @default(now())
+  idempotency_key    String       @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id])
 }
@@ -724,6 +730,7 @@ model Vaccinations {
   remarks            String?
   date               DateTime     @default(now())
   created_at         DateTime     @default(now())
+  idempotency_key    String       @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id])
 }
@@ -743,6 +750,7 @@ model EnvironmentRecords {
   recorded_by_id   String
   recorded_by      Profiles    @relation(fields: [recorded_by_id], references: [id])
   recorded_at      DateTime    @default(now())
+  idempotency_key  String      @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id])
   @@index([house_id, recorded_at])
@@ -760,6 +768,7 @@ model WeightRecords {
   measured_by_id   String
   measured_by      Profiles @relation(fields: [measured_by_id], references: [id])
   created_at       DateTime @default(now())
+  idempotency_key  String   @unique // client-generated; prevents double-insert on offline sync retry
 
   @@unique([batch_id, house_id, date])
 }
@@ -816,6 +825,7 @@ model InventoryAdjustment {
   recorded_by_id      String
   recorded_by         Profiles    @relation(fields: [recorded_by_id], references: [id])
   created_at          DateTime    @default(now())
+  idempotency_key     String      @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([item_id])
 }
@@ -858,6 +868,8 @@ model Sale {
   customer       Customers? @relation(fields: [customer_id], references: [id])
   sale_date      DateTime
   total          Decimal    @db.Decimal(10, 2)
+  paid_amount    Decimal    @db.Decimal(10, 2)
+  due_amount     Decimal    @db.Decimal(10, 2)
   recorded_by_id String
   recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
   created_at     DateTime   @default(now())
@@ -899,6 +911,8 @@ model BirdSale {
   avg_weight_g        Decimal?   @db.Decimal(10, 2)
   price_per_kg        Decimal    @db.Decimal(10, 2)
   total_amount        Decimal    @db.Decimal(10, 2)
+  paid_amount         Decimal    @db.Decimal(10, 2)
+  due_amount          Decimal    @db.Decimal(10, 2)
   recorded_by_id      String
   recorded_by         Profiles   @relation(fields: [recorded_by_id], references: [id])
   created_at          DateTime   @default(now())
@@ -969,16 +983,17 @@ model PaymentInstrument {
 // ════════════════════════════════════════════════════════════════════
 
 model PerformanceScoreEntry {
-  id          String               @id @default(uuid())
-  employee_id String
-  employee    Employees            @relation(fields: [employee_id], references: [id])
-  given_by_id String
-  given_by    Profiles             @relation(fields: [given_by_id], references: [id])
-  criterion   PerformanceCriterion
-  points      Int // signed; snapshot of the criterion's value at time of entry
-  reason      String // required — never optional
-  date        DateTime             @default(now())
-  created_at  DateTime             @default(now())
+  id              String               @id @default(uuid())
+  employee_id     String
+  employee        Employees            @relation(fields: [employee_id], references: [id])
+  given_by_id     String
+  given_by        Profiles             @relation(fields: [given_by_id], references: [id])
+  criterion       PerformanceCriterion
+  points          Int // signed; snapshot of the criterion's value at time of entry
+  reason          String // required — never optional
+  date            DateTime             @default(now())
+  created_at      DateTime             @default(now())
+  idempotency_key String               @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([employee_id, date])
 }
