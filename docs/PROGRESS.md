@@ -16,7 +16,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ✅                                                                                                                                |
 | 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`                              | 0                   | ✅                                                                                                                                |
 | 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ✅                                                                                                                                |
-| 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                 | 3, 5, 6             | ⬜                                                                                                                                |
+| 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                 | 3, 5, 6             | ✅                                                                                                                                |
 | 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption` | 5, 6                | ⬜                                                                                                                                |
 | 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                             | 3, 5, 6             | ⬜                                                                                                                                |
 | 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                             | 7, 9                | ⬜                                                                                                                                |
@@ -119,10 +119,33 @@ than Phase 5 — this is where money-adjacent balance math lives.
       with the exact remaining count) → close-with-force.
 - [ ] Merged to `main`
 
-**Next up: Phase 7 (Purchases)** — `Purchase`, `PurchaseItem`. This is what
-finally lets `StockUnit.bind()` (Phase 5) be exercised against a real
-purchase instead of a test-seeded one, and is what funds a batch's chicks
-(the `PurchaseItem.batch_id` link `BatchService.create` assumed exists).
+**Phase 7 (Purchases) — done.** Branch `feat/purchases-api`, ready to merge.
+
+- [x] `Purchase` + `PurchaseItem`: create only, no update -- both are
+      explicitly append-only per `system-design-arc.md` §6 ("a correction
+      is a new offsetting row"). List/get are the only other endpoints.
+- [x] Line totals (`quantity × unit_price`) and the purchase total are
+      computed with `Prisma.Decimal`, not native JS number arithmetic --
+      same precision reasoning that made `Employees.salary` a Decimal
+      column instead of `Float` originally. Verified with a
+      hard-to-round-cleanly case (15.50 × 10 + 9.99 × 3) landing exactly on
+      184.97, not a floating-point-adjacent value.
+      Extracted the `Units` enum to `@lib/enums` (now shared by
+      Item and Purchase validators — worth doing once it's reused a second
+      time, not before).
+- [x] Rejects `paid_amount` exceeding the computed total (400).
+- [x] **Closes the loop from Phase 5**: `StockUnit.bind()`'s test now binds
+      against a *real* `PurchaseItem` created through this module's own
+      service, not a Prisma-seeded stand-in — confirmed end to end.
+- [x] `PurchaseItem` also gets a thin read-only list (filterable by
+      `item_id`/`batch_id`) for lot lookups.
+- [x] 6 new tests (84 total). Smoke-tested over real HTTP (multi-line
+      purchase, over-payment rejection, empty-items rejection, lot listing).
+- [ ] Merged to `main`
+
+**Note for Phase 10 (Payments)**: `Purchase.due_amount` is a snapshot set
+once at creation. Recording a `Payment` against a purchase later doesn't
+currently update it — that reconciliation is Phase 10's job, not built here.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -171,3 +194,7 @@ lands and every request has a real caller.
   math verified both by tests that check rollback (not just the thrown
   error) and by a full create→transfer→mortality→close smoke test over
   real HTTP.
+- 2026-08-06 — Phase 7 done. Purchase/PurchaseItem built (create-only,
+  append-only per design), using Prisma.Decimal for money math instead of
+  native numbers. StockUnit.bind's test now uses a real PurchaseItem from
+  this module instead of a seeded stand-in.
