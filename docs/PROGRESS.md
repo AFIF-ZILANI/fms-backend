@@ -22,7 +22,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ✅                                                                                                                                |
 | 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ✅                                                                                                                                |
 | 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ✅                                                                                                                                |
-| 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ⬜                                                                                                                                |
+| 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ✅                                                                                                                                |
 | 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                              | 15                  | ⬜                                                                                                                                |
 | 15  | Auth & permission enforcement           | —                                                                                                                       | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
 | 16  | Analytics                               | reads everything                                                                                                        | 1–14                | ⬜                                                                                                                                |
@@ -261,7 +261,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       batch's `Consumption` rows." Wired into `BatchService.close()`
       (modifying already-merged Phase 6 code, not a new endpoint): for each
       distinct `ACTIVE` asset found that way, `amount = purchase_cost /
-    useful_life_batches` (the formula named in
+  useful_life_batches` (the formula named in
       `inventory-tracking-design.md`), written via `upsert` on
       `(asset_id, batch_id)` so a retried close can't double-compute.
       `AssetDepreciation` itself stays **read-only** from the client's
@@ -292,7 +292,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       job" question the design doc left open is resolved the same way
       `Batches.close()` was — manual, admin-triggered. Sums the month's
       `PerformanceScoreEntry` points, clamps to `[-10, +20]`, applies to
-      the employee's *current* baseline salary, locks the result
+      the employee's _current_ baseline salary, locks the result
       (`@@unique([employee_id, month])` — regenerating throws 409, matching
       "even if the baseline changes later, past months stay correct").
 - [x] **Verified against the design doc's own worked examples**, not just
@@ -303,10 +303,44 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
 - [x] 9 new tests (131 total).
 - [ ] Merged to `main`
 
-**Next up: Phase 13 (Alerts)** — the last write-bearing phase before Audit
-Log (14, needs Auth) and Analytics (16, needs everything). `Alerts` +
-trigger rules across everything built so far (low stock, mortality spikes,
-expiring stock, payroll due, negative-performance patterns).
+**Phase 13 (Alerts) — done.** Branch `feat/alerts-api`, ready to merge.
+
+- [x] **Design call**: FEATURES.md's 5 trigger conditions (low stock,
+      mortality spike, expiring stock, payroll due, negative-performance
+      pattern) are written as if they're live hooks on every relevant
+      write. Instrumenting all 8 already-merged services that would touch
+      (Consumption, MortalityLog, Purchase, PayrollRecord,
+      PerformanceScoreEntry, ...) is invasive and error-prone to retrofit.
+      Built `POST /api/alerts/scan` instead — reconciles current state
+      against all 5 conditions on demand, dedupes against existing
+      `ACTIVE` alerts by `(type, related_id)` so re-running doesn't spam.
+      Meant to run periodically (a cron, once one exists) or manually;
+      arguably *more* robust than event hooks for conditions that develop
+      gradually (a lateness pattern, a slow stock drain) rather than
+      firing at one exact moment.
+- [x] Low stock: aggregate balance from `StockLedger` (IN − OUT) per item
+      vs `reorder_level`, routed to `FEED` or `MEDICINE` alert type by
+      category.
+- [x] Mortality spike: 24h death count ÷ current live balance per
+      `RUNNING` batch, >1% → `CRITICAL`.
+- [x] Expiring stock: `PurchaseItem.expiration_date` within 30 days →
+      `MEDICINE WARNING`.
+- [x] Payroll due: any active employee missing a `PayrollRecord` for last
+      month, checked from the 5th of the month onward → `EMPLOYEE INFO`.
+- [x] Negative performance pattern: net `PerformanceScoreEntry` points this
+      month ≤ −5 → `EMPLOYEE WARNING`.
+- [x] Manual `Alerts` CRUD (create/list/get/resolve) alongside the scan,
+      for anything that doesn't fit an automated rule.
+- [x] 10 new tests (137 total), including an explicit re-run-doesn't-
+      duplicate check. Smoke-tested live — the scan caught a freshly
+      created item with zero ledger balance below its reorder level.
+- [ ] Merged to `main`
+
+**Remaining phases**: 14 (Audit Log) is blocked on 15 (Auth) for its write
+side per the original plan — the read/list API doesn't strictly need Auth
+first, so it could go next if useful before Auth lands. 16 (Analytics) reads
+across everything built so far and can go anytime. 15 itself stays blocked
+on a credential-scheme design decision.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -382,3 +416,7 @@ lands and every request has a real caller.
   criterion, server-computed, OTHER as the bounded escape hatch) and
   PayrollRecord (manual generate, clamp [-10,+20]) built. Verified against
   all three of the design doc's worked examples exactly (16200/13500/18000).
+- 2026-08-06 — Phase 13 done. Built alerts as an on-demand reconciliation
+  scan (POST /api/alerts/scan) instead of live hooks on 8 already-merged
+  services -- covers all 5 FEATURES.md trigger conditions, dedupes against
+  existing ACTIVE alerts. Manual Alerts CRUD alongside it.
