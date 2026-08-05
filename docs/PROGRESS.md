@@ -7,25 +7,25 @@ the build is, read it first when resuming.
 
 Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocked`
 
-| #   | Phase                                   | Models                                                                                                     | Depends on          | Status                                                                                                                            |
-| --- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | Foundation                              | DB, env, drop stale `user.*` scaffold                                                                      | —                   | ✅                                                                                                                                |
-| 1   | **Admins**                              | `Profiles` (role=ADMIN), `Admins`                                                                          | 0                   | ✅                                                                                                                                |
-| 2   | Employees                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                    | 0                   | ✅                                                                                                                                |
-| 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                        | 0                   | ✅                                                                                                                                |
-| 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ✅                                                                                                                                |
+| #   | Phase                                   | Models                                                                                                                  | Depends on          | Status                                                                                                                            |
+| --- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Foundation                              | DB, env, drop stale `user.*` scaffold                                                                                   | —                   | ✅                                                                                                                                |
+| 1   | **Admins**                              | `Profiles` (role=ADMIN), `Admins`                                                                                       | 0                   | ✅                                                                                                                                |
+| 2   | Employees                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                                 | 0                   | ✅                                                                                                                                |
+| 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                                     | 0                   | ✅                                                                                                                                |
+| 4   | Houses                                  | `Houses`                                                                                                                | 0                   | ✅                                                                                                                                |
 | 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`, `StockLedger`\*, `InventoryAdjustment`\* | 0                   | ✅                                                                                                                                |
-| 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ✅                                                                                                                                |
-| 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                 | 3, 5, 6             | ✅                                                                                                                                |
-| 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption` | 5, 6                | ✅                                                                                                                                |
-| 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                             | 3, 5, 6             | ⬜                                                                                                                                |
-| 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                             | 7, 9                | ⬜                                                                                                                                |
-| 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                       | 5, 6                | ⬜                                                                                                                                |
-| 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                   | 2                   | ⬜                                                                                                                                |
-| 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                 | 1–12 (reads across) | ⬜                                                                                                                                |
-| 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                 | 15                  | ⬜                                                                                                                                |
-| 15  | Auth & permission enforcement           | —                                                                                                          | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
-| 16  | Analytics                               | reads everything                                                                                           | 1–14                | ⬜                                                                                                                                |
+| 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                                  | 4                   | ✅                                                                                                                                |
+| 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                              | 3, 5, 6             | ✅                                                                                                                                |
+| 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption`              | 5, 6                | ✅                                                                                                                                |
+| 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                                          | 3, 5, 6             | ✅                                                                                                                                |
+| 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ⬜                                                                                                                                |
+| 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ⬜                                                                                                                                |
+| 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ⬜                                                                                                                                |
+| 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ⬜                                                                                                                                |
+| 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                              | 15                  | ⬜                                                                                                                                |
+| 15  | Auth & permission enforcement           | —                                                                                                                       | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
+| 16  | Analytics                               | reads everything                                                                                                        | 1–14                | ⬜                                                                                                                                |
 
 \* `StockLedger`/`InventoryAdjustment` were missed from Phase 5's original
 scope in this table — caught and closed at the start of Phase 8, since
@@ -192,11 +192,43 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       draw produced none.
 - [ ] Merged to `main`
 
-**Next up: Phase 9 (Sales)** — `Sale`, `SaleItem`, `BirdSale`. `BirdSale`
-will need to decrement `BatchHouseBalance` the same way `MortalityLog` does
-(Phase 6) — one more of the "only three things allowed to touch that
-balance." This is also what finally lets `Batches.close()` reconcile sold
-birds instead of requiring `force:true`.
+**Phase 9 (Sales) — done.** Branch `feat/sales-api`, ready to merge.
+
+- [x] **Schema gap closed**: `BirdSale` had no `house_id`, but the design
+      docs are explicit that it's one of only three things allowed to
+      touch `BatchHouseBalance` (alongside `BatchHouseAllocation` and
+      `MortalityLog`) — impossible without knowing which house's balance
+      to decrement. Added `house_id` (required FK to `Houses`), migration
+      `20260805202105_add_birdsale_house_id`.
+- [x] `Sale` + `SaleItem`: exact mirror of Purchase/PurchaseItem — create
+      only, append-only, `Prisma.Decimal` money math.
+- [x] `BirdSale`: decrements `BatchHouseBalance` in the same transaction as
+      the row insert, same pattern as `MortalityLog`. Deliberately
+      **narrow** about what gets server-computed: `total_amount = net_weight
+      × price_per_kg` and `due_amount` are unambiguous, so those are
+      computed. Every regional field (`dholta_in_g`, `total_katha`,
+      `avg_wt_per_katha_kg`, `avg_weight_g`) is accepted exactly as the
+      client sends it, not derived — `full-schema-analysis.md` explicitly
+      warns against touching business logic there's no full context on,
+      and guessing a formula would be worse than not having one.
+      Cross-field check: `male_count + female_count` must equal
+      `birds_count` when both are given.
+- [x] **First real test of `Batches.close()`'s reconciliation path**: sold
+      300 of 1000 birds, confirmed the balance read 700, confirmed
+      close-without-force reported "700 live birds allocated" (the exact
+      number), confirmed oversell (selling more than the house balance)
+      rejects with 409 and writes zero rows.
+- [x] 7 new tests (107 total). Full HTTP smoke test covering both Sale and
+      BirdSale, including the balance/close-reconciliation chain.
+- [ ] Merged to `main`
+
+**Next up: Phase 10 (Payments)** — `Payment`, `PaymentInstrument`. Recall
+the note above: neither `Purchase.due_amount` nor (now) `Sale`/`BirdSale`'s
+`due_amount` get updated when a `Payment` comes in later. Worth deciding in
+Phase 10 whether recording a `Payment` should reduce the referenced
+record's `due_amount`, or whether `due_amount` stays a create-time snapshot
+and outstanding balance is computed by summing `Payment` rows against it at
+read time instead.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -254,3 +286,7 @@ lands and every request has a real caller.
   Vaccinations/EnvironmentRecords/WeightRecords/BatchFeedingProgram.
   Consumption's coded-vs-aggregate branch is the real logic in this phase;
   verified both paths in isolation over real HTTP.
+- 2026-08-06 — Phase 9 done. Added BirdSale.house_id (schema gap -- it's
+  one of the three things allowed to touch BatchHouseBalance but had no
+  house reference). Built Sale/SaleItem/BirdSale; first real test of
+  Batches.close()'s reconciliation against actual sales, not just force:true.

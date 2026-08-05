@@ -449,6 +449,7 @@ model Houses {
   environmentRecords   EnvironmentRecords[]
   stockUnits           StockUnit[]
   inventoryAdjustments InventoryAdjustment[]
+  birdSales            BirdSale[]
 
   @@index([type])
 }
@@ -897,6 +898,8 @@ model BirdSale {
   id                  String     @id @default(uuid())
   batch_id            String
   batch               Batches    @relation(fields: [batch_id], references: [id])
+  house_id            String // which house's BatchHouseBalance this sale depletes -- one of only three things allowed to touch it, alongside BatchHouseAllocation and MortalityLog
+  house               Houses     @relation(fields: [house_id], references: [id])
   customer_id         String?
   customer            Customers? @relation(fields: [customer_id], references: [id])
   sale_date           DateTime
