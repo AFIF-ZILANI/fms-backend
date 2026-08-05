@@ -14,10 +14,10 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 2   | Employees                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                    | 0                   | ✅                                                                                                                                |
 | 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                        | 0                   | ✅                                                                                                                                |
 | 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ✅                                                                                                                                |
-| 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`                              | 0                   | ✅                                                                                                                                |
+| 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`, `StockLedger`\*, `InventoryAdjustment`\* | 0                   | ✅                                                                                                                                |
 | 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ✅                                                                                                                                |
 | 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                 | 3, 5, 6             | ✅                                                                                                                                |
-| 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption` | 5, 6                | ⬜                                                                                                                                |
+| 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption` | 5, 6                | ✅                                                                                                                                |
 | 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                             | 3, 5, 6             | ⬜                                                                                                                                |
 | 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                             | 7, 9                | ⬜                                                                                                                                |
 | 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                       | 5, 6                | ⬜                                                                                                                                |
@@ -26,6 +26,11 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                 | 15                  | ⬜                                                                                                                                |
 | 15  | Auth & permission enforcement           | —                                                                                                          | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
 | 16  | Analytics                               | reads everything                                                                                           | 1–14                | ⬜                                                                                                                                |
+
+\* `StockLedger`/`InventoryAdjustment` were missed from Phase 5's original
+scope in this table — caught and closed at the start of Phase 8, since
+`Consumption` needs `StockLedger` for non-coded (feed) draws. See the Phase
+8 entry below.
 
 ## Current step
 
@@ -135,7 +140,7 @@ than Phase 5 — this is where money-adjacent balance math lives.
       time, not before).
 - [x] Rejects `paid_amount` exceeding the computed total (400).
 - [x] **Closes the loop from Phase 5**: `StockUnit.bind()`'s test now binds
-      against a *real* `PurchaseItem` created through this module's own
+      against a _real_ `PurchaseItem` created through this module's own
       service, not a Prisma-seeded stand-in — confirmed end to end.
 - [x] `PurchaseItem` also gets a thin read-only list (filterable by
       `item_id`/`batch_id`) for lot lookups.
@@ -146,6 +151,52 @@ than Phase 5 — this is where money-adjacent balance math lives.
 **Note for Phase 10 (Payments)**: `Purchase.due_amount` is a snapshot set
 once at creation. Recording a `Payment` against a purchase later doesn't
 currently update it — that reconciliation is Phase 10's job, not built here.
+
+**Phase 8 (Treatment & Monitoring) — done.** Branch
+`feat/stock-ledger-and-treatment-api`, ready to merge. Started by closing
+the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
+`Consumption` needs both.
+
+- [x] `StockLedger`: **read-only from the client's perspective** — entries
+      are written by whatever domain action causes them (`Consumption`,
+      `InventoryAdjustment`), never posted directly. `record()` is an
+      internal helper that takes a `Prisma.TransactionClient` so it
+      composes into the caller's own transaction, not a separate write.
+      (Note: `Purchase`, already merged in Phase 7, does **not** yet write
+      an IN entry for aggregate items — not retrofitted here to avoid
+      reopening a merged phase; flagged as a follow-up.)
+- [x] `InventoryAdjustment`: create writes the adjustment row and a
+      matching `StockLedger` entry in the same transaction — direction
+      follows the sign of `quantity_after - quantity_before`. Rejects a
+      no-op correction (before == after).
+- [x] `Consumption`: the two-path branch is the core of this phase --
+      **coded draw** (`stock_unit_id` set): decrements
+      `StockUnit.remaining_quantity`, flips `IN_STOCK → IN_USE`, or
+      `→ CONSUMED` at exactly zero; equipment (`remaining_quantity` null)
+      just flips to `IN_USE` once, non-depleting. **Aggregate draw** (no
+      `stock_unit_id`, e.g. feed): no `StockUnit` involved, writes a
+      `StockLedger` OUT entry instead. Verified both paths don't leak into
+      each other (a coded draw writes zero `StockLedger` rows; an
+      aggregate draw touches zero `StockUnit` rows).
+- [x] `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`:
+      straightforward logging endpoints, no balance math. `WeightRecords`
+      enforces its `@@unique([batch_id, house_id, date])` as a 409, not a
+      silent overwrite.
+- [x] `BatchFeedingProgram`: create + list, plus a narrow
+      `setEndDay`-only update (closing out a feed phase early/late is the
+      one real edit case; everything else about a program is fixed at
+      creation).
+- [x] 22 new tests (100 total). Full HTTP smoke test walked both
+      `Consumption` branches end to end and confirmed the feed draw
+      produced exactly the expected `StockLedger` row while the medicine
+      draw produced none.
+- [ ] Merged to `main`
+
+**Next up: Phase 9 (Sales)** — `Sale`, `SaleItem`, `BirdSale`. `BirdSale`
+will need to decrement `BatchHouseBalance` the same way `MortalityLog` does
+(Phase 6) — one more of the "only three things allowed to touch that
+balance." This is also what finally lets `Batches.close()` reconcile sold
+birds instead of requiring `force:true`.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -198,3 +249,8 @@ lands and every request has a real caller.
   append-only per design), using Prisma.Decimal for money math instead of
   native numbers. StockUnit.bind's test now uses a real PurchaseItem from
   this module instead of a seeded stand-in.
+- 2026-08-06 — Phase 8 done. Closed a Phase 5 scope gap (StockLedger,
+  InventoryAdjustment) first, then built Consumption/Medications/
+  Vaccinations/EnvironmentRecords/WeightRecords/BatchFeedingProgram.
+  Consumption's coded-vs-aggregate branch is the real logic in this phase;
+  verified both paths in isolation over real HTTP.
