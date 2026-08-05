@@ -11,10 +11,11 @@ export const createAdminSchema = z.object({
 export const updateAdminSchema = createAdminSchema.partial();
 
 export const listAdminsQuerySchema = paginationQuerySchema.extend({
-    is_active: z
-        .enum(["true", "false"])
-        .optional()
-        .transform((v) => (v === undefined ? undefined : v === "true")),
+    // kept as the raw "true"/"false" string here (not transformed to boolean)
+    // -- chaining .transform() after .optional() makes the output key
+    // required-with-undefined instead of truly optional under
+    // exactOptionalPropertyTypes. Converted to boolean at the point of use.
+    is_active: z.enum(["true", "false"]).optional(),
 });
 
 export type CreateAdminInput = z.infer<typeof createAdminSchema>;
