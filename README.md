@@ -41,18 +41,18 @@ npm run dev:node     # http://localhost:5085
 
 ## Scripts
 
-| Command            | Description                          |
-| ------------------ | ------------------------------------ |
-| `bun run dev`      | Dev server with hot reload (Bun)     |
-| `npm run dev:node` | Dev server (Node.js via tsx)         |
-| `bun run start`    | Production server (Bun)              |
-| `npm run start:node` | Production server (Node.js)        |
-| `bun run build`    | Build for Node.js deployment         |
-| `bun run db:generate` | Generate Prisma client            |
+| Command               | Description                      |
+| --------------------- | -------------------------------- |
+| `bun run dev`         | Dev server with hot reload (Bun) |
+| `npm run dev:node`    | Dev server (Node.js via tsx)     |
+| `bun run start`       | Production server (Bun)          |
+| `npm run start:node`  | Production server (Node.js)      |
+| `bun run build`       | Build for Node.js deployment     |
+| `bun run db:generate` | Generate Prisma client           |
 | `bun run db:migrate`  | Run Prisma migrations            |
 | `bun run db:push`     | Push schema to database          |
-| `bun run format`       | Format with Prettier             |
-| `bun run typecheck`    | TypeScript type check            |
+| `bun run format`      | Format with Prettier             |
+| `bun run typecheck`   | TypeScript type check            |
 
 ---
 
@@ -94,17 +94,17 @@ import env from "@config/env";
 const port = env.PORT; // ✅ typed, validated
 ```
 
-| Variable               | Type                                      | Default                                       | Description                     |
-| ---------------------- | ----------------------------------------- | --------------------------------------------- | ------------------------------- |
-| `PORT`                 | `number`                                  | `5085`                                        | Server port                     |
-| `NODE_ENV`             | `"development" \| "production" \| "test"` | `"development"`                               | Runtime environment             |
+| Variable               | Type                                      | Default                                               | Description                  |
+| ---------------------- | ----------------------------------------- | ----------------------------------------------------- | ---------------------------- |
+| `PORT`                 | `number`                                  | `5085`                                                | Server port                  |
+| `NODE_ENV`             | `"development" \| "production" \| "test"` | `"development"`                                       | Runtime environment          |
 | `DATABASE_URL`         | `string`                                  | `postgresql://postgres:postgres@localhost:5432/bhaze` | PostgreSQL connection string |
-| `ALLOWED_ORIGINS`      | `string`                                  | `http://localhost:5085,http://localhost:5173`  | Comma-separated CORS origins    |
-| `CORS_CREDENTIALS`     | `boolean`                                 | `true`                                        | Allow credentials               |
-| `RATE_LIMIT_MAX`       | `number`                                  | `120`                                         | Max requests per window         |
-| `RATE_LIMIT_WINDOW_MS` | `number`                                  | `60000`                                       | Window duration (ms)            |
-| `TIMEOUT_MS`           | `number`                                  | `30000`                                       | Request timeout (ms)            |
-| `CSRF_ENABLED`         | `boolean`                                 | `true`                                        | CSRF protection (off in dev)    |
+| `ALLOWED_ORIGINS`      | `string`                                  | `http://localhost:5085,http://localhost:5173`         | Comma-separated CORS origins |
+| `CORS_CREDENTIALS`     | `boolean`                                 | `true`                                                | Allow credentials            |
+| `RATE_LIMIT_MAX`       | `number`                                  | `120`                                                 | Max requests per window      |
+| `RATE_LIMIT_WINDOW_MS` | `number`                                  | `60000`                                               | Window duration (ms)         |
+| `TIMEOUT_MS`           | `number`                                  | `30000`                                               | Request timeout (ms)         |
+| `CSRF_ENABLED`         | `boolean`                                 | `true`                                                | CSRF protection (off in dev) |
 
 Full docs: [`docs/SETUP.md`](./docs/SETUP.md)
 
@@ -134,22 +134,22 @@ Full docs: [`docs/SETUP.md`](./docs/SETUP.md)
 
 ```json
 {
-  "type": "https://api.bhaze.dev/errors/not-found",
-  "title": "Not Found",
-  "status": 404,
-  "detail": "User not found",
-  "instance": "/api/users/abc-123"
+    "type": "https://api.bhaze.dev/errors/not-found",
+    "title": "Not Found",
+    "status": 404,
+    "detail": "User not found",
+    "instance": "/api/users/abc-123"
 }
 ```
 
-| Field      | Type           | Required | Description                             |
-| ---------- | -------------- | -------- | --------------------------------------- |
-| `type`     | `string (URI)` | Always   | Error class identifier                  |
-| `title`    | `string`       | Always   | Short summary of the error type         |
-| `status`   | `number`       | Always   | HTTP status code                        |
-| `detail`   | `string`       | Always   | Explanation for this specific occurrence |
-| `instance` | `string (URI)` | No       | Request path / occurrence identifier    |
-| `extensions` | `object`    | No       | Additional data (validation fields, etc.)|
+| Field        | Type           | Required | Description                               |
+| ------------ | -------------- | -------- | ----------------------------------------- |
+| `type`       | `string (URI)` | Always   | Error class identifier                    |
+| `title`      | `string`       | Always   | Short summary of the error type           |
+| `status`     | `number`       | Always   | HTTP status code                          |
+| `detail`     | `string`       | Always   | Explanation for this specific occurrence  |
+| `instance`   | `string (URI)` | No       | Request path / occurrence identifier      |
+| `extensions` | `object`       | No       | Additional data (validation fields, etc.) |
 
 Full docs: [`docs/contracts/response.md`](./docs/contracts/response.md)
 
@@ -159,17 +159,17 @@ Full docs: [`docs/contracts/response.md`](./docs/contracts/response.md)
 
 ### AppError Static Factories
 
-| Method | Status | Usage |
-|--------|--------|-------|
-| `AppError.badRequest(msg, extensions?)` | 400 | Validation errors |
-| `AppError.unauthorized(msg?)` | 401 | Auth failures |
-| `AppError.forbidden(msg?)` | 403 | Permission denied |
-| `AppError.notFound(resource)` | 404 | Resource not found |
-| `AppError.conflict(msg)` | 409 | Duplicate resource |
-| `AppError.unprocessable(msg, extensions?)` | 422 | Semantic validation |
-| `AppError.tooManyRequests(msg?)` | 429 | Rate limit |
-| `AppError.internal(msg?, cause?)` | 500 | Unexpected error |
-| `AppError.serviceUnavailable(msg?, cause?)` | 503 | Dependency down |
+| Method                                      | Status | Usage               |
+| ------------------------------------------- | ------ | ------------------- |
+| `AppError.badRequest(msg, extensions?)`     | 400    | Validation errors   |
+| `AppError.unauthorized(msg?)`               | 401    | Auth failures       |
+| `AppError.forbidden(msg?)`                  | 403    | Permission denied   |
+| `AppError.notFound(resource)`               | 404    | Resource not found  |
+| `AppError.conflict(msg)`                    | 409    | Duplicate resource  |
+| `AppError.unprocessable(msg, extensions?)`  | 422    | Semantic validation |
+| `AppError.tooManyRequests(msg?)`            | 429    | Rate limit          |
+| `AppError.internal(msg?, cause?)`           | 500    | Unexpected error    |
+| `AppError.serviceUnavailable(msg?, cause?)` | 503    | Dependency down     |
 
 ### Usage in Services
 
@@ -177,17 +177,17 @@ Full docs: [`docs/contracts/response.md`](./docs/contracts/response.md)
 import { AppError } from "@lib/app-error";
 
 export const UserService = {
-  async getById(id: string) {
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) throw AppError.notFound("User");
-    return user;
-  },
+    async getById(id: string) {
+        const user = await prisma.user.findUnique({ where: { id } });
+        if (!user) throw AppError.notFound("User");
+        return user;
+    },
 
-  async create(data: CreateUserInput) {
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existing) throw AppError.conflict("Email already exists");
-    return prisma.user.create({ data });
-  },
+    async create(data: CreateUserInput) {
+        const existing = await prisma.user.findUnique({ where: { email: data.email } });
+        if (existing) throw AppError.conflict("Email already exists");
+        return prisma.user.create({ data });
+    },
 };
 ```
 
@@ -198,12 +198,12 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess } from "@lib/response";
 
 export const UserController = {
-  async getById(c: Context) {
-    return withHandler(c, async () => {
-      const user = await UserService.getById(id);
-      return sendSuccess(c, user, "User fetched");
-    });
-  },
+    async getById(c: Context) {
+        return withHandler(c, async () => {
+            const user = await UserService.getById(id);
+            return sendSuccess(c, user, "User fetched");
+        });
+    },
 };
 ```
 
@@ -215,14 +215,14 @@ Full docs: [`docs/contracts/error.md`](./docs/contracts/error.md)
 
 Applied in order on every request:
 
-| #  | Middleware         | Purpose                              |
-| -- | ------------------ | ------------------------------------ |
-| 1  | `secureHeaders`    | CSP, X-Frame-Options, Referrer-Policy |
-| 2  | `csrf`             | CSRF token validation (prod only)    |
-| 3  | `cors`             | Cross-origin resource sharing        |
-| 4  | `timeout`          | Request timeout (configurable)       |
-| 5  | `rateLimiter`      | Rate limiting (configurable)         |
-| 6  | `logger`           | Request/response logging             |
+| #   | Middleware      | Purpose                               |
+| --- | --------------- | ------------------------------------- |
+| 1   | `secureHeaders` | CSP, X-Frame-Options, Referrer-Policy |
+| 2   | `csrf`          | CSRF token validation (prod only)     |
+| 3   | `cors`          | Cross-origin resource sharing         |
+| 4   | `timeout`       | Request timeout (configurable)        |
+| 5   | `rateLimiter`   | Rate limiting (configurable)          |
+| 6   | `logger`        | Request/response logging              |
 
 ---
 
@@ -238,7 +238,7 @@ Applied in order on every request:
 | `@services/*`    | `src/services/*`    |
 | `@types/*`       | `src/types/*`       |
 | `@validators/*`  | `src/validators/*`  |
-| `@middlewares/*` | `src/middlewares/*`  |
+| `@middlewares/*` | `src/middlewares/*` |
 
 ---
 
@@ -250,8 +250,8 @@ Applied in order on every request:
 import { z } from "zod";
 
 export const createProductSchema = z.object({
-  name: z.string().min(1),
-  price: z.number().positive(),
+    name: z.string().min(1),
+    price: z.number().positive(),
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
@@ -265,13 +265,13 @@ import prisma from "@lib/db";
 import type { CreateProductInput } from "@validators/product.validator";
 
 export const ProductService = {
-  async getAll() {
-    return prisma.product.findMany();
-  },
+    async getAll() {
+        return prisma.product.findMany();
+    },
 
-  async create(data: CreateProductInput) {
-    return prisma.product.create({ data });
-  },
+    async create(data: CreateProductInput) {
+        return prisma.product.create({ data });
+    },
 };
 ```
 
@@ -285,20 +285,20 @@ import { ProductService } from "@services/product.service";
 import type { CreateProductInput } from "@validators/product.validator";
 
 export const ProductController = {
-  async getAll(c: Context) {
-    return withHandler(c, async () => {
-      const products = await ProductService.getAll();
-      return sendSuccess(c, products, "Products fetched");
-    });
-  },
+    async getAll(c: Context) {
+        return withHandler(c, async () => {
+            const products = await ProductService.getAll();
+            return sendSuccess(c, products, "Products fetched");
+        });
+    },
 
-  async create(c: Context) {
-    return withHandler(c, async () => {
-      const body = c.get("validatedBody") as CreateProductInput;
-      const product = await ProductService.create(body);
-      return sendSuccess(c, product, "Product created", 201);
-    });
-  },
+    async create(c: Context) {
+        return withHandler(c, async () => {
+            const body = c.get("validatedBody") as CreateProductInput;
+            const product = await ProductService.create(body);
+            return sendSuccess(c, product, "Product created", 201);
+        });
+    },
 };
 ```
 
@@ -336,21 +336,21 @@ GET /health → 200 { "status": "ok", "timestamp": "..." }
 
 ### Users
 
-| Method   | Endpoint          | Body                     | Description       |
-| -------- | ----------------- | ------------------------ | ----------------- |
-| `GET`    | `/api/users`      | —                        | List all users    |
-| `GET`    | `/api/users/:id`  | —                        | Get user by ID    |
-| `POST`   | `/api/users`      | `{ name, email }`        | Create user       |
-| `PATCH`  | `/api/users/:id`  | `{ name?, email? }`      | Update user       |
-| `DELETE` | `/api/users/:id`  | —                        | Delete user       |
+| Method   | Endpoint         | Body                | Description    |
+| -------- | ---------------- | ------------------- | -------------- |
+| `GET`    | `/api/users`     | —                   | List all users |
+| `GET`    | `/api/users/:id` | —                   | Get user by ID |
+| `POST`   | `/api/users`     | `{ name, email }`   | Create user    |
+| `PATCH`  | `/api/users/:id` | `{ name?, email? }` | Update user    |
+| `DELETE` | `/api/users/:id` | —                   | Delete user    |
 
 ---
 
 ## Docs
 
-| Doc | Description |
-|-----|-------------|
-| [`docs/SETUP.md`](./docs/SETUP.md) | Setup, env vars, architecture |
-| [`docs/contracts/response.md`](./docs/contracts/response.md) | Success/error JSON format |
-| [`docs/contracts/error.md`](./docs/contracts/error.md) | RFC 7807 Problem Details, AppError class |
-| [`docs/api.md`](./docs/api.md) | Full API reference with examples |
+| Doc                                                          | Description                              |
+| ------------------------------------------------------------ | ---------------------------------------- |
+| [`docs/SETUP.md`](./docs/SETUP.md)                           | Setup, env vars, architecture            |
+| [`docs/contracts/response.md`](./docs/contracts/response.md) | Success/error JSON format                |
+| [`docs/contracts/error.md`](./docs/contracts/error.md)       | RFC 7807 Problem Details, AppError class |
+| [`docs/api.md`](./docs/api.md)                               | Full API reference with examples         |

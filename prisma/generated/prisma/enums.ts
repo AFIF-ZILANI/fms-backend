@@ -316,7 +316,8 @@ export const PaymentRefType = {
   SALE: 'SALE',
   BIRD_SALE: 'BIRD_SALE',
   PURCHASE: 'PURCHASE',
-  EXPENSE: 'EXPENSE'
+  EXPENSE: 'EXPENSE',
+  PAYROLL: 'PAYROLL'
 } as const
 
 export type PaymentRefType = (typeof PaymentRefType)[keyof typeof PaymentRefType]

@@ -92,7 +92,7 @@ already established for medicine lots — one mechanism for both.
 
 - **Initial placement**: for every chicks `PurchaseItem`, create a matching
   `BatchHouseAllocation(reason=INITIAL, to_house_id=<brooder>, quantity=<that
-  delivery's chick count>, occurred_at=<delivery date>)`. Keeps the financial event
+delivery's chick count>, occurred_at=<delivery date>)`. Keeps the financial event
   (purchase) and the physical event (birds placed in a house) as two records — a
   batch can exist financially before its chicks are physically counted into a house,
   consistent with how FMS already treats batch creation.

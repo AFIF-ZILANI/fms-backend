@@ -15,13 +15,13 @@ Standalone. References `Employees`/`Profiles` from `codes/previous_schema.prisma
   part of the multi-user phase the original FMS plan already deferred
   (`docs/PREVIOUS_CONTEXT.md` §3: v1 is single-user).
 - **Monthly sum → capped adjustment**: `-10%` floor, `+20%` ceiling, as decided.
-  ```
-  adjustment_percent = clamp(sum_of_points_this_month, -10, +20)
-  final_salary = baseline_salary × (1 + adjustment_percent / 100)
-  ```
-  No entries in a month → sum is 0 → no change, matching "if zero then no change."
-  Points map 1:1 to percent, so the criteria below are sized directly in those terms
-  — no separate score-to-percent conversion step to keep track of.
+    ```
+    adjustment_percent = clamp(sum_of_points_this_month, -10, +20)
+    final_salary = baseline_salary × (1 + adjustment_percent / 100)
+    ```
+    No entries in a month → sum is 0 → no change, matching "if zero then no change."
+    Points map 1:1 to percent, so the criteria below are sized directly in those terms
+    — no separate score-to-percent conversion step to keep track of.
 
 ## Criteria
 
@@ -31,39 +31,39 @@ was it," which is where scoring systems usually get inconsistent between raters.
 
 ### Positive
 
-| Criterion | Points | Notes |
-|---|---|---|
-| Perfect attendance for the month | +3 | No unexcused absence, no pattern of lateness |
-| Caught/reported a problem early (sick birds, equipment fault, biosecurity risk) before it escalated | +3 | The single highest-leverage behavior on a farm — reward it well |
-| Proactive suggestion implemented (cost saving, efficiency, safety) | +3 | Only on actual implementation, not just suggesting |
-| Zero mortality/loss attributable to negligence in their area this month | +2 | Distinct from unavoidable mortality — negligence-caused only |
-| Accurate, timely data entry (feed allocation, mortality log, consumption, purchases) | +2 | Directly protects the FMS data this whole system depends on |
-| Followed biosecurity/safety protocol consistently | +2 | |
-| Helped train or cover for a struggling/new coworker | +2 | |
-| Completed an urgent task beyond assigned duty | +2 | |
-| *(Manager)* Team hit its output/performance target for the month | +3 | |
-| *(Manager)* Resolved a conflict/issue without it escalating to the Owner | +2 | |
+| Criterion                                                                                           | Points | Notes                                                           |
+| --------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------- |
+| Perfect attendance for the month                                                                    | +3     | No unexcused absence, no pattern of lateness                    |
+| Caught/reported a problem early (sick birds, equipment fault, biosecurity risk) before it escalated | +3     | The single highest-leverage behavior on a farm — reward it well |
+| Proactive suggestion implemented (cost saving, efficiency, safety)                                  | +3     | Only on actual implementation, not just suggesting              |
+| Zero mortality/loss attributable to negligence in their area this month                             | +2     | Distinct from unavoidable mortality — negligence-caused only    |
+| Accurate, timely data entry (feed allocation, mortality log, consumption, purchases)                | +2     | Directly protects the FMS data this whole system depends on     |
+| Followed biosecurity/safety protocol consistently                                                   | +2     |                                                                 |
+| Helped train or cover for a struggling/new coworker                                                 | +2     |                                                                 |
+| Completed an urgent task beyond assigned duty                                                       | +2     |                                                                 |
+| _(Manager)_ Team hit its output/performance target for the month                                    | +3     |                                                                 |
+| _(Manager)_ Resolved a conflict/issue without it escalating to the Owner                            | +2     |                                                                 |
 
 ### Negative
 
-| Criterion | Points | Notes |
-|---|---|---|
-| Inaccurate or falsified data entry/record | -5 | Most severe — corrupts the ledger everything else in FMS relies on |
-| Negligence causing bird injury/loss or a mortality spike | -5 | |
-| Biosecurity/safety protocol violation | -4 | |
-| Concealing a known problem instead of reporting it | -4 | |
-| Missed or delayed a critical task (late feed allocation, missed medicine schedule) | -3 | |
-| Damage to equipment/property from carelessness | -3 | |
-| Insubordination or a conduct issue | -3 | |
-| *(Manager)* Repeated team errors traceable to lack of supervision | -3 | |
-| Unexcused absence | -2 | Per occurrence |
-| Pattern of lateness | -2 | Per month it's a recurring issue, not per instance |
+| Criterion                                                                          | Points | Notes                                                              |
+| ---------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------ |
+| Inaccurate or falsified data entry/record                                          | -5     | Most severe — corrupts the ledger everything else in FMS relies on |
+| Negligence causing bird injury/loss or a mortality spike                           | -5     |                                                                    |
+| Biosecurity/safety protocol violation                                              | -4     |                                                                    |
+| Concealing a known problem instead of reporting it                                 | -4     |                                                                    |
+| Missed or delayed a critical task (late feed allocation, missed medicine schedule) | -3     |                                                                    |
+| Damage to equipment/property from carelessness                                     | -3     |                                                                    |
+| Insubordination or a conduct issue                                                 | -3     |                                                                    |
+| _(Manager)_ Repeated team errors traceable to lack of supervision                  | -3     |                                                                    |
+| Unexcused absence                                                                  | -2     | Per occurrence                                                     |
+| Pattern of lateness                                                                | -2     | Per month it's a recurring issue, not per instance                 |
 
 ### Escape hatch
 
-| Criterion | Points | Notes |
-|---|---|---|
-| `OTHER` | rater enters ±1 to ±5 | For anything real that doesn't fit the fixed list — always with a reason. A fixed list will never cover everything; better to have one deliberate escape hatch than force a bad-fit category. |
+| Criterion | Points                | Notes                                                                                                                                                                                         |
+| --------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OTHER`   | rater enters ±1 to ±5 | For anything real that doesn't fit the fixed list — always with a reason. A fixed list will never cover everything; better to have one deliberate escape hatch than force a bad-fit category. |
 
 ## Data Model
 
@@ -129,13 +129,13 @@ reference schema) referencing this record.
 
 ## Worked Examples — baseline ₹15,000/month
 
-| Scenario | Entries | Raw sum | Clamped | Final salary |
-|---|---|---|---|---|
-| Great month | Perfect attendance (+3), suggestion implemented (+3), accurate logging (+2) | +8 | +8% | ₹16,200 |
-| Mixed month | Perfect attendance (+3), one late feed allocation (-3), one unexcused absence (-2) | -2 | -2% | ₹14,700 |
-| Bad month | Biosecurity violation (-4), negligent mortality spike (-5), equipment damage (-3) | -12 | **-10%** (floor hit) | ₹13,500 |
-| Exceptional month | Attendance (+3), suggestion (+3), zero negligent loss (+2), helped coworker (+2), early report (+3) | +13 | +13% | ₹16,950 |
-| Runaway great month | Six positive entries averaging +4 each | +24 | **+20%** (ceiling hit) | ₹18,000 |
+| Scenario            | Entries                                                                                             | Raw sum | Clamped                | Final salary |
+| ------------------- | --------------------------------------------------------------------------------------------------- | ------- | ---------------------- | ------------ |
+| Great month         | Perfect attendance (+3), suggestion implemented (+3), accurate logging (+2)                         | +8      | +8%                    | ₹16,200      |
+| Mixed month         | Perfect attendance (+3), one late feed allocation (-3), one unexcused absence (-2)                  | -2      | -2%                    | ₹14,700      |
+| Bad month           | Biosecurity violation (-4), negligent mortality spike (-5), equipment damage (-3)                   | -12     | **-10%** (floor hit)   | ₹13,500      |
+| Exceptional month   | Attendance (+3), suggestion (+3), zero negligent loss (+2), helped coworker (+2), early report (+3) | +13     | +13%                   | ₹16,950      |
+| Runaway great month | Six positive entries averaging +4 each                                                              | +24     | **+20%** (ceiling hit) | ₹18,000      |
 
 The floor is easier to hit than the ceiling on purpose — a couple of serious negative
 entries (falsified record, negligence) should meaningfully bite; reaching the max

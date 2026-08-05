@@ -205,6 +205,7 @@ export const HousesScalarFieldEnum = {
   name: 'name',
   type: 'type',
   number: 'number',
+  capacity: 'capacity',
   created_at: 'created_at',
   updated_at: 'updated_at'
 } as const
@@ -239,7 +240,8 @@ export const BatchHouseAllocationScalarFieldEnum = {
   reason: 'reason',
   recorded_by_id: 'recorded_by_id',
   occurred_at: 'occurred_at',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type BatchHouseAllocationScalarFieldEnum = (typeof BatchHouseAllocationScalarFieldEnum)[keyof typeof BatchHouseAllocationScalarFieldEnum]
@@ -264,7 +266,8 @@ export const MortalityLogScalarFieldEnum = {
   cause_note: 'cause_note',
   date: 'date',
   recorded_by_id: 'recorded_by_id',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type MortalityLogScalarFieldEnum = (typeof MortalityLogScalarFieldEnum)[keyof typeof MortalityLogScalarFieldEnum]
@@ -371,7 +374,8 @@ export const ConsumptionScalarFieldEnum = {
   date: 'date',
   note: 'note',
   recorded_by_id: 'recorded_by_id',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type ConsumptionScalarFieldEnum = (typeof ConsumptionScalarFieldEnum)[keyof typeof ConsumptionScalarFieldEnum]
@@ -389,7 +393,8 @@ export const MedicationsScalarFieldEnum = {
   doctor_id: 'doctor_id',
   remarks: 'remarks',
   date: 'date',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type MedicationsScalarFieldEnum = (typeof MedicationsScalarFieldEnum)[keyof typeof MedicationsScalarFieldEnum]
@@ -407,7 +412,8 @@ export const VaccinationsScalarFieldEnum = {
   doctor_id: 'doctor_id',
   remarks: 'remarks',
   date: 'date',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type VaccinationsScalarFieldEnum = (typeof VaccinationsScalarFieldEnum)[keyof typeof VaccinationsScalarFieldEnum]
@@ -424,7 +430,8 @@ export const EnvironmentRecordsScalarFieldEnum = {
   air_pressure_hpa: 'air_pressure_hpa',
   time_period: 'time_period',
   recorded_by_id: 'recorded_by_id',
-  recorded_at: 'recorded_at'
+  recorded_at: 'recorded_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type EnvironmentRecordsScalarFieldEnum = (typeof EnvironmentRecordsScalarFieldEnum)[keyof typeof EnvironmentRecordsScalarFieldEnum]
@@ -438,7 +445,8 @@ export const WeightRecordsScalarFieldEnum = {
   sample_size: 'sample_size',
   date: 'date',
   measured_by_id: 'measured_by_id',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type WeightRecordsScalarFieldEnum = (typeof WeightRecordsScalarFieldEnum)[keyof typeof WeightRecordsScalarFieldEnum]
@@ -485,7 +493,8 @@ export const InventoryAdjustmentScalarFieldEnum = {
   reason: 'reason',
   note: 'note',
   recorded_by_id: 'recorded_by_id',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type InventoryAdjustmentScalarFieldEnum = (typeof InventoryAdjustmentScalarFieldEnum)[keyof typeof InventoryAdjustmentScalarFieldEnum]
@@ -525,6 +534,8 @@ export const SaleScalarFieldEnum = {
   customer_id: 'customer_id',
   sale_date: 'sale_date',
   total: 'total',
+  paid_amount: 'paid_amount',
+  due_amount: 'due_amount',
   recorded_by_id: 'recorded_by_id',
   created_at: 'created_at'
 } as const
@@ -562,6 +573,8 @@ export const BirdSaleScalarFieldEnum = {
   avg_weight_g: 'avg_weight_g',
   price_per_kg: 'price_per_kg',
   total_amount: 'total_amount',
+  paid_amount: 'paid_amount',
+  due_amount: 'due_amount',
   recorded_by_id: 'recorded_by_id',
   created_at: 'created_at'
 } as const
@@ -627,7 +640,8 @@ export const PerformanceScoreEntryScalarFieldEnum = {
   points: 'points',
   reason: 'reason',
   date: 'date',
-  created_at: 'created_at'
+  created_at: 'created_at',
+  idempotency_key: 'idempotency_key'
 } as const
 
 export type PerformanceScoreEntryScalarFieldEnum = (typeof PerformanceScoreEntryScalarFieldEnum)[keyof typeof PerformanceScoreEntryScalarFieldEnum]
