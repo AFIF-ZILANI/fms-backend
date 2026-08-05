@@ -1,6 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
-import { handleUniqueConstraint } from "@lib/prisma-errors";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     CreateAdminInput,
@@ -49,7 +49,7 @@ export const AdminService = {
                 return tx.admins.create({ data: { profile_id: profile.id }, include });
             });
         } catch (err) {
-            return handleUniqueConstraint(err);
+            return handlePrismaWriteError(err);
         }
     },
 
@@ -78,7 +78,7 @@ export const AdminService = {
                 include,
             });
         } catch (err) {
-            return handleUniqueConstraint(err);
+            return handlePrismaWriteError(err);
         }
     },
 

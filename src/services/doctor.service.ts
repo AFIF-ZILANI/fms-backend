@@ -1,6 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
-import { handleUniqueConstraint } from "@lib/prisma-errors";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type { CreateDoctorInput, ListDoctorsQuery } from "@validators/doctor.validator";
 
@@ -54,7 +54,7 @@ export const DoctorService = {
                 });
             });
         } catch (err) {
-            return handleUniqueConstraint(err);
+            return handlePrismaWriteError(err);
         }
     },
 };
