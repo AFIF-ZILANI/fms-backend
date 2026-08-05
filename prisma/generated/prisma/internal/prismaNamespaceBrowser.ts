@@ -560,6 +560,7 @@ export type SaleItemScalarFieldEnum = (typeof SaleItemScalarFieldEnum)[keyof typ
 export const BirdSaleScalarFieldEnum = {
   id: 'id',
   batch_id: 'batch_id',
+  house_id: 'house_id',
   customer_id: 'customer_id',
   sale_date: 'sale_date',
   grade: 'grade',
