@@ -1,0 +1,60 @@
+{
+  "compilerOptions": {
+    // ── Target & Module ───────────────────────────────────────────
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+
+    // ── Type Sources ──────────────────────────────────────────────
+    "types": ["bun-types", "node"],
+    "skipLibCheck": true,
+
+    // ── Strict Mode ───────────────────────────────────────────────
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+
+    // ── Extra Safety ──────────────────────────────────────────────
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    // ── Interop ───────────────────────────────────────────────────
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    // ── Output ────────────────────────────────────────────────────
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+
+    // ── Path Aliases (relative to tsconfig.json, no baseUrl needed)
+    "paths": {
+      "@/*": ["./src/*"],
+      "@routes/*": ["./src/routes/*"],
+      "@controllers/*": ["./src/controllers/*"],
+      "@services/*": ["./src/services/*"],
+      "@middlewares/*": ["./src/middlewares/*"],
+      "@validators/*": ["./src/validators/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@types/*": ["./src/types/*"],
+      "@config/*": ["./src/config/*"]
+    }
+  },
+
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "build"]
+}

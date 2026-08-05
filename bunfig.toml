@@ -1,0 +1,17 @@
+[serve]
+port = 3000
+
+[build]
+target = "bun"
+
+# Path aliases — mirrors tsconfig paths so Bun resolves them at runtime
+[module.aliases]
+"@" = "./src"
+"@routes" = "./src/routes"
+"@controllers" = "./src/controllers"
+"@services" = "./src/services"
+"@middlewares" = "./src/middlewares"
+"@validators" = "./src/validators"
+"@lib" = "./src/lib"
+"@types" = "./src/types"
+"@config" = "./src/config"
