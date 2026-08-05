@@ -27,6 +27,8 @@ import { saleRoutes } from "@routes/sale.routes";
 import { birdSaleRoutes } from "@routes/bird-sale.routes";
 import { paymentInstrumentRoutes } from "@routes/payment-instrument.routes";
 import { paymentRoutes } from "@routes/payment.routes";
+import { expenseRoutes } from "@routes/expense.routes";
+import { assetDepreciationRoutes } from "@routes/asset-depreciation.routes";
 
 export const appRoutes = new Hono();
 
@@ -60,3 +62,5 @@ appRoutes.route("/sales", saleRoutes);
 appRoutes.route("/bird-sales", birdSaleRoutes);
 appRoutes.route("/payment-instruments", paymentInstrumentRoutes);
 appRoutes.route("/payments", paymentRoutes);
+appRoutes.route("/expenses", expenseRoutes);
+appRoutes.route("/asset-depreciations", assetDepreciationRoutes);

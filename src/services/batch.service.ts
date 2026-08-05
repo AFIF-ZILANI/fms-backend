@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -111,9 +112,15 @@ export const BatchService = {
 
     /** Manual close, per the confirmed design decision (FEATURES.md §2.2) --
      * requires all birds accounted for (balances sum to zero) unless
-     * force:true. BirdSale (Phase 9) doesn't exist yet to reconcile
-     * against, so force is the escape hatch until then; AssetDepreciation
-     * computation stays out of scope here -- that's Phase 11. */
+     * force:true.
+     *
+     * Also fires the AssetDepreciation trigger deferred since Phase 5/6:
+     * an Asset has no direct link to a Batch, but Consumption does (batch_id
+     * + stock_unit_id together), so "which assets did this batch use" is
+     * "which Assets' StockUnits appear in this batch's Consumption rows."
+     * For each ACTIVE one, amount = purchase_cost / useful_life_batches
+     * (the formula named in inventory-tracking-design.md), written via
+     * upsert so closing is safe to retry without double-computing. */
     async close(id: string, data: CloseBatchInput) {
         const batch = await prisma.batches.findUnique({
             where: { id },
@@ -129,10 +136,39 @@ export const BatchService = {
             );
         }
 
-        return prisma.batches.update({
-            where: { id },
-            data: { status: data.status, actual_end_date: new Date() },
-            include,
+        return prisma.$transaction(async (tx) => {
+            const closed = await tx.batches.update({
+                where: { id },
+                data: { status: data.status, actual_end_date: new Date() },
+                include,
+            });
+
+            const usedStockUnits = await tx.consumption.findMany({
+                where: { batch_id: id, stock_unit_id: { not: null } },
+                select: { stock_unit_id: true },
+                distinct: ["stock_unit_id"],
+            });
+            const stockUnitIds = usedStockUnits
+                .map((c) => c.stock_unit_id)
+                .filter((v): v is string => v !== null);
+
+            if (stockUnitIds.length > 0) {
+                const assets = await tx.asset.findMany({
+                    where: { stock_unit_id: { in: stockUnitIds }, status: "ACTIVE" },
+                });
+                for (const asset of assets) {
+                    const amount = new Prisma.Decimal(asset.purchase_cost).dividedBy(
+                        asset.useful_life_batches,
+                    );
+                    await tx.assetDepreciation.upsert({
+                        where: { asset_id_batch_id: { asset_id: asset.id, batch_id: id } },
+                        create: { asset_id: asset.id, batch_id: id, amount },
+                        update: {},
+                    });
+                }
+            }
+
+            return closed;
         });
     },
 };

@@ -20,7 +20,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption`              | 5, 6                | ✅                                                                                                                                |
 | 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                                          | 3, 5, 6             | ✅                                                                                                                                |
 | 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ✅                                                                                                                                |
-| 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ⬜                                                                                                                                |
+| 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ✅                                                                                                                                |
 | 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ⬜                                                                                                                                |
 | 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ⬜                                                                                                                                |
 | 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                              | 15                  | ⬜                                                                                                                                |
@@ -205,7 +205,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
 - [x] `BirdSale`: decrements `BatchHouseBalance` in the same transaction as
       the row insert, same pattern as `MortalityLog`. Deliberately
       **narrow** about what gets server-computed: `total_amount = net_weight
-    × price_per_kg` and `due_amount` are unambiguous, so those are
+  × price_per_kg` and `due_amount` are unambiguous, so those are
       computed. Every regional field (`dholta_in_g`, `total_katha`,
       `avg_wt_per_katha_kg`, `avg_weight_g`) is accepted exactly as the
       client sends it, not derived — `full-schema-analysis.md` explicitly
@@ -249,10 +249,36 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       not a 500).
 - [ ] Merged to `main`
 
-**Next up: Phase 11 (Finance)** — `Expense`, `AssetDepreciation`. This is
-where the `Batches.close()` → depreciation trigger that's been deferred
-since Phase 5/6 finally gets built, plus the direct/shared_period/
-shared_capital cost classification from the original FMS plan.
+**Phase 11 (Finance) — done.** Branch `feat/finance-api`, ready to merge.
+
+- [x] `Expense`: append-only (create + list + get), same reasoning as every
+      other money-movement table this session — a correction is a new
+      offsetting entry, not an edit.
+- [x] **The `AssetDepreciation` trigger deferred since Phase 5/6 is built.**
+      An `Asset` has no direct link to a `Batch` — but `Consumption` does
+      (`batch_id` + `stock_unit_id` together, Phase 8), so "which assets did
+      this batch use" resolves to "which Assets' `StockUnit`s appear in this
+      batch's `Consumption` rows." Wired into `BatchService.close()`
+      (modifying already-merged Phase 6 code, not a new endpoint): for each
+      distinct `ACTIVE` asset found that way, `amount = purchase_cost /
+      useful_life_batches` (the formula named in
+      `inventory-tracking-design.md`), written via `upsert` on
+      `(asset_id, batch_id)` so a retried close can't double-compute.
+      `AssetDepreciation` itself stays **read-only** from the client's
+      perspective — same "written by the domain action, not posted
+      directly" pattern as `StockLedger`.
+- [x] Verified the full chain over both tests and live HTTP: bound a
+      `StockUnit` to a $40,000 asset with `useful_life_batches: 10`,
+      consumed it in a batch, closed the batch, got exactly `4000` back.
+      Also verified a batch that never touched the asset produces zero
+      depreciation rows, and confirmed no regression in the existing
+      `Batches.close()` tests from Phase 6.
+- [x] 6 new tests (122 total).
+- [ ] Merged to `main`
+
+**Next up: Phase 12 (Payroll)** — `PerformanceScoreEntry`, `PayrollRecord`.
+Point-ledger scoring (already scoped by `Employees` in Phase 2) feeding a
+monthly clamp-and-compute payroll run, per `employee-payroll-design.md`.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -319,3 +345,8 @@ lands and every request has a real caller.
   have due_amount mutated, so outstanding balance is computed by summing
   Payment rows at read time. Caught a Number-vs-Decimal slip in the balance
   computation before it shipped.
+- 2026-08-06 — Phase 11 done. Expense built; the AssetDepreciation trigger
+  deferred since Phase 5/6 finally wired into Batches.close() now that
+  Consumption exists to link an asset's StockUnit back to a batch.
+  Verified 40000/10=4000 exactly over both tests and live HTTP, plus no
+  regression in Phase 6's existing close() tests.
