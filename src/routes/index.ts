@@ -15,6 +15,14 @@ import { batchHouseAllocationRoutes } from "@routes/batch-house-allocation.route
 import { mortalityLogRoutes } from "@routes/mortality-log.routes";
 import { batchHouseBalanceRoutes } from "@routes/batch-house-balance.routes";
 import { purchaseRoutes, purchaseItemRoutes } from "@routes/purchase.routes";
+import { stockLedgerRoutes } from "@routes/stock-ledger.routes";
+import { inventoryAdjustmentRoutes } from "@routes/inventory-adjustment.routes";
+import { consumptionRoutes } from "@routes/consumption.routes";
+import { medicationRoutes } from "@routes/medication.routes";
+import { vaccinationRoutes } from "@routes/vaccination.routes";
+import { environmentRecordRoutes } from "@routes/environment-record.routes";
+import { weightRecordRoutes } from "@routes/weight-record.routes";
+import { batchFeedingProgramRoutes } from "@routes/batch-feeding-program.routes";
 
 export const appRoutes = new Hono();
 
@@ -36,3 +44,11 @@ appRoutes.route("/mortality-logs", mortalityLogRoutes);
 appRoutes.route("/batch-house-balances", batchHouseBalanceRoutes);
 appRoutes.route("/purchases", purchaseRoutes);
 appRoutes.route("/purchase-items", purchaseItemRoutes);
+appRoutes.route("/stock-ledger", stockLedgerRoutes);
+appRoutes.route("/inventory-adjustments", inventoryAdjustmentRoutes);
+appRoutes.route("/consumptions", consumptionRoutes);
+appRoutes.route("/medications", medicationRoutes);
+appRoutes.route("/vaccinations", vaccinationRoutes);
+appRoutes.route("/environment-records", environmentRecordRoutes);
+appRoutes.route("/weight-records", weightRecordRoutes);
+appRoutes.route("/batch-feeding-programs", batchFeedingProgramRoutes);
