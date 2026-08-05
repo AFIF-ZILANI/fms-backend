@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
+import { unitSchema } from "@lib/enums";
 
 const resourceCategory = z.enum([
     "FEED",
@@ -18,28 +19,10 @@ const resourceCategory = z.enum([
     "OTHER",
 ]);
 
-const unit = z.enum([
-    "BIRD",
-    "KG",
-    "LITER",
-    "BAG",
-    "BOX",
-    "UNIT",
-    "SACHETS",
-    "BOTTLE",
-    "ML",
-    "L",
-    "G",
-    "PCS",
-    "VIAL",
-    "DOSE",
-    "OTHER",
-]);
-
 export const createItemSchema = z.object({
     name: z.string().min(1, "Name is required"),
     category: resourceCategory,
-    unit,
+    unit: unitSchema,
     reorder_level: z.coerce.number().nonnegative().optional(),
     preferred_reorder_qty: z.coerce.number().nonnegative().optional(),
     lead_time_days: z.coerce.number().int().nonnegative().optional(),

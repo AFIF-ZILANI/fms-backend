@@ -14,6 +14,7 @@ import { batchRoutes } from "@routes/batch.routes";
 import { batchHouseAllocationRoutes } from "@routes/batch-house-allocation.routes";
 import { mortalityLogRoutes } from "@routes/mortality-log.routes";
 import { batchHouseBalanceRoutes } from "@routes/batch-house-balance.routes";
+import { purchaseRoutes, purchaseItemRoutes } from "@routes/purchase.routes";
 
 export const appRoutes = new Hono();
 
@@ -33,3 +34,5 @@ appRoutes.route("/batches", batchRoutes);
 appRoutes.route("/batch-house-allocations", batchHouseAllocationRoutes);
 appRoutes.route("/mortality-logs", mortalityLogRoutes);
 appRoutes.route("/batch-house-balances", batchHouseBalanceRoutes);
+appRoutes.route("/purchases", purchaseRoutes);
+appRoutes.route("/purchase-items", purchaseItemRoutes);
