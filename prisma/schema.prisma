@@ -12,10 +12,1025 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
+// ════════════════════════════════════════════════════════════════════
+// ENUMS
+// ════════════════════════════════════════════════════════════════════
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+  CUSTOMER
+  SUPPLIER
+  DOCTOR
+}
+
+enum EmployeeRoleNames {
+  MANAGER
+  WORKER
+  INTERN
+}
+
+enum SupplierRoleNames {
+  SALES_MAN
+  OWNER
+  DISTRIBUTOR
+  DEALER
+  WHOLESALER
+  RETAILER
+  MANUFACTURER
+  IMPORTER
+  REPRESENTATIVE
+}
+
+enum ContactMethods {
+  WHATSAPP
+  EMAIL
+  IMO
+  TELEGRAM
+}
+
+enum Units {
+  BIRD
+  KG
+  LITER
+  BAG
+  BOX
+  UNIT
+  SACHETS
+  BOTTLE
+  ML
+  L
+  G
+  PCS
+  VIAL
+  DOSE
+  OTHER
+}
+
+enum ResourceCategories {
+  FEED
+  MEDICINE
+  VACCINE
+  SUPPLEMENT
+  BIOSECURITY
+  CHICKS
+  HUSK
+  EQUIPMENT
+  UTILITIES
+  SALARY
+  TRANSPORTATION
+  MAINTENANCE
+  CLEANING_SUPPLIES
+  OTHER
+}
+
+enum SupplierSupplyCategories {
+  FEED
+  MEDICINE
+  CHICKS
+  HUSK
+  EQUIPMENT
+  UTILITIES
+  TRANSPORTATION
+  CLEANING_SUPPLIES
+  OFFICE_SUPPLIES
+  SOFTWARE
+  OTHER
+}
+
+enum HouseType {
+  BROODER
+  GROWER
+  LAYER
+}
+
+enum BatchStatus {
+  RUNNING
+  CLOSED
+  SOLD
+}
+
+enum Phase {
+  BROODER
+  GROWER
+}
+
+enum BirdBreeds {
+  CLASSIC
+  HIBREED
+  PAKISTHANI
+  KEDERNATH
+  FAOMI
+  TIGER
+}
+
+enum AllocationReason {
+  INITIAL // chicks placed into first house
+  TRANSFER // house → house move
+  ADJUSTMENT // correction
+}
+
+enum TimePeriods {
+  MORNING
+  NOON
+  AFTERNOON
+  EVENING
+  NIGHT
+  MIDNIGHT
+  LATENIGHT
+}
+
+enum FeedType {
+  PRE_STARTER
+  STARTER
+  GROWER
+  FINISHER
+  LAYER
+}
+
+enum CostType {
+  DIRECT // traceable to one batch
+  SHARED_PERIOD // recurring, farm-wide, allocated later by bird-days
+  SHARED_CAPITAL // equipment/assets, depreciated via useful_life_batches
+}
+
+enum ExpenseCategory {
+  LABOR
+  ELECTRICITY
+  WATER
+  RENT
+  TRANSPORT
+  FUEL
+  MAINTENANCE
+  VET_FEE
+  INTERNET
+  MISC
+}
+
+enum StockUnitStatus {
+  UNASSIGNED // printed, not yet bound to a purchase
+  IN_STOCK // bound, sitting in storage, untouched
+  IN_USE // opened/depleting (medicine, vaccine) or currently assigned to a batch (equipment)
+  CONSUMED // fully depleted — medicine/vaccine only
+  DISPOSED // written off — expired, damaged, discarded
+}
+
+enum AssetStatus {
+  ACTIVE
+  RETIRED
+  DISPOSED
+}
+
+enum StockDirection {
+  IN
+  OUT
+}
+
+enum StockReason {
+  PURCHASE
+  TRANSFER
+  CONSUMPTION
+  WASTAGE
+  EXPIRED
+  ADJUSTMENT
+  OPENING_BALANCE
+}
+
+enum LocationType {
+  WAREHOUSE
+  HOUSE
+  DISPOSAL
+}
+
+enum RefType {
+  PURCHASE
+  CONSUMPTION
+  ADJUSTMENT
+}
+
+enum OrganizationRole {
+  MANUFACTURER
+  IMPORTER
+  MARKETER
+  DISTRIBUTOR
+}
+
+enum BirdGrade {
+  HIGH
+  LOW
+  CULL
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MFS
+}
+
+enum MfsType {
+  BKASH
+  NAGAD
+  ROCKET
+}
+
+enum PaymentType {
+  INCOMING
+  OUTGOING
+}
+
+enum PaymentRefType {
+  SALE
+  BIRD_SALE
+  PURCHASE
+  EXPENSE
+}
+
+enum PerformanceCriterion {
+  ATTENDANCE_PERFECT
+  EARLY_PROBLEM_REPORT
+  SUGGESTION_IMPLEMENTED
+  ZERO_NEGLIGENT_LOSS
+  ACCURATE_DATA_ENTRY
+  BIOSECURITY_FOLLOWED
+  HELPED_COWORKER
+  EXTRA_TASK_COMPLETED
+  TEAM_TARGET_HIT
+  CONFLICT_RESOLVED
+  FALSIFIED_RECORD
+  NEGLIGENT_LOSS
+  BIOSECURITY_VIOLATION
+  CONCEALED_PROBLEM
+  MISSED_CRITICAL_TASK
+  EQUIPMENT_DAMAGE
+  CONDUCT_ISSUE
+  TEAM_SUPERVISION_FAILURE
+  UNEXCUSED_ABSENCE
+  PATTERN_LATENESS
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum AlertTypes {
+  EMPLOYEE
+  BATCH
+  FEED
+  MEDICINE
+  SYSTEM
+}
+
+enum AlertLevels {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+}
+
+enum AlertActionTypes {
+  PAY
+  REASSIGN
+  MARK_RESOLVED
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PEOPLE
+// ════════════════════════════════════════════════════════════════════
+
+model Profiles {
+  id         String   @id @default(uuid())
+  email      String?  @unique
+  name       String
+  mobile     String   @unique
+  address    String?
+  avatar_id  String?
+  avatar     Avatars? @relation(fields: [avatar_id], references: [id], onDelete: SetNull)
+  role       UserRole
+  is_active  Boolean  @default(true) // never hard-delete a Profile — it's referenced by every accountability field below
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  employees Employees?
+  admins    Admins?
+  customers Customers?
+  suppliers Suppliers?
+  doctors   Doctors?
+
+  // accountability back-relations — every action-record's actor field resolves here
+  weightRecords           WeightRecords[]
+  payments                Payment[]
+  mortalityLogsRecorded   MortalityLog[]
+  allocationsRecorded     BatchHouseAllocation[]
+  consumptionsRecorded    Consumption[]
+  purchasesRecorded       Purchase[]
+  stockUnitsBound         StockUnit[]
+  expensesRecorded        Expense[]
+  salesRecorded           Sale[]
+  birdSalesRecorded       BirdSale[]
+  environmentRecordsTaken EnvironmentRecords[]
+  scoresGiven             PerformanceScoreEntry[]
+  inventoryAdjustments    InventoryAdjustment[]
+  medicationsGiven        Medications[]
+  vaccinationsGiven       Vaccinations[]
+  auditLogs               AuditLog[]
+
+  @@index([role])
+}
+
+model Employees {
+  id           String            @id @default(uuid())
+  profile_id   String            @unique
+  profile      Profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  role         EmployeeRoleNames
+  salary       Decimal           @db.Decimal(10, 2) // baseline; PayrollRecord snapshots the actual monthly figure
+  joining_date DateTime          @default(now())
+  rating       Float?            @default(0)
+  created_at   DateTime          @default(now())
+  updated_at   DateTime          @updatedAt
+
+  performanceScores PerformanceScoreEntry[]
+  payrollRecords    PayrollRecord[]
+
+  @@index([role])
+}
+
+model Admins {
+  id         String   @id @default(uuid())
+  profile_id String   @unique
+  profile    Profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Customers {
+  id         String   @id @default(uuid())
+  profile_id String   @unique
+  profile    Profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  company    String?
+  rating     Float?   @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  sales     Sale[]
+  birdSales BirdSale[]
+}
+
+model Suppliers {
+  id         String                     @id @default(uuid())
+  profile_id String                     @unique
+  profile    Profiles                   @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  role       SupplierRoleNames
+  supplies   SupplierSupplyCategories[]
+  company    String?
+  is_active  Boolean                    @default(true)
+  created_at DateTime                   @default(now())
+  updated_at DateTime                   @updatedAt
+
+  items     Item[]
+  purchases Purchase[]
+
+  @@index([supplies])
+}
+
+model Doctors {
+  id          String   @id @default(uuid())
+  profile_id  String   @unique
+  profile     Profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  specialty   String?
+  position    String?
+  degrees     String[]
+  institution String?
+  rating      Float?   @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  medications  Medications[]
+  vaccinations Vaccinations[]
+}
+
+model Avatars {
+  id         String   @id @default(uuid())
+  public_id  String
+  image_url  String
+  created_at DateTime @default(now())
+
+  profiles Profiles[]
+}
+
+// ════════════════════════════════════════════════════════════════════
+// FARM STRUCTURE
+// ════════════════════════════════════════════════════════════════════
+
+model Houses {
+  id         String    @id @default(uuid())
+  name       String
+  type       HouseType
+  number     Int
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  weightRecords        WeightRecords[]
+  allocationsTo        BatchHouseAllocation[] @relation("ToHouse")
+  allocationsFrom      BatchHouseAllocation[] @relation("FromHouse")
+  batchHouseBalances   BatchHouseBalance[]
+  mortalityLogs        MortalityLog[]
+  consumptions         Consumption[]
+  environmentRecords   EnvironmentRecords[]
+  stockUnits           StockUnit[]
+  inventoryAdjustments InventoryAdjustment[]
+
+  @@index([type])
+}
+
+model Batches {
+  id                    String      @id @default(uuid())
+  batch_code            String      @unique
+  breed                 BirdBreeds
+  phase                 Phase       @default(BROODER)
+  status                BatchStatus @default(RUNNING)
+  starting_date         DateTime    @default(now())
+  expected_selling_date DateTime
+  actual_end_date       DateTime? // set when status → CLOSED/SOLD; drives bird-days + depreciation triggers
+  initial_chick_count   Int
+  init_chicks_avg_wt    Float
+  created_at            DateTime    @default(now())
+  updated_at            DateTime    @updatedAt
+
+  purchaseItems      PurchaseItem[]
+  houseAllocations   BatchHouseAllocation[]
+  houseBalances      BatchHouseBalance[]
+  mortalityLogs      MortalityLog[]
+  weightRecords      WeightRecords[]
+  medications        Medications[]
+  vaccinations       Vaccinations[]
+  environmentRecords EnvironmentRecords[]
+  consumptions       Consumption[]
+  expenses           Expense[]
+  birdSales          BirdSale[]
+  feedingPrograms    BatchFeedingProgram[]
+  assetDepreciations AssetDepreciation[]
+
+  @@index([status])
+}
+
+model BatchHouseAllocation {
+  id             String           @id @default(uuid())
+  batch_id       String
+  batch          Batches          @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+  from_house_id  String?
+  from_house     Houses?          @relation("FromHouse", fields: [from_house_id], references: [id], onDelete: SetNull)
+  to_house_id    String?
+  to_house       Houses?          @relation("ToHouse", fields: [to_house_id], references: [id], onDelete: SetNull)
+  quantity       Int // birds moved in THIS event (always positive) — stagger a multi-day shift as several rows
+  reason         AllocationReason
+  recorded_by_id String
+  recorded_by    Profiles         @relation(fields: [recorded_by_id], references: [id])
+  occurred_at    DateTime         @default(now())
+  created_at     DateTime         @default(now())
+
+  @@index([batch_id])
+  @@index([from_house_id])
+  @@index([to_house_id])
+}
+
+model BatchHouseBalance {
+  id         String   @id @default(uuid())
+  batch_id   String
+  batch      Batches  @relation(fields: [batch_id], references: [id])
+  house_id   String
+  house      Houses   @relation(fields: [house_id], references: [id])
+  quantity   Int
+  updated_at DateTime @updatedAt
+  // Cached count. MUST be updated in the same transaction as any BatchHouseAllocation,
+  // MortalityLog, or BirdSale insert that touches this batch+house — those are the only
+  // three things that can change it now that generic house events are gone. If it's ever
+  // updated out of band, it will drift and nobody will notice until the numbers are wrong.
+
+  @@unique([batch_id, house_id])
+  @@index([house_id])
+}
+
+model MortalityLog {
+  id             String   @id @default(uuid())
+  batch_id       String
+  batch          Batches  @relation(fields: [batch_id], references: [id])
+  house_id       String
+  house          Houses   @relation(fields: [house_id], references: [id])
+  count_died     Int
+  cause_note     String?
+  date           DateTime
+  recorded_by_id String
+  recorded_by    Profiles @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime @default(now())
+
+  @@index([batch_id])
+  @@index([house_id, date])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ITEMS & PURCHASING (lot costing lives here)
+// ════════════════════════════════════════════════════════════════════
+
+model Item {
+  id                    String             @id @default(uuid())
+  name                  String
+  normalized_key        String             @unique // app-computed dedup key — prevents "Amoxicillin" and "amoxicillin" splitting inventory
+  category              ResourceCategories
+  unit                  Units
+  meta_data             Json?
+  reorder_level         Decimal?           @db.Decimal(10, 3)
+  preferred_reorder_qty Decimal?           @db.Decimal(10, 3)
+  lead_time_days        Int?
+  is_active             Boolean            @default(true)
+  created_at            DateTime           @default(now())
+  updated_at            DateTime           @updatedAt
+
+  purchaseItems        PurchaseItem[]
+  ledgerEntries        StockLedger[]
+  consumptions         Consumption[]
+  saleItems            SaleItem[]
+  suppliers            Suppliers[]
+  feedingPrograms      BatchFeedingProgram[]
+  itemOrganizations    ItemOrganization[]
+  inventoryAdjustments InventoryAdjustment[]
+
+  @@index([category])
+}
+
+model Purchase {
+  id             String     @id @default(uuid())
+  supplier_id    String?
+  supplier       Suppliers? @relation(fields: [supplier_id], references: [id])
+  invoice_no     String?
+  purchase_date  DateTime
+  total_amount   Decimal    @db.Decimal(10, 2)
+  paid_amount    Decimal    @db.Decimal(10, 2)
+  due_amount     Decimal    @db.Decimal(10, 2)
+  recorded_by_id String
+  recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime   @default(now())
+
+  items PurchaseItem[]
+
+  @@index([supplier_id, purchase_date])
+}
+
+model PurchaseItem {
+  id              String    @id @default(uuid())
+  purchase_id     String
+  purchase        Purchase  @relation(fields: [purchase_id], references: [id])
+  item_id         String
+  item            Item      @relation(fields: [item_id], references: [id])
+  batch_id        String? // set for chicks — the batch this delivery funds. Repeatable: no unique
+  batch           Batches?  @relation(fields: [batch_id], references: [id]) // constraint blocks a 2nd delivery at a different price/date.
+  quantity        Decimal   @db.Decimal(10, 3)
+  unit            Units
+  unit_price      Decimal   @db.Decimal(10, 2)
+  total_price     Decimal   @db.Decimal(10, 2)
+  mfg_date        DateTime?
+  expiration_date DateTime?
+  created_at      DateTime  @default(now())
+
+  stockUnits StockUnit[]
+
+  @@index([item_id])
+  @@index([batch_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PHYSICAL UNIT TRACKING (medicine, vaccine, equipment)
+// ════════════════════════════════════════════════════════════════════
+
+model StockUnit {
+  id                 String          @id @default(uuid())
+  code               String          @unique // printed as QR + human-readable text
+  purchase_item_id   String? // null = blank, pre-printed, not yet bound to a lot
+  purchase_item      PurchaseItem?   @relation(fields: [purchase_item_id], references: [id])
+  status             StockUnitStatus @default(UNASSIGNED)
+  initial_quantity   Decimal?        @db.Decimal(10, 3) // e.g. 1000 (mL); null for equipment
+  remaining_quantity Decimal?        @db.Decimal(10, 3)
+  house_id           String? // current physical location, updated manually — not auto-synced to BatchHouseAllocation
+  house              Houses?         @relation(fields: [house_id], references: [id])
+  bound_by_id        String?
+  bound_by           Profiles?       @relation(fields: [bound_by_id], references: [id])
+  bound_at           DateTime?
+  created_at         DateTime        @default(now())
+
+  consumptions Consumption[]
+  asset        Asset?
+
+  @@index([purchase_item_id])
+  @@index([status])
+}
+
+model Asset {
+  id                  String      @id @default(uuid())
+  stock_unit_id       String      @unique
+  stock_unit          StockUnit   @relation(fields: [stock_unit_id], references: [id])
+  name                String
+  purchase_cost       Decimal     @db.Decimal(10, 2)
+  purchase_date       DateTime
+  useful_life_batches Int
+  status              AssetStatus @default(ACTIVE)
+  created_at          DateTime    @default(now())
+
+  depreciations AssetDepreciation[]
+}
+
+model AssetDepreciation {
+  id          String   @id @default(uuid())
+  asset_id    String
+  asset       Asset    @relation(fields: [asset_id], references: [id])
+  batch_id    String
+  batch       Batches  @relation(fields: [batch_id], references: [id])
+  amount      Decimal  @db.Decimal(10, 2) // purchase_cost / useful_life_batches, computed at batch close
+  computed_at DateTime @default(now())
+
+  @@unique([asset_id, batch_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CONSUMPTION, TREATMENT & MONITORING
+// ════════════════════════════════════════════════════════════════════
+
+model Consumption {
+  id             String     @id @default(uuid())
+  batch_id       String?
+  batch          Batches?   @relation(fields: [batch_id], references: [id])
+  house_id       String
+  house          Houses     @relation(fields: [house_id], references: [id])
+  item_id        String
+  item           Item       @relation(fields: [item_id], references: [id])
+  stock_unit_id  String? // set when drawn from a specific coded unit (medicine/vaccine/equipment)
+  stock_unit     StockUnit? @relation(fields: [stock_unit_id], references: [id])
+  quantity       Decimal    @db.Decimal(10, 3) // feed: allocation amount; medicine: dose drawn; equipment: 1 (non-depleting)
+  date           DateTime
+  note           String?
+  recorded_by_id String
+  recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime   @default(now())
+
+  medications  Medications[]
+  vaccinations Vaccinations[]
+
+  @@index([batch_id])
+  @@index([house_id, date])
+  @@index([stock_unit_id])
+}
+
+model Medications {
+  id                 String       @id @default(uuid())
+  batch_id           String
+  batch              Batches      @relation(fields: [batch_id], references: [id])
+  consumption_id     String? // links the treatment to the actual stock draw it came from
+  consumption        Consumption? @relation(fields: [consumption_id], references: [id])
+  medicine_name      String // kept for quick display / manual entries even without a linked consumption
+  dosage             String
+  cause              String?
+  period             String?
+  administered_by_id String // any Profile, not just Admins — workers/managers administer treatment day to day
+  administered_by    Profiles     @relation(fields: [administered_by_id], references: [id])
+  doctor_id          String?
+  doctor             Doctors?     @relation(fields: [doctor_id], references: [id])
+  remarks            String?
+  date               DateTime     @default(now())
+  created_at         DateTime     @default(now())
+
+  @@index([batch_id])
+}
+
+model Vaccinations {
+  id                 String       @id @default(uuid())
+  batch_id           String
+  batch              Batches      @relation(fields: [batch_id], references: [id])
+  consumption_id     String?
+  consumption        Consumption? @relation(fields: [consumption_id], references: [id])
+  vaccine_name       String
+  dosage             Int
+  cause              String?
+  period             String?
+  administered_by_id String
+  administered_by    Profiles     @relation(fields: [administered_by_id], references: [id])
+  doctor_id          String?
+  doctor             Doctors?     @relation(fields: [doctor_id], references: [id])
+  remarks            String?
+  date               DateTime     @default(now())
+  created_at         DateTime     @default(now())
+
+  @@index([batch_id])
+}
+
+model EnvironmentRecords {
+  id               String      @id @default(uuid())
+  batch_id         String
+  batch            Batches     @relation(fields: [batch_id], references: [id])
+  house_id         String
+  house            Houses      @relation(fields: [house_id], references: [id])
+  temperature_c    Float
+  humidity_percent Float
+  ammonia_ppm      Float
+  co2_ppm          Float
+  air_pressure_hpa Float
+  time_period      TimePeriods
+  recorded_by_id   String
+  recorded_by      Profiles    @relation(fields: [recorded_by_id], references: [id])
+  recorded_at      DateTime    @default(now())
+
+  @@index([batch_id])
+  @@index([house_id, recorded_at])
+}
+
+model WeightRecords {
+  id               String   @id @default(uuid())
+  batch_id         String?
+  batch            Batches? @relation(fields: [batch_id], references: [id])
+  house_id         String
+  house            Houses   @relation(fields: [house_id], references: [id])
+  average_wt_grams Decimal  @db.Decimal(10, 2)
+  sample_size      Int
+  date             DateTime
+  measured_by_id   String
+  measured_by      Profiles @relation(fields: [measured_by_id], references: [id])
+  created_at       DateTime @default(now())
+
+  @@unique([batch_id, house_id, date])
+}
+
+model BatchFeedingProgram {
   id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  batch_id  String
+  batch     Batches  @relation(fields: [batch_id], references: [id])
+  feed_type FeedType
+  item_id   String
+  item      Item     @relation(fields: [item_id], references: [id])
+  start_day Int
+  end_day   Int?
+
+  @@index([batch_id, start_day, end_day])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AGGREGATE LEDGER (non-coded items, e.g. feed at the warehouse level)
+// ════════════════════════════════════════════════════════════════════
+
+model StockLedger {
+  id              String         @id @default(uuid())
+  item_id         String
+  item            Item           @relation(fields: [item_id], references: [id])
+  quantity        Decimal        @db.Decimal(10, 3)
+  direction       StockDirection
+  reason          StockReason
+  unit_cost       Decimal?       @db.Decimal(10, 2)
+  location_type   LocationType?
+  location_id     String?
+  ref_type        RefType
+  ref_id          String
+  idempotency_key String         @unique
+  occurred_at     DateTime       @default(now())
+
+  @@index([item_id, occurred_at])
+  @@index([ref_type, ref_id])
+}
+
+model InventoryAdjustment {
+  id                  String      @id @default(uuid())
+  item_id             String
+  item                Item        @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  warehouse_id        String?
+  warehouse           Warehouses? @relation(fields: [warehouse_id], references: [id], onDelete: Cascade)
+  house_id            String?
+  house               Houses?     @relation(fields: [house_id], references: [id], onDelete: Cascade)
+  quantity_before     Decimal     @db.Decimal(10, 3)
+  quantity_after      Decimal     @db.Decimal(10, 3)
+  adjustment_quantity Decimal     @db.Decimal(10, 3)
+  reason              String
+  note                String?
+  recorded_by_id      String
+  recorded_by         Profiles    @relation(fields: [recorded_by_id], references: [id])
+  created_at          DateTime    @default(now())
+
+  @@index([item_id])
+}
+
+model Warehouses {
+  id         String   @id @default(uuid())
+  name       String
+  created_at DateTime @default(now())
+
+  inventoryAdjustments InventoryAdjustment[]
+}
+
+model Organization {
+  id             String   @id @default(uuid())
+  label_name     String
+  normalized_key String   @unique
+  created_at     DateTime @default(now())
+
+  itemLinks ItemOrganization[]
+}
+
+model ItemOrganization {
+  id              String           @id @default(uuid())
+  item_id         String
+  item            Item             @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  organization_id String
+  organization    Organization     @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  role            OrganizationRole
+
+  @@unique([item_id, organization_id, role])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SALES
+// ════════════════════════════════════════════════════════════════════
+
+model Sale {
+  id             String     @id @default(uuid())
+  customer_id    String?
+  customer       Customers? @relation(fields: [customer_id], references: [id])
+  sale_date      DateTime
+  total          Decimal    @db.Decimal(10, 2)
+  recorded_by_id String
+  recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime   @default(now())
+
+  items SaleItem[]
+}
+
+model SaleItem {
+  id          String  @id @default(uuid())
+  sale_id     String
+  sale        Sale    @relation(fields: [sale_id], references: [id])
+  item_id     String
+  item        Item    @relation(fields: [item_id], references: [id])
+  quantity    Decimal @db.Decimal(10, 3)
+  unit        Units
+  unit_price  Decimal @db.Decimal(10, 2)
+  total_price Decimal @db.Decimal(10, 2)
+
+  @@index([sale_id])
+  @@index([item_id])
+}
+
+model BirdSale {
+  id                  String     @id @default(uuid())
+  batch_id            String
+  batch               Batches    @relation(fields: [batch_id], references: [id])
+  customer_id         String?
+  customer            Customers? @relation(fields: [customer_id], references: [id])
+  sale_date           DateTime
+  grade               BirdGrade
+  male_count          Int?
+  female_count        Int?
+  birds_count         Int
+  dholta_in_g         Decimal    @db.Decimal(10, 2)
+  total_katha         Int
+  avg_wt_per_katha_kg Decimal?   @db.Decimal(10, 2)
+  total_weight        Decimal    @db.Decimal(10, 2)
+  net_weight          Decimal    @db.Decimal(10, 2)
+  avg_weight_g        Decimal?   @db.Decimal(10, 2)
+  price_per_kg        Decimal    @db.Decimal(10, 2)
+  total_amount        Decimal    @db.Decimal(10, 2)
+  recorded_by_id      String
+  recorded_by         Profiles   @relation(fields: [recorded_by_id], references: [id])
+  created_at          DateTime   @default(now())
+
+  @@index([batch_id, sale_date])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MONEY
+// ════════════════════════════════════════════════════════════════════
+
+model Expense {
+  id             String          @id @default(uuid())
+  batch_id       String?
+  batch          Batches?        @relation(fields: [batch_id], references: [id])
+  category       ExpenseCategory
+  cost_type      CostType
+  amount         Decimal         @db.Decimal(10, 2)
+  date           DateTime
+  remarks        String?
+  recorded_by_id String
+  recorded_by    Profiles        @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime        @default(now())
+
+  @@index([batch_id, date])
+  @@index([cost_type])
+}
+
+model Payment {
+  id                 String             @id @default(uuid())
+  amount             Decimal            @db.Decimal(10, 2)
+  payment_date       DateTime
+  direction          PaymentType
+  ref_type           PaymentRefType
+  ref_id             String
+  from_instrument_id String
+  from_instrument    PaymentInstrument  @relation("PaymentFrom", fields: [from_instrument_id], references: [id])
+  to_instrument_id   String?
+  to_instrument      PaymentInstrument? @relation("PaymentTo", fields: [to_instrument_id], references: [id])
+  transaction_ref    String?
+  handled_by_id      String?
+  handled_by         Profiles?          @relation(fields: [handled_by_id], references: [id])
+  note               String?
+  created_at         DateTime           @default(now())
+
+  @@index([ref_type, ref_id])
+}
+
+model PaymentInstrument {
+  id         String        @id @default(uuid())
+  owner_type UserRole
+  owner_id   String
+  type       PaymentMethod
+  label      String
+  bank_name  String?
+  account_no String?
+  mobile_no  String?
+  mfs_type   MfsType?
+  is_active  Boolean       @default(true)
+  created_at DateTime      @default(now())
+
+  payments_from Payment[] @relation("PaymentFrom")
+  payments_to   Payment[] @relation("PaymentTo")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PERFORMANCE & PAYROLL
+// ════════════════════════════════════════════════════════════════════
+
+model PerformanceScoreEntry {
+  id          String               @id @default(uuid())
+  employee_id String
+  employee    Employees            @relation(fields: [employee_id], references: [id])
+  given_by_id String
+  given_by    Profiles             @relation(fields: [given_by_id], references: [id])
+  criterion   PerformanceCriterion
+  points      Int // signed; snapshot of the criterion's value at time of entry
+  reason      String // required — never optional
+  date        DateTime             @default(now())
+  created_at  DateTime             @default(now())
+
+  @@index([employee_id, date])
+}
+
+model PayrollRecord {
+  id                 String    @id @default(uuid())
+  employee_id        String
+  employee           Employees @relation(fields: [employee_id], references: [id])
+  month              DateTime // normalized to first-of-month
+  baseline_salary    Decimal   @db.Decimal(10, 2)
+  score_sum          Int // raw sum, pre-clamp, kept for audit/history
+  adjustment_percent Decimal   @db.Decimal(5, 2) // clamped to [-10, +20], the value actually applied
+  final_salary       Decimal   @db.Decimal(10, 2)
+  created_at         DateTime  @default(now())
+
+  @@unique([employee_id, month])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// AUDIT
+// ════════════════════════════════════════════════════════════════════
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  table_name    String
+  record_id     String
+  action        AuditAction
+  changed_by_id String
+  changed_by    Profiles    @relation(fields: [changed_by_id], references: [id])
+  before_data   Json?
+  after_data    Json?
+  note          String?
+  occurred_at   DateTime    @default(now())
+
+  @@index([table_name, record_id])
+  @@index([changed_by_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ALERTS
+// ════════════════════════════════════════════════════════════════════
+
+model Alerts {
+  id          String            @id @default(uuid())
+  title       String
+  description String?
+  type        AlertTypes
+  level       AlertLevels
+  status      AlertStatus       @default(ACTIVE)
+  related_id  String?
+  action_type AlertActionTypes?
+  issued_at   DateTime?         @db.Date
+  resolved_at DateTime?         @db.Date
+  created_at  DateTime          @default(now())
 }

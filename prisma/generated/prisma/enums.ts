@@ -9,7 +9,387 @@
 * 🟢 You can import this file directly.
 */
 
+export const UserRole = {
+  ADMIN: 'ADMIN',
+  EMPLOYEE: 'EMPLOYEE',
+  CUSTOMER: 'CUSTOMER',
+  SUPPLIER: 'SUPPLIER',
+  DOCTOR: 'DOCTOR'
+} as const
+
+export type UserRole = (typeof UserRole)[keyof typeof UserRole]
 
 
-// This file is empty because there are no enums in the schema.
-export {}
+export const EmployeeRoleNames = {
+  MANAGER: 'MANAGER',
+  WORKER: 'WORKER',
+  INTERN: 'INTERN'
+} as const
+
+export type EmployeeRoleNames = (typeof EmployeeRoleNames)[keyof typeof EmployeeRoleNames]
+
+
+export const SupplierRoleNames = {
+  SALES_MAN: 'SALES_MAN',
+  OWNER: 'OWNER',
+  DISTRIBUTOR: 'DISTRIBUTOR',
+  DEALER: 'DEALER',
+  WHOLESALER: 'WHOLESALER',
+  RETAILER: 'RETAILER',
+  MANUFACTURER: 'MANUFACTURER',
+  IMPORTER: 'IMPORTER',
+  REPRESENTATIVE: 'REPRESENTATIVE'
+} as const
+
+export type SupplierRoleNames = (typeof SupplierRoleNames)[keyof typeof SupplierRoleNames]
+
+
+export const ContactMethods = {
+  WHATSAPP: 'WHATSAPP',
+  EMAIL: 'EMAIL',
+  IMO: 'IMO',
+  TELEGRAM: 'TELEGRAM'
+} as const
+
+export type ContactMethods = (typeof ContactMethods)[keyof typeof ContactMethods]
+
+
+export const Units = {
+  BIRD: 'BIRD',
+  KG: 'KG',
+  LITER: 'LITER',
+  BAG: 'BAG',
+  BOX: 'BOX',
+  UNIT: 'UNIT',
+  SACHETS: 'SACHETS',
+  BOTTLE: 'BOTTLE',
+  ML: 'ML',
+  L: 'L',
+  G: 'G',
+  PCS: 'PCS',
+  VIAL: 'VIAL',
+  DOSE: 'DOSE',
+  OTHER: 'OTHER'
+} as const
+
+export type Units = (typeof Units)[keyof typeof Units]
+
+
+export const ResourceCategories = {
+  FEED: 'FEED',
+  MEDICINE: 'MEDICINE',
+  VACCINE: 'VACCINE',
+  SUPPLEMENT: 'SUPPLEMENT',
+  BIOSECURITY: 'BIOSECURITY',
+  CHICKS: 'CHICKS',
+  HUSK: 'HUSK',
+  EQUIPMENT: 'EQUIPMENT',
+  UTILITIES: 'UTILITIES',
+  SALARY: 'SALARY',
+  TRANSPORTATION: 'TRANSPORTATION',
+  MAINTENANCE: 'MAINTENANCE',
+  CLEANING_SUPPLIES: 'CLEANING_SUPPLIES',
+  OTHER: 'OTHER'
+} as const
+
+export type ResourceCategories = (typeof ResourceCategories)[keyof typeof ResourceCategories]
+
+
+export const SupplierSupplyCategories = {
+  FEED: 'FEED',
+  MEDICINE: 'MEDICINE',
+  CHICKS: 'CHICKS',
+  HUSK: 'HUSK',
+  EQUIPMENT: 'EQUIPMENT',
+  UTILITIES: 'UTILITIES',
+  TRANSPORTATION: 'TRANSPORTATION',
+  CLEANING_SUPPLIES: 'CLEANING_SUPPLIES',
+  OFFICE_SUPPLIES: 'OFFICE_SUPPLIES',
+  SOFTWARE: 'SOFTWARE',
+  OTHER: 'OTHER'
+} as const
+
+export type SupplierSupplyCategories = (typeof SupplierSupplyCategories)[keyof typeof SupplierSupplyCategories]
+
+
+export const HouseType = {
+  BROODER: 'BROODER',
+  GROWER: 'GROWER',
+  LAYER: 'LAYER'
+} as const
+
+export type HouseType = (typeof HouseType)[keyof typeof HouseType]
+
+
+export const BatchStatus = {
+  RUNNING: 'RUNNING',
+  CLOSED: 'CLOSED',
+  SOLD: 'SOLD'
+} as const
+
+export type BatchStatus = (typeof BatchStatus)[keyof typeof BatchStatus]
+
+
+export const Phase = {
+  BROODER: 'BROODER',
+  GROWER: 'GROWER'
+} as const
+
+export type Phase = (typeof Phase)[keyof typeof Phase]
+
+
+export const BirdBreeds = {
+  CLASSIC: 'CLASSIC',
+  HIBREED: 'HIBREED',
+  PAKISTHANI: 'PAKISTHANI',
+  KEDERNATH: 'KEDERNATH',
+  FAOMI: 'FAOMI',
+  TIGER: 'TIGER'
+} as const
+
+export type BirdBreeds = (typeof BirdBreeds)[keyof typeof BirdBreeds]
+
+
+export const AllocationReason = {
+  INITIAL: 'INITIAL',
+  TRANSFER: 'TRANSFER',
+  ADJUSTMENT: 'ADJUSTMENT'
+} as const
+
+export type AllocationReason = (typeof AllocationReason)[keyof typeof AllocationReason]
+
+
+export const TimePeriods = {
+  MORNING: 'MORNING',
+  NOON: 'NOON',
+  AFTERNOON: 'AFTERNOON',
+  EVENING: 'EVENING',
+  NIGHT: 'NIGHT',
+  MIDNIGHT: 'MIDNIGHT',
+  LATENIGHT: 'LATENIGHT'
+} as const
+
+export type TimePeriods = (typeof TimePeriods)[keyof typeof TimePeriods]
+
+
+export const FeedType = {
+  PRE_STARTER: 'PRE_STARTER',
+  STARTER: 'STARTER',
+  GROWER: 'GROWER',
+  FINISHER: 'FINISHER',
+  LAYER: 'LAYER'
+} as const
+
+export type FeedType = (typeof FeedType)[keyof typeof FeedType]
+
+
+export const CostType = {
+  DIRECT: 'DIRECT',
+  SHARED_PERIOD: 'SHARED_PERIOD',
+  SHARED_CAPITAL: 'SHARED_CAPITAL'
+} as const
+
+export type CostType = (typeof CostType)[keyof typeof CostType]
+
+
+export const ExpenseCategory = {
+  LABOR: 'LABOR',
+  ELECTRICITY: 'ELECTRICITY',
+  WATER: 'WATER',
+  RENT: 'RENT',
+  TRANSPORT: 'TRANSPORT',
+  FUEL: 'FUEL',
+  MAINTENANCE: 'MAINTENANCE',
+  VET_FEE: 'VET_FEE',
+  INTERNET: 'INTERNET',
+  MISC: 'MISC'
+} as const
+
+export type ExpenseCategory = (typeof ExpenseCategory)[keyof typeof ExpenseCategory]
+
+
+export const StockUnitStatus = {
+  UNASSIGNED: 'UNASSIGNED',
+  IN_STOCK: 'IN_STOCK',
+  IN_USE: 'IN_USE',
+  CONSUMED: 'CONSUMED',
+  DISPOSED: 'DISPOSED'
+} as const
+
+export type StockUnitStatus = (typeof StockUnitStatus)[keyof typeof StockUnitStatus]
+
+
+export const AssetStatus = {
+  ACTIVE: 'ACTIVE',
+  RETIRED: 'RETIRED',
+  DISPOSED: 'DISPOSED'
+} as const
+
+export type AssetStatus = (typeof AssetStatus)[keyof typeof AssetStatus]
+
+
+export const StockDirection = {
+  IN: 'IN',
+  OUT: 'OUT'
+} as const
+
+export type StockDirection = (typeof StockDirection)[keyof typeof StockDirection]
+
+
+export const StockReason = {
+  PURCHASE: 'PURCHASE',
+  TRANSFER: 'TRANSFER',
+  CONSUMPTION: 'CONSUMPTION',
+  WASTAGE: 'WASTAGE',
+  EXPIRED: 'EXPIRED',
+  ADJUSTMENT: 'ADJUSTMENT',
+  OPENING_BALANCE: 'OPENING_BALANCE'
+} as const
+
+export type StockReason = (typeof StockReason)[keyof typeof StockReason]
+
+
+export const LocationType = {
+  WAREHOUSE: 'WAREHOUSE',
+  HOUSE: 'HOUSE',
+  DISPOSAL: 'DISPOSAL'
+} as const
+
+export type LocationType = (typeof LocationType)[keyof typeof LocationType]
+
+
+export const RefType = {
+  PURCHASE: 'PURCHASE',
+  CONSUMPTION: 'CONSUMPTION',
+  ADJUSTMENT: 'ADJUSTMENT'
+} as const
+
+export type RefType = (typeof RefType)[keyof typeof RefType]
+
+
+export const OrganizationRole = {
+  MANUFACTURER: 'MANUFACTURER',
+  IMPORTER: 'IMPORTER',
+  MARKETER: 'MARKETER',
+  DISTRIBUTOR: 'DISTRIBUTOR'
+} as const
+
+export type OrganizationRole = (typeof OrganizationRole)[keyof typeof OrganizationRole]
+
+
+export const BirdGrade = {
+  HIGH: 'HIGH',
+  LOW: 'LOW',
+  CULL: 'CULL'
+} as const
+
+export type BirdGrade = (typeof BirdGrade)[keyof typeof BirdGrade]
+
+
+export const PaymentMethod = {
+  CASH: 'CASH',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+  MFS: 'MFS'
+} as const
+
+export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod]
+
+
+export const MfsType = {
+  BKASH: 'BKASH',
+  NAGAD: 'NAGAD',
+  ROCKET: 'ROCKET'
+} as const
+
+export type MfsType = (typeof MfsType)[keyof typeof MfsType]
+
+
+export const PaymentType = {
+  INCOMING: 'INCOMING',
+  OUTGOING: 'OUTGOING'
+} as const
+
+export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType]
+
+
+export const PaymentRefType = {
+  SALE: 'SALE',
+  BIRD_SALE: 'BIRD_SALE',
+  PURCHASE: 'PURCHASE',
+  EXPENSE: 'EXPENSE'
+} as const
+
+export type PaymentRefType = (typeof PaymentRefType)[keyof typeof PaymentRefType]
+
+
+export const PerformanceCriterion = {
+  ATTENDANCE_PERFECT: 'ATTENDANCE_PERFECT',
+  EARLY_PROBLEM_REPORT: 'EARLY_PROBLEM_REPORT',
+  SUGGESTION_IMPLEMENTED: 'SUGGESTION_IMPLEMENTED',
+  ZERO_NEGLIGENT_LOSS: 'ZERO_NEGLIGENT_LOSS',
+  ACCURATE_DATA_ENTRY: 'ACCURATE_DATA_ENTRY',
+  BIOSECURITY_FOLLOWED: 'BIOSECURITY_FOLLOWED',
+  HELPED_COWORKER: 'HELPED_COWORKER',
+  EXTRA_TASK_COMPLETED: 'EXTRA_TASK_COMPLETED',
+  TEAM_TARGET_HIT: 'TEAM_TARGET_HIT',
+  CONFLICT_RESOLVED: 'CONFLICT_RESOLVED',
+  FALSIFIED_RECORD: 'FALSIFIED_RECORD',
+  NEGLIGENT_LOSS: 'NEGLIGENT_LOSS',
+  BIOSECURITY_VIOLATION: 'BIOSECURITY_VIOLATION',
+  CONCEALED_PROBLEM: 'CONCEALED_PROBLEM',
+  MISSED_CRITICAL_TASK: 'MISSED_CRITICAL_TASK',
+  EQUIPMENT_DAMAGE: 'EQUIPMENT_DAMAGE',
+  CONDUCT_ISSUE: 'CONDUCT_ISSUE',
+  TEAM_SUPERVISION_FAILURE: 'TEAM_SUPERVISION_FAILURE',
+  UNEXCUSED_ABSENCE: 'UNEXCUSED_ABSENCE',
+  PATTERN_LATENESS: 'PATTERN_LATENESS',
+  OTHER: 'OTHER'
+} as const
+
+export type PerformanceCriterion = (typeof PerformanceCriterion)[keyof typeof PerformanceCriterion]
+
+
+export const AuditAction = {
+  CREATE: 'CREATE',
+  UPDATE: 'UPDATE',
+  DELETE: 'DELETE'
+} as const
+
+export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction]
+
+
+export const AlertTypes = {
+  EMPLOYEE: 'EMPLOYEE',
+  BATCH: 'BATCH',
+  FEED: 'FEED',
+  MEDICINE: 'MEDICINE',
+  SYSTEM: 'SYSTEM'
+} as const
+
+export type AlertTypes = (typeof AlertTypes)[keyof typeof AlertTypes]
+
+
+export const AlertLevels = {
+  INFO: 'INFO',
+  WARNING: 'WARNING',
+  CRITICAL: 'CRITICAL'
+} as const
+
+export type AlertLevels = (typeof AlertLevels)[keyof typeof AlertLevels]
+
+
+export const AlertStatus = {
+  ACTIVE: 'ACTIVE',
+  RESOLVED: 'RESOLVED'
+} as const
+
+export type AlertStatus = (typeof AlertStatus)[keyof typeof AlertStatus]
+
+
+export const AlertActionTypes = {
+  PAY: 'PAY',
+  REASSIGN: 'REASSIGN',
+  MARK_RESOLVED: 'MARK_RESOLVED'
+} as const
+
+export type AlertActionTypes = (typeof AlertActionTypes)[keyof typeof AlertActionTypes]

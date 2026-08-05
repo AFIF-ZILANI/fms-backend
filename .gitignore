@@ -29,3 +29,5 @@ logs
 .vscode
 .DS_Store
 /graphify-out
+# prisma generated client
+prisma/generated

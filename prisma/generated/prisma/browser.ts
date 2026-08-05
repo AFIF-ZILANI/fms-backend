@@ -18,7 +18,197 @@ export { Prisma }
 export * as $Enums from './enums'
 export * from './enums';
 /**
- * Model User
+ * Model Profiles
  * 
  */
-export type User = Prisma.UserModel
+export type Profiles = Prisma.ProfilesModel
+/**
+ * Model Employees
+ * 
+ */
+export type Employees = Prisma.EmployeesModel
+/**
+ * Model Admins
+ * 
+ */
+export type Admins = Prisma.AdminsModel
+/**
+ * Model Customers
+ * 
+ */
+export type Customers = Prisma.CustomersModel
+/**
+ * Model Suppliers
+ * 
+ */
+export type Suppliers = Prisma.SuppliersModel
+/**
+ * Model Doctors
+ * 
+ */
+export type Doctors = Prisma.DoctorsModel
+/**
+ * Model Avatars
+ * 
+ */
+export type Avatars = Prisma.AvatarsModel
+/**
+ * Model Houses
+ * 
+ */
+export type Houses = Prisma.HousesModel
+/**
+ * Model Batches
+ * 
+ */
+export type Batches = Prisma.BatchesModel
+/**
+ * Model BatchHouseAllocation
+ * 
+ */
+export type BatchHouseAllocation = Prisma.BatchHouseAllocationModel
+/**
+ * Model BatchHouseBalance
+ * 
+ */
+export type BatchHouseBalance = Prisma.BatchHouseBalanceModel
+/**
+ * Model MortalityLog
+ * 
+ */
+export type MortalityLog = Prisma.MortalityLogModel
+/**
+ * Model Item
+ * 
+ */
+export type Item = Prisma.ItemModel
+/**
+ * Model Purchase
+ * 
+ */
+export type Purchase = Prisma.PurchaseModel
+/**
+ * Model PurchaseItem
+ * 
+ */
+export type PurchaseItem = Prisma.PurchaseItemModel
+/**
+ * Model StockUnit
+ * 
+ */
+export type StockUnit = Prisma.StockUnitModel
+/**
+ * Model Asset
+ * 
+ */
+export type Asset = Prisma.AssetModel
+/**
+ * Model AssetDepreciation
+ * 
+ */
+export type AssetDepreciation = Prisma.AssetDepreciationModel
+/**
+ * Model Consumption
+ * 
+ */
+export type Consumption = Prisma.ConsumptionModel
+/**
+ * Model Medications
+ * 
+ */
+export type Medications = Prisma.MedicationsModel
+/**
+ * Model Vaccinations
+ * 
+ */
+export type Vaccinations = Prisma.VaccinationsModel
+/**
+ * Model EnvironmentRecords
+ * 
+ */
+export type EnvironmentRecords = Prisma.EnvironmentRecordsModel
+/**
+ * Model WeightRecords
+ * 
+ */
+export type WeightRecords = Prisma.WeightRecordsModel
+/**
+ * Model BatchFeedingProgram
+ * 
+ */
+export type BatchFeedingProgram = Prisma.BatchFeedingProgramModel
+/**
+ * Model StockLedger
+ * 
+ */
+export type StockLedger = Prisma.StockLedgerModel
+/**
+ * Model InventoryAdjustment
+ * 
+ */
+export type InventoryAdjustment = Prisma.InventoryAdjustmentModel
+/**
+ * Model Warehouses
+ * 
+ */
+export type Warehouses = Prisma.WarehousesModel
+/**
+ * Model Organization
+ * 
+ */
+export type Organization = Prisma.OrganizationModel
+/**
+ * Model ItemOrganization
+ * 
+ */
+export type ItemOrganization = Prisma.ItemOrganizationModel
+/**
+ * Model Sale
+ * 
+ */
+export type Sale = Prisma.SaleModel
+/**
+ * Model SaleItem
+ * 
+ */
+export type SaleItem = Prisma.SaleItemModel
+/**
+ * Model BirdSale
+ * 
+ */
+export type BirdSale = Prisma.BirdSaleModel
+/**
+ * Model Expense
+ * 
+ */
+export type Expense = Prisma.ExpenseModel
+/**
+ * Model Payment
+ * 
+ */
+export type Payment = Prisma.PaymentModel
+/**
+ * Model PaymentInstrument
+ * 
+ */
+export type PaymentInstrument = Prisma.PaymentInstrumentModel
+/**
+ * Model PerformanceScoreEntry
+ * 
+ */
+export type PerformanceScoreEntry = Prisma.PerformanceScoreEntryModel
+/**
+ * Model PayrollRecord
+ * 
+ */
+export type PayrollRecord = Prisma.PayrollRecordModel
+/**
+ * Model AuditLog
+ * 
+ */
+export type AuditLog = Prisma.AuditLogModel
+/**
+ * Model Alerts
+ * 
+ */
+export type Alerts = Prisma.AlertsModel
