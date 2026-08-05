@@ -12,7 +12,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 0   | Foundation                              | DB, env, drop stale `user.*` scaffold                                                                      | —                   | ✅                                                                                                                                |
 | 1   | **Admins**                              | `Profiles` (role=ADMIN), `Admins`                                                                          | 0                   | ✅                                                                                                                                |
 | 2   | Employees                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                    | 0                   | ✅                                                                                                                                |
-| 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                        | 0                   | ⬜                                                                                                                                |
+| 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                        | 0                   | ✅                                                                                                                                |
 | 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ⬜                                                                                                                                |
 | 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`                              | 0                   | ⬜                                                                                                                                |
 | 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ⬜                                                                                                                                |
@@ -29,33 +29,39 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 
 ## Current step
 
-**Phase 2 (Employees) — done.** Branch `feat/employees-api`, ready to merge.
+**Phase 3 (Suppliers / Customers / Doctors) — done.** Branch
+`feat/suppliers-customers-doctors-api`, ready to merge.
 
-- [x] `Employees` module: validator → service → controller → routes,
-      mirroring Admins (create wraps `Profiles`+`Employees` in one
-      transaction, list is paginated + filterable by `role`/`is_active`,
-      update can change role/salary/rating, deactivate/reactivate via
-      `Profiles.is_active`)
-- [x] Tests written and passing (7 tests: round-trip, conflict, not-found,
-      no-op update rejection, role promotion, activation toggle, role filter)
-- [x] Dev server smoke-tested against real endpoints (create, invalid
-      role/negative salary validation, role filter, promotion, deactivate)
+- [x] `Suppliers` module: full CRUD + deactivate/reactivate. Filterable by
+      `role` and `supplies` (array-contains). `supplies` requires at least
+      one category.
+- [x] `Customers` module: full CRUD + deactivate/reactivate, plus `rating`
+      updates.
+- [x] `Doctors` module: create + list + get only, per the agreed reduced
+      scope (no dedicated FEATURES.md page, no `is_active` field on the
+      model — nothing to deactivate against).
+- [x] **Key difference from Admins/Employees**: `Suppliers.is_active` and
+      `Customers.is_active` are the model's own fields, not
+      `Profiles.is_active` — deactivate/reactivate targets the domain
+      table directly. Verified in both tests and a live smoke test that
+      deactivating a supplier leaves `profile.is_active` untouched.
+- [x] 15 tests written and passing (28 total across all modules so far)
+- [x] Dev server smoke-tested end to end: create/validate/filter/deactivate
+      for all three, confirmed the is_active-table distinction live
 - [ ] Merged to `main`
 
-**Fixed while building:** the `is_active` query-param schema on both Admins
-and Employees list endpoints had `.optional().transform(...)` after it,
-which — under `exactOptionalPropertyTypes` — makes the _output_ key
-required-with-`undefined` instead of genuinely optional, so any hand-built
-query object omitting `is_active` failed to typecheck. Reverted both to a
-plain `z.enum(["true","false"]).optional()` and moved the string→boolean
-conversion to the service layer, where it's one line either way. Same fix
-applied to both modules for consistency — future modules with an
-`is_active`-style filter should follow this pattern, not the transform one.
+**Next up: Phase 4 (Houses)** — smaller than the last two: no linked
+Profile/actor, just `Houses` CRUD (name, type, number, capacity) plus an
+occupancy view once Phase 6 (Batches) exists to read `BatchHouseBalance`
+from.
 
-**Next up: Phase 3 (Suppliers / Customers / Doctors)** — same shape again,
-though `Doctors` has no page of its own in FEATURES.md (referenced only via
-`doctor_id` on Medications/Vaccinations) so it may just need a minimal
-create+list, not full CRUD.
+**Fixed in Phase 2 (context for future modules):** the `is_active`
+query-param schema had `.optional().transform(...)` after it, which — under
+`exactOptionalPropertyTypes` — makes the _output_ key required-with-
+`undefined` instead of genuinely optional. Fixed pattern: keep the schema as
+a plain `z.enum(["true","false"]).optional()` and convert to boolean at the
+point of use in the service. All four modules built since (Employees,
+Suppliers, Customers) follow this.
 
 **Deliberately deferred to Phase 15 (Auth):** the generic `AuditLog`-writing
 middleware originally slated for Phase 0. Building it now would mean
@@ -80,3 +86,7 @@ lands and every request has a real caller.
 - 2026-08-06 — Phase 2 done. Employees module built and verified; fixed the
   `is_active` optional+transform typing gap (see above), applied to both
   Admins and Employees.
+- 2026-08-06 — Phase 3 done. Suppliers (full CRUD), Customers (full CRUD),
+  Doctors (create+list+get) built and verified. Confirmed
+  Suppliers/Customers deactivate their own `is_active`, not
+  `Profiles.is_active` — the one real shape difference from Phase 1/2.
