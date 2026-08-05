@@ -23,7 +23,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ✅                                                                                                                                |
 | 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ✅                                                                                                                                |
 | 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ✅                                                                                                                                |
-| 14  | Audit Log (read API + write middleware) | `AuditLog`                                                                                                              | 15                  | ⬜                                                                                                                                |
+| 14  | Audit Log (read API only; write middleware stays on 15) | `AuditLog`                                                                                              | —                   | ✅ (read side)                                                                                                                    |
 | 15  | Auth & permission enforcement           | —                                                                                                                       | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
 | 16  | Analytics                               | reads everything                                                                                                        | 1–14                | ⬜                                                                                                                                |
 
@@ -261,7 +261,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       batch's `Consumption` rows." Wired into `BatchService.close()`
       (modifying already-merged Phase 6 code, not a new endpoint): for each
       distinct `ACTIVE` asset found that way, `amount = purchase_cost /
-  useful_life_batches` (the formula named in
+useful_life_batches` (the formula named in
       `inventory-tracking-design.md`), written via `upsert` on
       `(asset_id, batch_id)` so a retried close can't double-compute.
       `AssetDepreciation` itself stays **read-only** from the client's
@@ -315,7 +315,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       against all 5 conditions on demand, dedupes against existing
       `ACTIVE` alerts by `(type, related_id)` so re-running doesn't spam.
       Meant to run periodically (a cron, once one exists) or manually;
-      arguably *more* robust than event hooks for conditions that develop
+      arguably _more_ robust than event hooks for conditions that develop
       gradually (a lateness pattern, a slow stock drain) rather than
       firing at one exact moment.
 - [x] Low stock: aggregate balance from `StockLedger` (IN − OUT) per item
@@ -336,11 +336,38 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       created item with zero ledger balance below its reorder level.
 - [ ] Merged to `main`
 
-**Remaining phases**: 14 (Audit Log) is blocked on 15 (Auth) for its write
-side per the original plan — the read/list API doesn't strictly need Auth
-first, so it could go next if useful before Auth lands. 16 (Analytics) reads
-across everything built so far and can go anytime. 15 itself stays blocked
-on a credential-scheme design decision.
+**Phase 14 (Audit Log — read side) — done.** Branch `feat/audit-log-api`,
+ready to merge.
+
+- [x] **Split the phase deliberately**: population (writing `AuditLog` rows
+      on every mutable-table update) genuinely needs Phase 15 — a Prisma
+      middleware doing this needs to know *who* made the change, and there's
+      no request-scoped actor identity until Auth exists. Retrofitting
+      manual audit-write calls into the ~15 already-merged services now
+      would mean some get coverage and others don't, which is a worse state
+      than the current consistent "not yet populated." Built the **read
+      side only**: `GET /api/audit-logs` (filterable by `table_name`,
+      `record_id`, `changed_by_id`, `action`, date range) and
+      `GET /api/audit-logs/:id` (full before/after JSON diff). Ready the
+      moment Phase 15 starts writing to it — no further changes needed here.
+- [x] 5 new tests (142 total), seeding raw `AuditLog` rows directly via
+      Prisma since there's no write path yet — a legitimate fixture pattern
+      for a genuinely not-yet-built dependency, same reasoning used for
+      `StockUnit.bind()` in Phase 5. Smoke-tested live the same way.
+- [x] **Noted, not chased down**: hit one flaky test failure in
+      `alert.service.test.ts` while running the full suite (passed reliably
+      alone and on two full-suite reruns). The test suite shares one live
+      Postgres database with no per-test transaction isolation, and Bun
+      runs test files concurrently by default — a real gap worth closing
+      eventually (wrap each test in a rolled-back transaction, or give each
+      file its own schema), but not a logic bug in anything built this
+      session.
+- [ ] Merged to `main`
+
+**Remaining**: 16 (Analytics) reads across everything built so far and can
+go anytime. 15 (Auth) stays blocked on a credential-scheme design decision
+— that's genuinely a "discuss with the user" item, not something to guess
+at, so it's the natural stopping point for autonomous work.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -420,3 +447,7 @@ lands and every request has a real caller.
   scan (POST /api/alerts/scan) instead of live hooks on 8 already-merged
   services -- covers all 5 FEATURES.md trigger conditions, dedupes against
   existing ACTIVE alerts. Manual Alerts CRUD alongside it.
+- 2026-08-06 — Phase 14 done (read side only). AuditLog list/get built;
+  population stays blocked on Phase 15 (Auth) deliberately, not retrofitted
+  partially. Noted a flaky cross-file test (shared DB, no per-test
+  isolation) as a real but separate gap, not a logic bug.
