@@ -15,7 +15,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                        | 0                   | ✅                                                                                                                                |
 | 4   | Houses                                  | `Houses`                                                                                                   | 0                   | ✅                                                                                                                                |
 | 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`                              | 0                   | ✅                                                                                                                                |
-| 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ⬜                                                                                                                                |
+| 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                     | 4                   | ✅                                                                                                                                |
 | 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                 | 3, 5, 6             | ⬜                                                                                                                                |
 | 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption` | 5, 6                | ⬜                                                                                                                                |
 | 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                             | 3, 5, 6             | ⬜                                                                                                                                |
@@ -78,16 +78,51 @@ Biggest phase so far — 6 resources across 5 models.
 **Working convention for actor fields, since there's no auth yet (Phase
 15 blocked)**: optional actor fields (`StockUnit.bound_by_id`) are accepted
 as an optional field in the request body. Required actor fields
-(`recorded_by_id` on `MortalityLog`/`Consumption`/etc. in upcoming phases)
-will need the same treatment as a required client-supplied field, until
-Phase 15 replaces it with a real session. Noting this now so Phase 6+
-doesn't need to re-derive the decision.
+(`recorded_by_id`) are accepted as a required client-supplied field in the
+request body, until Phase 15 replaces it with a real session. Used this
+convention for the first time in Phase 6 (`Batches.create`,
+`BatchHouseAllocation.create`, `MortalityLog.create` all take
+`recorded_by_id` directly).
 
-**Next up: Phase 6 (Batches)** — `Batches`, `BatchHouseAllocation`,
-`BatchHouseBalance`, `MortalityLog`. First module with the
-transactional-balance-update pattern (`BatchHouseBalance` must update in
-the same transaction as any allocation/mortality/sale touching that
-batch+house) and the first required `recorded_by_id` fields.
+**Phase 6 (Batches) — done.** Branch `feat/batches-api`, ready to merge.
+Biggest module yet for correctness risk, even though it's fewer resources
+than Phase 5 — this is where money-adjacent balance math lives.
+
+- [x] `Batches`: create wraps the Batch + INITIAL `BatchHouseAllocation` +
+      starting `BatchHouseBalance` in one transaction (the "chicks arrive"
+      flow from `system-design-arc.md` §4). Update is blocked once a batch
+      leaves `RUNNING`. Close is the confirmed manual-admin-action design
+      (FEATURES.md §2.2): requires the batch's balances to sum to zero,
+      with a `force:true` escape hatch since `BirdSale` (Phase 9) doesn't
+      exist yet to reconcile sold birds against. `AssetDepreciation`
+      computation stays out of scope — Phase 11.
+- [x] `BatchHouseAllocation`: one algorithm covers `TRANSFER` and
+      `ADJUSTMENT` — decrement `from_house_id`'s balance if set, increment
+      `to_house_id`'s if set (matches the schema comment: quantity is
+      always positive, direction is whichever field is set). Rejects a
+      transfer that would take a house negative. Rejects any allocation on
+      a non-`RUNNING` batch.
+- [x] `MortalityLog`: decrements the batch-house balance in the same
+      transaction as the log row — one of only three things allowed to
+      touch that balance (the schema's own words). Rejects a mortality
+      count that exceeds the house's live balance.
+- [x] `BatchHouseBalance`: read-only list endpoint (filterable by
+      batch/house) for the occupancy-grid style views `FEATURES.md`
+      describes.
+- [x] Explicitly verified transactional rollback in tests, not just the
+      happy path: an over-quantity transfer or over-count mortality log
+      leaves the balance untouched and writes zero rows — confirmed by
+      querying the DB directly after the rejected call, not just asserting
+      on the thrown error.
+- [x] 16 new tests (78 total). Full lifecycle also smoke-tested over real
+      HTTP: create → transfer → mortality → close-without-force (rejected
+      with the exact remaining count) → close-with-force.
+- [ ] Merged to `main`
+
+**Next up: Phase 7 (Purchases)** — `Purchase`, `PurchaseItem`. This is what
+finally lets `StockUnit.bind()` (Phase 5) be exercised against a real
+purchase instead of a test-seeded one, and is what funds a batch's chicks
+(the `PurchaseItem.batch_id` link `BatchService.create` assumed exists).
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -131,3 +166,8 @@ lands and every request has a real caller.
   built. Found and fixed a real bug: unhandled P2003 (FK violation) leaking
   as a raw 500 on StockUnit.bind — generalized the fix into
   handlePrismaWriteError so every future module gets it for free.
+- 2026-08-06 — Phase 6 done. Batches/BatchHouseAllocation/
+  BatchHouseBalance/MortalityLog built, with the transactional balance
+  math verified both by tests that check rollback (not just the thrown
+  error) and by a full create→transfer→mortality→close smoke test over
+  real HTTP.
