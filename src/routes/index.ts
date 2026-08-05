@@ -25,6 +25,8 @@ import { weightRecordRoutes } from "@routes/weight-record.routes";
 import { batchFeedingProgramRoutes } from "@routes/batch-feeding-program.routes";
 import { saleRoutes } from "@routes/sale.routes";
 import { birdSaleRoutes } from "@routes/bird-sale.routes";
+import { paymentInstrumentRoutes } from "@routes/payment-instrument.routes";
+import { paymentRoutes } from "@routes/payment.routes";
 
 export const appRoutes = new Hono();
 
@@ -56,3 +58,5 @@ appRoutes.route("/weight-records", weightRecordRoutes);
 appRoutes.route("/batch-feeding-programs", batchFeedingProgramRoutes);
 appRoutes.route("/sales", saleRoutes);
 appRoutes.route("/bird-sales", birdSaleRoutes);
+appRoutes.route("/payment-instruments", paymentInstrumentRoutes);
+appRoutes.route("/payments", paymentRoutes);

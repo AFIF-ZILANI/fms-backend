@@ -19,7 +19,7 @@ Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocke
 | 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                              | 3, 5, 6             | ✅                                                                                                                                |
 | 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption`              | 5, 6                | ✅                                                                                                                                |
 | 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                                          | 3, 5, 6             | ✅                                                                                                                                |
-| 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ⬜                                                                                                                                |
+| 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ✅                                                                                                                                |
 | 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ⬜                                                                                                                                |
 | 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ⬜                                                                                                                                |
 | 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ⬜                                                                                                                                |
@@ -205,7 +205,7 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
 - [x] `BirdSale`: decrements `BatchHouseBalance` in the same transaction as
       the row insert, same pattern as `MortalityLog`. Deliberately
       **narrow** about what gets server-computed: `total_amount = net_weight
-      × price_per_kg` and `due_amount` are unambiguous, so those are
+    × price_per_kg` and `due_amount` are unambiguous, so those are
       computed. Every regional field (`dholta_in_g`, `total_katha`,
       `avg_wt_per_katha_kg`, `avg_weight_g`) is accepted exactly as the
       client sends it, not derived — `full-schema-analysis.md` explicitly
@@ -222,13 +222,37 @@ the Phase 5 scope gap (`StockLedger`, `InventoryAdjustment`), since
       BirdSale, including the balance/close-reconciliation chain.
 - [ ] Merged to `main`
 
-**Next up: Phase 10 (Payments)** — `Payment`, `PaymentInstrument`. Recall
-the note above: neither `Purchase.due_amount` nor (now) `Sale`/`BirdSale`'s
-`due_amount` get updated when a `Payment` comes in later. Worth deciding in
-Phase 10 whether recording a `Payment` should reduce the referenced
-record's `due_amount`, or whether `due_amount` stays a create-time snapshot
-and outstanding balance is computed by summing `Payment` rows against it at
-read time instead.
+**Phase 10 (Payments) — done.** Branch `feat/payments-api`, ready to merge.
+
+- [x] **Resolved the due_amount question from Phase 7/9's note**: since
+      `Purchase`/`Sale`/`BirdSale` are append-only, mutating their
+      `due_amount` when a `Payment` comes in would violate that. `due_amount`
+      stays a create-time snapshot; `PaymentService.getTotalPaidForRef`
+      computes the running total by summing `Payment` rows against
+      `(ref_type, ref_id)` at read time instead. Exposed as
+      `GET /api/payments/total-paid?ref_type=&ref_id=`.
+- [x] `Payment`: append-only (create + list + get, no update, same as
+      Purchase/Sale). `ref_id` is a polymorphic reference resolved via
+      `ref_type` — not a real FK, same untyped-reference pattern
+      `StockLedger` already uses, so not validated against the target
+      table (consistent, not a new gap).
+- [x] `PaymentInstrument`: full CRUD + deactivate/reactivate (has its own
+      `is_active`, same pattern as Suppliers/Customers/Houses — not
+      `Profiles.is_active`). `owner_id`/`owner_type` is the same
+      polymorphic-reference pattern.
+- [x] `GET /:id/balance` on `PaymentInstrument`: incoming minus outgoing,
+      computed with `Prisma.Decimal` throughout (caught and fixed a first
+      draft that used native `Number` for this — same precision standard as
+      every other money computation this session).
+- [x] 9 new tests (116 total). Smoke-tested over HTTP including the
+      FK-violation path (`from_instrument_id` pointing nowhere → clean 400,
+      not a 500).
+- [ ] Merged to `main`
+
+**Next up: Phase 11 (Finance)** — `Expense`, `AssetDepreciation`. This is
+where the `Batches.close()` → depreciation trigger that's been deferred
+since Phase 5/6 finally gets built, plus the direct/shared_period/
+shared_capital cost classification from the original FMS plan.
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -290,3 +314,8 @@ lands and every request has a real caller.
   one of the three things allowed to touch BatchHouseBalance but had no
   house reference). Built Sale/SaleItem/BirdSale; first real test of
   Batches.close()'s reconciliation against actual sales, not just force:true.
+- 2026-08-06 — Phase 10 done. Payment/PaymentInstrument built. Resolved
+  the due_amount question flagged in Phase 7/9: append-only tables can't
+  have due_amount mutated, so outstanding balance is computed by summing
+  Payment rows at read time. Caught a Number-vs-Decimal slip in the balance
+  computation before it shipped.
