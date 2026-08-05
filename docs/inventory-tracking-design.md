@@ -23,7 +23,7 @@ Status: Approved. Standalone — no need to cross-reference `codes/previous_sche
   shares one price. This is the anchor for "which price applied to this bottle."
 - **Physical identity lives on `StockUnit`** — one row per individually-coded bottle
   or asset, bound to a `PurchaseItem` once received. Codes can be printed in bulk
-  *before* any purchase exists, because the physical sticker carries no information
+  _before_ any purchase exists, because the physical sticker carries no information
   beyond an opaque ID — meaning lives entirely in the database.
 - **All usage flows through one `Consumption` log** — batch, house, item, quantity,
   and (when relevant) which exact `StockUnit` it came from. This single event log is

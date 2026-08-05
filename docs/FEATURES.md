@@ -9,12 +9,12 @@ current source of truth, not just a reference.
 
 ## 1. Roles & clients
 
-| Role | Client | Schema role(s) |
-|---|---|---|
-| Owner/Admin | Web dashboard | `UserRole.ADMIN` (flat — no owner/admin tier split) |
-| Employee — Manager | Mobile app | `UserRole.EMPLOYEE` + `EmployeeRoleNames.MANAGER` |
-| Employee — Worker | Mobile app | `UserRole.EMPLOYEE` + `EmployeeRoleNames.WORKER` |
-| Employee — Intern | Mobile app | `UserRole.EMPLOYEE` + `EmployeeRoleNames.INTERN` |
+| Role               | Client        | Schema role(s)                                      |
+| ------------------ | ------------- | --------------------------------------------------- |
+| Owner/Admin        | Web dashboard | `UserRole.ADMIN` (flat — no owner/admin tier split) |
+| Employee — Manager | Mobile app    | `UserRole.EMPLOYEE` + `EmployeeRoleNames.MANAGER`   |
+| Employee — Worker  | Mobile app    | `UserRole.EMPLOYEE` + `EmployeeRoleNames.WORKER`    |
+| Employee — Intern  | Mobile app    | `UserRole.EMPLOYEE` + `EmployeeRoleNames.INTERN`    |
 
 Suppliers, Customers, and Doctors have **no login/portal** — they are records
 managed by Admins/Employees (purchase counterparties, sale counterparties,
@@ -68,23 +68,23 @@ module.
   house (creates the `INITIAL` `BatchHouseAllocation` into the brooder house
   in the same transaction as the chick `PurchaseItem`).
 - **Batch detail**, tabbed:
-  - *Overview* — phase, live bird count, houses currently occupied, age in
-    days, running mortality %.
-  - *House allocations* — history of moves (`BatchHouseAllocation`); add a
-    `TRANSFER` (brooder→grower) or `ADJUSTMENT` (correction) entry.
-  - *Mortality* — log entries (`count_died`, `cause_note`, `date`); cumulative
-    mortality chart.
-  - *Weight* — log sample weigh-ins (`average_wt_grams`, `sample_size`, per
-    house/date); growth curve.
-  - *Feeding program* — define `BatchFeedingProgram` (feed type per day
-    range: PRE_STARTER→STARTER→GROWER→FINISHER); actual vs. planned
-    consumption.
-  - *Treatments* — `Medications` / `Vaccinations` history, each linked to the
-    `Consumption` row it drew from; add new entries.
-  - *Environment* — logged readings (temp/humidity/ammonia/CO2/pressure) per
-    house per time-of-day; threshold flags feed into Alerts.
-  - *Financials* — direct expenses, chick/feed purchase cost, bird sales,
-    depreciation share, computed P&L for this batch.
+    - _Overview_ — phase, live bird count, houses currently occupied, age in
+      days, running mortality %.
+    - _House allocations_ — history of moves (`BatchHouseAllocation`); add a
+      `TRANSFER` (brooder→grower) or `ADJUSTMENT` (correction) entry.
+    - _Mortality_ — log entries (`count_died`, `cause_note`, `date`); cumulative
+      mortality chart.
+    - _Weight_ — log sample weigh-ins (`average_wt_grams`, `sample_size`, per
+      house/date); growth curve.
+    - _Feeding program_ — define `BatchFeedingProgram` (feed type per day
+      range: PRE_STARTER→STARTER→GROWER→FINISHER); actual vs. planned
+      consumption.
+    - _Treatments_ — `Medications` / `Vaccinations` history, each linked to the
+      `Consumption` row it drew from; add new entries.
+    - _Environment_ — logged readings (temp/humidity/ammonia/CO2/pressure) per
+      house per time-of-day; threshold flags feed into Alerts.
+    - _Financials_ — direct expenses, chick/feed purchase cost, bird sales,
+      depreciation share, computed P&L for this batch.
 - **Close batch** (manual admin action, confirmed in brainstorming):
   validates bird count is reconciled (sold + died = initial, or an explicit
   override reason), sets `status → CLOSED/SOLD` and `actual_end_date`, and
@@ -113,14 +113,14 @@ module.
   balance, or `StockUnit` count for coded items) is below `reorder_level` —
   feeds an Alert.
 - **Coded units** (`StockUnit` — medicine, vaccine, equipment):
-  - Provision a batch of blank codes (prints QR + text, `status UNASSIGNED`).
-  - Bind a code to a `PurchaseItem` lot (scan or manual entry) →
-    `status IN_STOCK` — also reachable from the mobile app (§3.3), since
-    deliveries often get received in the field, not at a desk.
-  - Unit detail: remaining quantity, current location (`house_id`), status,
-    who bound it and when, full consumption history.
-  - Relocate a unit to a different house.
-  - Mark disposed/expired (`DISPOSED`).
+    - Provision a batch of blank codes (prints QR + text, `status UNASSIGNED`).
+    - Bind a code to a `PurchaseItem` lot (scan or manual entry) →
+      `status IN_STOCK` — also reachable from the mobile app (§3.3), since
+      deliveries often get received in the field, not at a desk.
+    - Unit detail: remaining quantity, current location (`house_id`), status,
+      who bound it and when, full consumption history.
+    - Relocate a unit to a different house.
+    - Mark disposed/expired (`DISPOSED`).
 - **Assets** (equipment): list, purchase cost, useful life in batches,
   status (ACTIVE/RETIRED/DISPOSED), per-batch `AssetDepreciation` history,
   assign to a batch/house.
@@ -142,7 +142,7 @@ module.
 - Detail: purchase history, total outstanding due, items supplied, rating.
 - Deactivate (soft delete — purchases stay intact).
 
-### 2.6 Customers *(added — not in your original list)*
+### 2.6 Customers _(added — not in your original list)_
 
 `Sale` and `BirdSale` both reference `Customers`, so this needs its own page
 symmetric to Suppliers.
@@ -241,7 +241,7 @@ symmetric to Suppliers.
 - Deactivate an admin account; view that admin's action history via Audit
   Log.
 
-### 2.13 Alerts *(added — not in your original list)*
+### 2.13 Alerts _(added — not in your original list)_
 
 The `Alerts` model exists in the schema but nothing currently reads or
 writes it — this page (plus the triggers behind it) is what makes it real.
@@ -249,17 +249,17 @@ writes it — this page (plus the triggers behind it) is what makes it real.
 - Feed of alerts: type (EMPLOYEE/BATCH/FEED/MEDICINE/SYSTEM), level
   (INFO/WARNING/CRITICAL), status (ACTIVE/RESOLVED).
 - **Auto-generated triggers** (system-side, not manual entry):
-  - `Item` stock below `reorder_level` → FEED/MEDICINE alert.
-  - Batch daily mortality rate exceeds a threshold → BATCH CRITICAL.
-  - `StockUnit`/`PurchaseItem` nearing `expiration_date` → MEDICINE WARNING.
-  - Payroll run due / overdue → EMPLOYEE INFO.
-  - Employee negative-performance pattern (repeated negative
-    `PerformanceScoreEntry`) → EMPLOYEE WARNING.
+    - `Item` stock below `reorder_level` → FEED/MEDICINE alert.
+    - Batch daily mortality rate exceeds a threshold → BATCH CRITICAL.
+    - `StockUnit`/`PurchaseItem` nearing `expiration_date` → MEDICINE WARNING.
+    - Payroll run due / overdue → EMPLOYEE INFO.
+    - Employee negative-performance pattern (repeated negative
+      `PerformanceScoreEntry`) → EMPLOYEE WARNING.
 - Manual resolve, with optional `action_type` (PAY/REASSIGN/MARK_RESOLVED)
   tied to the `related_id` record.
 - Unresolved-critical badge count surfaces on the dashboard header.
 
-### 2.14 Audit Log *(added — not in your original list)*
+### 2.14 Audit Log _(added — not in your original list)_
 
 `AuditLog` exists for exactly this — needs a viewer or it's a dead table.
 
@@ -271,7 +271,7 @@ writes it — this page (plus the triggers behind it) is what makes it real.
   recommended in `system-design-arc.md` §6) — this page is the read side,
   not the write mechanism.
 
-### 2.15 Settings *(added — not in your original list)*
+### 2.15 Settings _(added — not in your original list)_
 
 Configuration data that isn't itself a transactional record:
 
@@ -288,7 +288,7 @@ Configuration data that isn't itself a transactional record:
 
 The "Field App" referenced but deferred in `system-design-arc.md` — this
 section now defines its feature set in full, per your call in brainstorming.
-Offline-sync *implementation* mechanics (queue internals, conflict
+Offline-sync _implementation_ mechanics (queue internals, conflict
 resolution) stay a separate later doc; what follows is what screens/actions
 exist and who can use them.
 
@@ -362,23 +362,23 @@ shouldn't own yet:
 
 ### 3.5 Permission matrix
 
-| Action | Intern | Worker | Manager | Admin |
-|---|---|---|---|---|
-| View batch/house info | ✅ | ✅ | ✅ | ✅ |
-| Log environment readings | ✅ | ✅ | ✅ | ✅ |
-| Log weight samples | assist | ✅ | ✅ | ✅ |
-| Log mortality | ❌ | ✅ | ✅ | ✅ |
-| Log consumption | ❌ | ✅ | ✅ | ✅ |
-| Administer/log treatment | ❌ | ✅ | ✅ | ✅ |
-| House transfer / adjustment | ❌ | ❌ | ✅ | ✅ |
-| Manage feeding program | ❌ | ❌ | ✅ | ✅ |
-| Score other employees | ❌ | ❌ | ✅ | ✅ |
-| Receive & bind incoming stock | ❌ | ❌ | ✅ | ✅ |
-| Report inventory discrepancy | ❌ | ❌ | ✅ | ✅ |
-| View own performance history | ✅ | ✅ | ✅ | ✅ |
-| Purchases / Sales / Payments / Finance | ❌ | ❌ | ❌ | ✅ |
-| Close a batch | ❌ | ❌ | ❌ | ✅ |
-| Manage Admins/Employees accounts | ❌ | ❌ | ❌ | ✅ |
+| Action                                 | Intern | Worker | Manager | Admin |
+| -------------------------------------- | ------ | ------ | ------- | ----- |
+| View batch/house info                  | ✅     | ✅     | ✅      | ✅    |
+| Log environment readings               | ✅     | ✅     | ✅      | ✅    |
+| Log weight samples                     | assist | ✅     | ✅      | ✅    |
+| Log mortality                          | ❌     | ✅     | ✅      | ✅    |
+| Log consumption                        | ❌     | ✅     | ✅      | ✅    |
+| Administer/log treatment               | ❌     | ✅     | ✅      | ✅    |
+| House transfer / adjustment            | ❌     | ❌     | ✅      | ✅    |
+| Manage feeding program                 | ❌     | ❌     | ✅      | ✅    |
+| Score other employees                  | ❌     | ❌     | ✅      | ✅    |
+| Receive & bind incoming stock          | ❌     | ❌     | ✅      | ✅    |
+| Report inventory discrepancy           | ❌     | ❌     | ✅      | ✅    |
+| View own performance history           | ✅     | ✅     | ✅      | ✅    |
+| Purchases / Sales / Payments / Finance | ❌     | ❌     | ❌      | ✅    |
+| Close a batch                          | ❌     | ❌     | ❌      | ✅    |
+| Manage Admins/Employees accounts       | ❌     | ❌     | ❌      | ✅    |
 
 ---
 
@@ -407,7 +407,7 @@ model:
   data to validate against.
 - Auth/role enforcement layer — schema and this permission matrix are ready;
   no middleware/guard code exists yet.
-- Field App offline-sync *implementation* (queue internals, conflict
+- Field App offline-sync _implementation_ (queue internals, conflict
   handling, retry logic against `idempotency_key`) — feature list is now
   defined (§3); the sync mechanism itself is still a separate design
   conversation.

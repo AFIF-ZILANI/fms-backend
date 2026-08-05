@@ -43,7 +43,7 @@ Companion to `codes/schema.prisma` (validated with `prisma validate`). Base is
   employee payroll design (`employee-payroll-design.md`), as agreed: single
   point-ledger per employee per month, fixed criteria values, -10%/+20% clamp.
 - **`AuditLog`** — generic `(table_name, record_id, action, changed_by, before/after
-  json)` trail for anything mutable. This is the "full audit" piece: it can't enforce
+json)` trail for anything mutable. This is the "full audit" piece: it can't enforce
   itself — something (a Prisma middleware or service-layer wrapper) has to actually
   write to it on every update — but the schema now has a place for that trail to live
   instead of relying purely on `updated_at` overwriting history.
@@ -122,4 +122,5 @@ Companion to `codes/schema.prisma` (validated with `prisma validate`). Base is
 ```
 cd codes && npx prisma validate --schema=./schema.prisma
 ```
+
 Passes as of this doc. No migration has been run — no database exists yet.

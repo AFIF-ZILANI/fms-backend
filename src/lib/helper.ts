@@ -16,7 +16,14 @@ export const withHandler = <T>(
 ): Promise<Response> =>
     Promise.resolve()
         .then(() => fn())
-        .then((data) => sendSuccess(c, data, options?.message, options?.status ?? 200))
+        // fn() may already have built its Response via sendSuccess/sendList
+        // (the documented pattern — a custom message/status per call site);
+        // only auto-wrap when it returned raw data instead.
+        .then((data) =>
+            data instanceof Response
+                ? data
+                : sendSuccess(c, data, options?.message, options?.status ?? 200),
+        )
         .catch((err) => {
             if (err instanceof AppError) return sendError(c, err);
             console.error("[Unhandled]", err);

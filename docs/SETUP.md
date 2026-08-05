@@ -31,17 +31,17 @@ const port = env.PORT; // ✅ typed, validated
 
 ### Variables
 
-| Variable               | Type                                      | Default                                       | Description                     |
-| ---------------------- | ----------------------------------------- | --------------------------------------------- | ------------------------------- |
-| `PORT`                 | `number`                                  | `5085`                                        | Server port                     |
-| `NODE_ENV`             | `"development" \| "production" \| "test"` | `"development"`                               | Runtime environment             |
+| Variable               | Type                                      | Default                                               | Description                  |
+| ---------------------- | ----------------------------------------- | ----------------------------------------------------- | ---------------------------- |
+| `PORT`                 | `number`                                  | `5085`                                                | Server port                  |
+| `NODE_ENV`             | `"development" \| "production" \| "test"` | `"development"`                                       | Runtime environment          |
 | `DATABASE_URL`         | `string`                                  | `postgresql://postgres:postgres@localhost:5432/bhaze` | PostgreSQL connection string |
-| `ALLOWED_ORIGINS`      | `string`                                  | `http://localhost:5085,http://localhost:5173`  | Comma-separated CORS origins    |
-| `CORS_CREDENTIALS`     | `boolean`                                 | `true`                                        | Allow credentials               |
-| `RATE_LIMIT_MAX`       | `number`                                  | `120`                                         | Max requests per window         |
-| `RATE_LIMIT_WINDOW_MS` | `number`                                  | `60000`                                       | Window duration (ms)            |
-| `TIMEOUT_MS`           | `number`                                  | `30000`                                       | Request timeout (ms)            |
-| `CSRF_ENABLED`         | `boolean`                                 | `true`                                        | CSRF protection (off in dev)    |
+| `ALLOWED_ORIGINS`      | `string`                                  | `http://localhost:5085,http://localhost:5173`         | Comma-separated CORS origins |
+| `CORS_CREDENTIALS`     | `boolean`                                 | `true`                                                | Allow credentials            |
+| `RATE_LIMIT_MAX`       | `number`                                  | `120`                                                 | Max requests per window      |
+| `RATE_LIMIT_WINDOW_MS` | `number`                                  | `60000`                                               | Window duration (ms)         |
+| `TIMEOUT_MS`           | `number`                                  | `30000`                                               | Request timeout (ms)         |
+| `CSRF_ENABLED`         | `boolean`                                 | `true`                                                | CSRF protection (off in dev) |
 
 ### .env File
 
@@ -72,8 +72,8 @@ CSRF_ENABLED=true
 
 ```ts
 const envSchema = z.object({
-  // ...existing vars
-  MY_NEW_VAR: z.string().default("default-value"),
+    // ...existing vars
+    MY_NEW_VAR: z.string().default("default-value"),
 });
 ```
 
@@ -98,7 +98,7 @@ The `Env` type is exported from `config/env.ts`:
 import type { Env } from "@config/env";
 
 function configureDb(env: Env) {
-  const url = env.DATABASE_URL;
+    const url = env.DATABASE_URL;
 }
 ```
 
@@ -150,14 +150,14 @@ Client Request
 
 ### Middleware Stack
 
-| #  | Middleware         | Purpose                              |
-| -- | ------------------ | ------------------------------------ |
-| 1  | `secureHeaders`    | CSP, X-Frame-Options, Referrer-Policy |
-| 2  | `csrf`             | CSRF token validation (prod only)    |
-| 3  | `cors`             | Cross-origin resource sharing        |
-| 4  | `timeout`          | Request timeout (configurable)       |
-| 5  | `rateLimiter`      | Rate limiting (configurable)         |
-| 6  | `logger`           | Request/response logging             |
+| #   | Middleware      | Purpose                               |
+| --- | --------------- | ------------------------------------- |
+| 1   | `secureHeaders` | CSP, X-Frame-Options, Referrer-Policy |
+| 2   | `csrf`          | CSRF token validation (prod only)     |
+| 3   | `cors`          | Cross-origin resource sharing         |
+| 4   | `timeout`       | Request timeout (configurable)        |
+| 5   | `rateLimiter`   | Rate limiting (configurable)          |
+| 6   | `logger`        | Request/response logging              |
 
 ### Data Flow
 
@@ -214,6 +214,6 @@ async getById(c: Context) {
 **Path Aliases** — import paths aliased in `tsconfig.json`:
 
 ```ts
-import { AppError } from "@lib/app-error";        // → src/lib/app-error.ts
+import { AppError } from "@lib/app-error"; // → src/lib/app-error.ts
 import { UserService } from "@services/user.service"; // → src/services/user.service.ts
 ```

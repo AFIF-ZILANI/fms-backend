@@ -55,15 +55,15 @@ Service modules map roughly to the design docs, and each owns a cluster of table
 this is the boundary that keeps the codebase from becoming one undifferentiated blob
 as it grows:
 
-| Service | Owns | Encodes |
-|---|---|---|
-| **Batch** | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog` | Placement, brooder→grower transfer, mortality, the batch-closing lifecycle (not yet defined — see §7) |
-| **Inventory** | `Item`, `Purchase`, `PurchaseItem`, `StockUnit`, `Asset`, `AssetDepreciation`, `Consumption`, `StockLedger`, `InventoryAdjustment` | Lot costing, code binding, consumption/depletion, depreciation |
-| **Treatment** | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords` | Links treatment records to actual stock draws via `Consumption` |
-| **Payroll** | `PerformanceScoreEntry`, `PayrollRecord`, `Employees` | Point-ledger scoring, monthly clamp-and-compute |
-| **Sales** | `Sale`, `SaleItem`, `BirdSale` | Revenue recognition |
-| **Money** | `Expense`, `Payment`, `PaymentInstrument` | Cost classification (`cost_type`), cash movement |
-| **Reporting** | reads across all of the above | Bird-days allocation (v2), batch P&L, payroll summaries |
+| Service       | Owns                                                                                                                               | Encodes                                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Batch**     | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                                             | Placement, brooder→grower transfer, mortality, the batch-closing lifecycle (not yet defined — see §7) |
+| **Inventory** | `Item`, `Purchase`, `PurchaseItem`, `StockUnit`, `Asset`, `AssetDepreciation`, `Consumption`, `StockLedger`, `InventoryAdjustment` | Lot costing, code binding, consumption/depletion, depreciation                                        |
+| **Treatment** | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`                                                               | Links treatment records to actual stock draws via `Consumption`                                       |
+| **Payroll**   | `PerformanceScoreEntry`, `PayrollRecord`, `Employees`                                                                              | Point-ledger scoring, monthly clamp-and-compute                                                       |
+| **Sales**     | `Sale`, `SaleItem`, `BirdSale`                                                                                                     | Revenue recognition                                                                                   |
+| **Money**     | `Expense`, `Payment`, `PaymentInstrument`                                                                                          | Cost classification (`cost_type`), cash movement                                                      |
+| **Reporting** | reads across all of the above                                                                                                      | Bird-days allocation (v2), batch P&L, payroll summaries                                               |
 
 Reporting is deliberately read-only against the other modules' tables rather than
 owning any of its own — it has no state to be accountable for, only queries.
@@ -97,7 +97,7 @@ no signal has to carry enough information to be trustworthy once it lands, whene
 that is.
 
 **Gap worth closing before real field entry starts**: only `StockLedger` currently has
-an `idempotency_key`. Every table a client can write to *offline* — `Consumption`,
+an `idempotency_key`. Every table a client can write to _offline_ — `Consumption`,
 `MortalityLog`, `BatchHouseAllocation`, `PerformanceScoreEntry` — needs the same
 protection, or a flaky connection retrying a queued sync will double-insert. Same
 mechanism as `StockLedger` already models (a client-generated unique key), just not
@@ -152,6 +152,7 @@ duplicate mortality entry is discovered in production.
 ```
 cd codes && npx prisma validate --schema=./schema.prisma   # passes
 ```
+
 No migration has been generated, no database exists, no backend or frontend code has
 been written — this and the three feature docs are the complete design surface so
 far. Next concrete step, when ready, is `prisma migrate dev` against a real Postgres
