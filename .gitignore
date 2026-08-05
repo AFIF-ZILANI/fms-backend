@@ -1,0 +1,31 @@
+# dependencies
+node_modules
+
+# build output
+dist
+out
+*.tgz
+
+# test coverage
+coverage
+*.lcov
+
+# logs
+*.log
+logs
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# editor / OS
+.idea
+.vscode
+.DS_Store
+/graphify-out
