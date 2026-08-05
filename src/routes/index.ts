@@ -33,6 +33,7 @@ import { performanceScoreEntryRoutes } from "@routes/performance-score-entry.rou
 import { payrollRecordRoutes } from "@routes/payroll-record.routes";
 import { alertRoutes } from "@routes/alert.routes";
 import { auditLogRoutes } from "@routes/audit-log.routes";
+import { analyticsRoutes } from "@routes/analytics.routes";
 
 export const appRoutes = new Hono();
 
@@ -72,3 +73,4 @@ appRoutes.route("/performance-score-entries", performanceScoreEntryRoutes);
 appRoutes.route("/payroll-records", payrollRecordRoutes);
 appRoutes.route("/alerts", alertRoutes);
 appRoutes.route("/audit-logs", auditLogRoutes);
+appRoutes.route("/analytics", analyticsRoutes);
