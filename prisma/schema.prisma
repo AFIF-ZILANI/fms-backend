@@ -436,6 +436,7 @@ model Houses {
   type       HouseType
   number     Int
   capacity   Int? // max birds this house can hold; null = no limit tracked
+  is_active  Boolean   @default(true) // never hard-delete -- mortality/allocation/environment history attaches once a batch runs through it
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 
