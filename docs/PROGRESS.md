@@ -7,25 +7,25 @@ the build is, read it first when resuming.
 
 Status key: `⬜ not started` · `🔨 in progress` · `✅ done` · `⛔ blocked`
 
-| #   | Phase                                   | Models                                                                                                                  | Depends on          | Status                                                                                                                            |
-| --- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | Foundation                              | DB, env, drop stale `user.*` scaffold                                                                                   | —                   | ✅                                                                                                                                |
-| 1   | **Admins**                              | `Profiles` (role=ADMIN), `Admins`                                                                                       | 0                   | ✅                                                                                                                                |
-| 2   | Employees                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                                 | 0                   | ✅                                                                                                                                |
-| 3   | Suppliers / Customers / Doctors         | `Suppliers`, `Customers`, `Doctors`                                                                                     | 0                   | ✅                                                                                                                                |
-| 4   | Houses                                  | `Houses`                                                                                                                | 0                   | ✅                                                                                                                                |
-| 5   | Inventory                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`, `StockLedger`\*, `InventoryAdjustment`\* | 0                   | ✅                                                                                                                                |
-| 6   | Batches                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                                  | 4                   | ✅                                                                                                                                |
-| 7   | Purchases                               | `Purchase`, `PurchaseItem`                                                                                              | 3, 5, 6             | ✅                                                                                                                                |
-| 8   | Treatment & Monitoring                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption`              | 5, 6                | ✅                                                                                                                                |
-| 9   | Sales                                   | `Sale`, `SaleItem`, `BirdSale`                                                                                          | 3, 5, 6             | ✅                                                                                                                                |
-| 10  | Payments                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ✅                                                                                                                                |
-| 11  | Finance                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ✅                                                                                                                                |
-| 12  | Payroll                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ✅                                                                                                                                |
-| 13  | Alerts                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ✅                                                                                                                                |
-| 14  | Audit Log (read API only; write middleware stays on 15) | `AuditLog`                                                                                              | —                   | ✅ (read side)                                                                                                                    |
-| 15  | Auth & permission enforcement           | —                                                                                                                       | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
-| 16  | Analytics                               | reads everything                                                                                                        | 1–14                | ⬜                                                                                                                                |
+| #   | Phase                                                   | Models                                                                                                                  | Depends on          | Status                                                                                                                            |
+| --- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Foundation                                              | DB, env, drop stale `user.*` scaffold                                                                                   | —                   | ✅                                                                                                                                |
+| 1   | **Admins**                                              | `Profiles` (role=ADMIN), `Admins`                                                                                       | 0                   | ✅                                                                                                                                |
+| 2   | Employees                                               | `Profiles` (role=EMPLOYEE), `Employees`                                                                                 | 0                   | ✅                                                                                                                                |
+| 3   | Suppliers / Customers / Doctors                         | `Suppliers`, `Customers`, `Doctors`                                                                                     | 0                   | ✅                                                                                                                                |
+| 4   | Houses                                                  | `Houses`                                                                                                                | 0                   | ✅                                                                                                                                |
+| 5   | Inventory                                               | `Item`, `Warehouses`, `Organization`/`ItemOrganization`, `StockUnit`, `Asset`, `StockLedger`\*, `InventoryAdjustment`\* | 0                   | ✅                                                                                                                                |
+| 6   | Batches                                                 | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                                  | 4                   | ✅                                                                                                                                |
+| 7   | Purchases                                               | `Purchase`, `PurchaseItem`                                                                                              | 3, 5, 6             | ✅                                                                                                                                |
+| 8   | Treatment & Monitoring                                  | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`, `BatchFeedingProgram`, `Consumption`              | 5, 6                | ✅                                                                                                                                |
+| 9   | Sales                                                   | `Sale`, `SaleItem`, `BirdSale`                                                                                          | 3, 5, 6             | ✅                                                                                                                                |
+| 10  | Payments                                                | `Payment`, `PaymentInstrument`                                                                                          | 7, 9                | ✅                                                                                                                                |
+| 11  | Finance                                                 | `Expense`, `AssetDepreciation` (batch-close trigger)                                                                    | 5, 6                | ✅                                                                                                                                |
+| 12  | Payroll                                                 | `PerformanceScoreEntry`, `PayrollRecord`                                                                                | 2                   | ✅                                                                                                                                |
+| 13  | Alerts                                                  | `Alerts` (+ trigger rules)                                                                                              | 1–12 (reads across) | ✅                                                                                                                                |
+| 14  | Audit Log (read API only; write middleware stays on 15) | `AuditLog`                                                                                                              | —                   | ✅ (read side)                                                                                                                    |
+| 15  | Auth & permission enforcement                           | —                                                                                                                       | 1, 2                | ⛔ blocked — no credential scheme decided yet (schema has no password/OTP field); needs its own design pass before implementation |
+| 16  | Analytics                                               | reads everything                                                                                                        | 1–14                | ✅                                                                                                                                |
 
 \* `StockLedger`/`InventoryAdjustment` were missed from Phase 5's original
 scope in this table — caught and closed at the start of Phase 8, since
@@ -341,7 +341,7 @@ ready to merge.
 
 - [x] **Split the phase deliberately**: population (writing `AuditLog` rows
       on every mutable-table update) genuinely needs Phase 15 — a Prisma
-      middleware doing this needs to know *who* made the change, and there's
+      middleware doing this needs to know _who_ made the change, and there's
       no request-scoped actor identity until Auth exists. Retrofitting
       manual audit-write calls into the ~15 already-merged services now
       would mean some get coverage and others don't, which is a worse state
@@ -364,10 +364,48 @@ ready to merge.
       session.
 - [ ] Merged to `main`
 
-**Remaining**: 16 (Analytics) reads across everything built so far and can
-go anytime. 15 (Auth) stays blocked on a credential-scheme design decision
-— that's genuinely a "discuss with the user" item, not something to guess
-at, so it's the natural stopping point for autonomous work.
+**Phase 16 (Analytics) — done.** Branch `feat/analytics-api`, ready to
+merge. **This closes out every unblocked phase** — 15 (Auth) is the only
+one left, and it stays blocked on a credential-scheme decision.
+
+- [x] **Scoped deliberately, not exhaustively**: FEATURES.md's "trend"
+      items (mortality trend, feed consumption trend, price trend, growth
+      curve) are all already retrievable from the module that owns them —
+      every list endpoint built since Phase 6 already supports date-range
+      filtering. Building redundant "trend" endpoints here would just
+      reshape data the frontend can already chart directly from
+      `GET /api/mortality-logs`, `/api/consumptions`, `/api/weight-records`,
+      etc. Built the four aggregates that genuinely need cross-table
+      computation instead:
+  - `GET /api/analytics/overview` — active batches, total live birds
+    (scoped to `RUNNING` batches specifically, not all `BatchHouseBalance`
+    rows — a force-closed batch can still hold a nonzero balance),
+    houses occupied/empty, active employee headcount, unresolved alerts
+    grouped by level.
+  - `GET /api/analytics/batches/:id/performance` — cumulative mortality
+    rate, live count, age, latest weight sample.
+  - `GET /api/analytics/batches/:id/pnl` — revenue (`BirdSale`) minus
+    chick/lot purchase cost (`PurchaseItem.batch_id`) minus direct
+    expenses minus depreciation share. Shared-period expenses reported
+    but explicitly left unallocated — the bird-days formula that would
+    distribute them is still v2 (`system-design-arc.md` §7), not guessed
+    at here.
+  - `GET /api/analytics/financial?month=` — revenue, expenses, gross
+    profit, outstanding payables, and cash position (reusing
+    `PaymentInstrumentService.getBalance`, not a second implementation).
+- [x] **Deliberately did not compute FCR** (feed conversion ratio), even
+      though FEATURES.md names it under batch performance — feed
+      quantities are logged in whatever `Unit` the item uses (`BAG`, `KG`,
+      ...) and turning that into a true ratio needs a per-unit weight
+      table this system doesn't have. Same reasoning as leaving
+      `BirdSale`'s dholta/katha fields alone in Phase 9: a computed number
+      built on an unstated unit assumption is worse than no number.
+- [x] Full end-to-end scenario test (1000 chicks → 20 died → 300 sold →
+      680 live, ৳118,000 bird-sale revenue, ৳2,000 direct expense) landed
+      exact figures across all four endpoints, plus live HTTP
+      confirmation.
+- [x] 5 new tests (147 total).
+- [ ] Merged to `main`
 
 **Fixed in Phase 2 (context for future modules):** the `is_active`
 query-param schema had `.optional().transform(...)` after it, which — under
@@ -451,3 +489,9 @@ lands and every request has a real caller.
   population stays blocked on Phase 15 (Auth) deliberately, not retrofitted
   partially. Noted a flaky cross-file test (shared DB, no per-test
   isolation) as a real but separate gap, not a logic bug.
+- 2026-08-06 — Phase 16 done. Farm overview / batch performance / batch
+  P&L / financial dashboard built -- deliberately skipped redundant trend
+  endpoints (already-filterable lists cover them) and FCR (unit-conversion
+  ambiguity, same "don't guess domain math" call as BirdSale in Phase 9).
+  Every unblocked phase is now done; only Phase 15 (Auth) remains, blocked
+  on a credential-scheme decision.
