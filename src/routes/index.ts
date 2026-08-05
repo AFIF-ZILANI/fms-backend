@@ -10,6 +10,10 @@ import { warehouseRoutes } from "@routes/warehouse.routes";
 import { organizationRoutes, itemOrganizationRoutes } from "@routes/organization.routes";
 import { stockUnitRoutes } from "@routes/stock-unit.routes";
 import { assetRoutes } from "@routes/asset.routes";
+import { batchRoutes } from "@routes/batch.routes";
+import { batchHouseAllocationRoutes } from "@routes/batch-house-allocation.routes";
+import { mortalityLogRoutes } from "@routes/mortality-log.routes";
+import { batchHouseBalanceRoutes } from "@routes/batch-house-balance.routes";
 
 export const appRoutes = new Hono();
 
@@ -25,3 +29,7 @@ appRoutes.route("/organizations", organizationRoutes);
 appRoutes.route("/item-organizations", itemOrganizationRoutes);
 appRoutes.route("/stock-units", stockUnitRoutes);
 appRoutes.route("/assets", assetRoutes);
+appRoutes.route("/batches", batchRoutes);
+appRoutes.route("/batch-house-allocations", batchHouseAllocationRoutes);
+appRoutes.route("/mortality-logs", mortalityLogRoutes);
+appRoutes.route("/batch-house-balances", batchHouseBalanceRoutes);
