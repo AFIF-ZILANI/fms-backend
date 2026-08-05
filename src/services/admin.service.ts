@@ -13,7 +13,9 @@ const include = { profile: true } as const;
 export const AdminService = {
     async getAll(query: ListAdminsQuery) {
         const where =
-            query.is_active === undefined ? {} : { profile: { is_active: query.is_active } };
+            query.is_active === undefined
+                ? {}
+                : { profile: { is_active: query.is_active === "true" } };
         const [admins, total] = await Promise.all([
             prisma.admins.findMany({
                 where,
