@@ -367,25 +367,34 @@ Add to `server/src/services/analytics.service.ts`, after `feedTrend`:
 ```ts
     /** Daily bird-sale revenue and volume-weighted avg price/kg (total
      * revenue / total net weight for the day, not an average of averages --
-     * a 10kg sale and a 500kg sale don't count equally). */
+     * a 10kg sale and a 500kg sale don't count equally). Buckets in memory
+     * by calendar day rather than a raw groupBy: `sale_date` is a
+     * full-precision DateTime, so a Prisma groupBy on it treats two sales on
+     * the same day at different times as separate groups instead of one --
+     * same trap `mortalityTrend` (Task 1) hit and fixed the same way. */
     async salesTrend(days: number) {
         const since = new Date(Date.now() - days * 86_400_000);
-        const grouped = await prisma.birdSale.groupBy({
-            by: ["sale_date"],
+        const rows = await prisma.birdSale.findMany({
             where: { sale_date: { gte: since } },
-            _sum: { total_amount: true, net_weight: true },
+            select: { sale_date: true, total_amount: true, net_weight: true },
         });
-        return grouped
-            .map((row) => {
-                const revenue = row._sum.total_amount ?? new Prisma.Decimal(0);
-                const weight = row._sum.net_weight ?? new Prisma.Decimal(0);
-                const avgPrice = weight.isZero() ? new Prisma.Decimal(0) : revenue.div(weight);
-                return {
-                    date: row.sale_date.toISOString().slice(0, 10),
-                    revenue: revenue.toString(),
-                    avg_price_per_kg: avgPrice.toString(),
-                };
-            })
+
+        const byDate = new Map<string, { revenue: Prisma.Decimal; weight: Prisma.Decimal }>();
+        for (const row of rows) {
+            const dateKey = row.sale_date.toISOString().slice(0, 10);
+            const existing = byDate.get(dateKey) ?? { revenue: new Prisma.Decimal(0), weight: new Prisma.Decimal(0) };
+            byDate.set(dateKey, {
+                revenue: existing.revenue.plus(row.total_amount),
+                weight: existing.weight.plus(row.net_weight),
+            });
+        }
+
+        return Array.from(byDate.entries())
+            .map(([date, { revenue, weight }]) => ({
+                date,
+                revenue: revenue.toString(),
+                avg_price_per_kg: (weight.isZero() ? new Prisma.Decimal(0) : revenue.div(weight)).toString(),
+            }))
             .sort((a, b) => a.date.localeCompare(b.date));
     },
 ```
