@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
 import { AnalyticsController } from "@controllers/analytics.controller";
-import { expenseBreakdownQuerySchema, financialDashboardQuerySchema, trendsQuerySchema } from "@validators/analytics.validator";
+import {
+    expenseBreakdownQuerySchema,
+    financialDashboardQuerySchema,
+    revenueVsExpensesQuerySchema,
+    trendsQuerySchema,
+} from "@validators/analytics.validator";
 
 export const analyticsRoutes = new Hono();
 
@@ -32,4 +37,9 @@ analyticsRoutes.get(
     "/expenses/breakdown",
     zValidatorRfc7807("query", expenseBreakdownQuerySchema),
     AnalyticsController.expenseBreakdown,
+);
+analyticsRoutes.get(
+    "/revenue-vs-expenses",
+    zValidatorRfc7807("query", revenueVsExpensesQuerySchema),
+    AnalyticsController.revenueVsExpenses,
 );

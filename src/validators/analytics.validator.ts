@@ -17,3 +17,9 @@ export const expenseBreakdownQuerySchema = z.object({
 });
 
 export type ExpenseBreakdownQuery = z.infer<typeof expenseBreakdownQuerySchema>;
+
+export const revenueVsExpensesQuerySchema = z.object({
+    months: z.coerce.number().int().positive().max(24).default(6),
+});
+
+export type RevenueVsExpensesQuery = z.infer<typeof revenueVsExpensesQuerySchema>;

@@ -3,7 +3,12 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { AnalyticsService } from "@services/analytics.service";
-import type { ExpenseBreakdownQuery, FinancialDashboardQuery, TrendsQuery } from "@validators/analytics.validator";
+import type {
+    ExpenseBreakdownQuery,
+    FinancialDashboardQuery,
+    RevenueVsExpensesQuery,
+    TrendsQuery,
+} from "@validators/analytics.validator";
 
 export const AnalyticsController = {
     async farmOverview(c: Context) {
@@ -64,6 +69,14 @@ export const AnalyticsController = {
             const query = getValid<ExpenseBreakdownQuery>(c, "query");
             const breakdown = await AnalyticsService.expenseBreakdown(query.month);
             return sendSuccess(c, breakdown, "Expense breakdown computed");
+        });
+    },
+
+    async revenueVsExpenses(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<RevenueVsExpensesQuery>(c, "query");
+            const rows = await AnalyticsService.revenueVsExpenses(query.months);
+            return sendSuccess(c, rows, "Revenue vs expenses computed");
         });
     },
 };

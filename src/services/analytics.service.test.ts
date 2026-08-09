@@ -218,4 +218,13 @@ describe("AnalyticsService", () => {
         expect(vetFeeRow).toBeDefined();
         expect(parseFloat(vetFeeRow!.total)).toBeGreaterThanOrEqual(2000);
     });
+
+    test("revenueVsExpenses' current month includes the seeded bird-sale revenue and expense", async () => {
+        const rows = await AnalyticsService.revenueVsExpenses(6);
+        const thisMonth = new Date().toISOString().slice(0, 7);
+        const currentRow = rows.find((r) => r.month === thisMonth);
+        expect(currentRow).toBeDefined();
+        expect(parseFloat(currentRow!.revenue)).toBeGreaterThanOrEqual(118000);
+        expect(parseFloat(currentRow!.expenses)).toBeGreaterThanOrEqual(2000);
+    });
 });

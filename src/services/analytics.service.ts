@@ -293,4 +293,43 @@ export const AnalyticsService = {
             }))
             .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
     },
+
+    async revenueVsExpenses(months: number) {
+        const now = new Date();
+        const windows = Array.from({ length: months }, (_, i) => {
+            const monthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+            const monthStart = monthDate;
+            const monthEnd = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1));
+            return { label: monthStart.toISOString().slice(0, 7), monthStart, monthEnd };
+        });
+
+        const rows = await Promise.all(
+            windows.map(async ({ label, monthStart, monthEnd }) => {
+                const [saleRevenue, birdSaleRevenue, expenses] = await Promise.all([
+                    prisma.sale.aggregate({
+                        where: { sale_date: { gte: monthStart, lt: monthEnd } },
+                        _sum: { total: true },
+                    }),
+                    prisma.birdSale.aggregate({
+                        where: { sale_date: { gte: monthStart, lt: monthEnd } },
+                        _sum: { total_amount: true },
+                    }),
+                    prisma.expense.aggregate({
+                        where: { date: { gte: monthStart, lt: monthEnd } },
+                        _sum: { amount: true },
+                    }),
+                ]);
+                const revenue = (saleRevenue._sum.total ?? new Prisma.Decimal(0)).plus(
+                    birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0),
+                );
+                return {
+                    month: label,
+                    revenue: revenue.toString(),
+                    expenses: (expenses._sum.amount ?? new Prisma.Decimal(0)).toString(),
+                };
+            }),
+        );
+
+        return rows.sort((a, b) => a.month.localeCompare(b.month));
+    },
 };
