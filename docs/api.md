@@ -1104,6 +1104,44 @@ deactivated instruments excluded) — same computation as §15.1's
 per-instrument balance endpoint, just totaled. `cash_by_instrument` is only
 active instruments too.
 
+### 14.5 Analytics trends & aggregates
+
+Read-only, same reporting rules as the rest of Analytics (§ above) — no
+state of its own.
+
+| Method | Path | Status | Query |
+|---|---|---|---|
+| GET | `/api/analytics/trends/mortality` | 200 | `days?` (int, 1-365, default 30) |
+| GET | `/api/analytics/trends/feed` | 200 | `days?` (int, 1-365, default 30) |
+| GET | `/api/analytics/trends/sales` | 200 | `days?` (int, 1-365, default 30) |
+| GET | `/api/analytics/expenses/breakdown` | 200 | `month?` (date, defaults to current month) |
+| GET | `/api/analytics/revenue-vs-expenses` | 200 | `months?` (int, 1-24, default 6) |
+| GET | `/api/analytics/batches/performance` | 200 | `status?` (`RUNNING`\|`CLOSED`\|`SOLD`, default `RUNNING`) |
+
+**`/trends/mortality`** — `{ date: string (YYYY-MM-DD), died: number }[]`,
+one row per day with at least one logged death (no zero-fill).
+
+**`/trends/feed`** — `{ date: string, unit: Units, quantity: string }[]`,
+grouped by date **and** unit (FEED-category consumption only) — quantities
+in different units are never summed together.
+
+**`/trends/sales`** — `{ date: string, revenue: string, avg_price_per_kg: string }[]`,
+`avg_price_per_kg` is volume-weighted (`total revenue / total net weight`
+for the day), not an average of per-sale averages.
+
+**`/expenses/breakdown`** — `{ category: ExpenseCategory, total: string }[]`,
+sorted descending by total.
+
+**`/revenue-vs-expenses`** — `{ month: string (YYYY-MM), revenue: string, expenses: string }[]`,
+ascending by month. `revenue` = `Sale.total` + `BirdSale.total_amount` for
+that month, same computation as `/analytics/financial`.
+
+**`/batches/performance`** — bulk version of
+`/analytics/batches/:id/performance`; same per-batch shape, array instead
+of one object. Added so the Analytics page's batch table and comparison
+chart can fetch every batch's numbers in one request instead of one per
+batch.
+
 ---
 
 ## 15. Payments
