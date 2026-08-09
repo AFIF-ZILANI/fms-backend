@@ -160,12 +160,21 @@ implementation time, not during this design pass.
 - `batch-comparison-chart.tsx` — horizontal bar, mortality rate % per
   running batch, worst→best. Also becomes the new data source for the
   existing performance table (see 4.3).
-- `sales-price-trend-chart.tsx` — line chart, 7/30/90-day toggle, revenue +
-  avg price/kg (dual-axis or two stacked mini-lines — decided during
-  implementation based on how it looks with real proportions).
+- `sales-price-trend-chart.tsx` — 7/30/90-day toggle, two stacked
+  single-series line charts (revenue, then avg price/kg) sharing one toggle.
+  Not a dual-axis combo: the dataviz skill treats dual-axis as the #1 chart
+  anti-pattern (two y-scales invite false correlation) — two measures of
+  different scale become two small charts instead.
 - `revenue-expense-chart.tsx` — combo bar (expenses) + line (revenue),
   fixed 6-month window.
-- `expense-breakdown-chart.tsx` — donut, current month, categorical colors.
+- `expense-breakdown-chart.tsx` — sorted horizontal bar, current month,
+  categorical colors. Not a donut: the dataviz skill explicitly deprioritizes
+  donut/pie ("part-to-whole rides on the stacked bar chart") and flags
+  pie-for-close-values as an anti-pattern. Top 4 categories by amount get
+  their own categorical slot (blue/orange/aqua/yellow, the dataviz reference
+  palette's validated adjacent-pair order); the rest fold into a neutral-gray
+  "Other" bar — `ExpenseCategory` has 10 values, past 4 slots the palette's
+  own guidance is to fold rather than keep generating hues.
 - `alerts-by-level-chart.tsx` — small horizontal bar replacing the current
   plain-text row inside the existing alerts Card.
 
