@@ -1598,6 +1598,7 @@ Create `web/src/pages/analytics/batch-comparison-chart.tsx`:
 import { useMemo } from "react";
 import { Scale } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { TooltipValueType } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -1648,7 +1649,7 @@ export function BatchComparisonChart({ batches, performances, isLoading }: Batch
               <CartesianGrid {...chartGridProps} horizontal={false} />
               <XAxis type="number" unit="%" {...chartAxisProps} />
               <YAxis type="category" dataKey="batch_code" width={100} {...chartAxisProps} />
-              <Tooltip contentStyle={chartTooltipContentStyle} formatter={(value: number) => [`${value}%`, "Mortality rate"]} />
+              <Tooltip contentStyle={chartTooltipContentStyle} formatter={(value: TooltipValueType | undefined) => [`${value}%`, "Mortality rate"]} />
               <Bar dataKey="mortality_rate" radius={[0, 4, 4, 0]}>
                 {rows.map((row) => (
                   <Cell key={row.batch_code} fill={toneColor(row.mortality_rate / 100)} />
@@ -1722,6 +1723,7 @@ Create `web/src/pages/analytics/sales-price-trend-chart.tsx`:
 import { useState } from "react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { TooltipValueType } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -1766,7 +1768,7 @@ export function SalesPriceTrendChart() {
                 <CartesianGrid {...chartGridProps} />
                 <XAxis dataKey="date" {...chartAxisProps} hide />
                 <YAxis {...chartAxisProps} />
-                <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: number) => formatMoney(v)} />
+                <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: TooltipValueType | undefined) => formatMoney(typeof v === "number" ? v : Number(v))} />
                 <Line type="monotone" dataKey="revenue" name="Revenue" stroke={SINGLE_SERIES_STROKE} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -1776,7 +1778,7 @@ export function SalesPriceTrendChart() {
                 <CartesianGrid {...chartGridProps} />
                 <XAxis dataKey="date" {...chartAxisProps} />
                 <YAxis {...chartAxisProps} />
-                <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: number) => formatMoney(v)} />
+                <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: TooltipValueType | undefined) => formatMoney(typeof v === "number" ? v : Number(v))} />
                 <Line type="monotone" dataKey="avg_price_per_kg" name="Avg price/kg" stroke={SINGLE_SERIES_STROKE} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -1845,6 +1847,7 @@ dual-axis (bar for expenses, line for revenue, one y-axis). Create
 ```tsx
 import { Banknote } from "lucide-react";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { TooltipValueType } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -1880,7 +1883,7 @@ export function RevenueExpenseChart() {
               <CartesianGrid {...chartGridProps} />
               <XAxis dataKey="month" {...chartAxisProps} />
               <YAxis {...chartAxisProps} />
-              <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: number) => formatMoney(v)} />
+              <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: TooltipValueType | undefined) => formatMoney(typeof v === "number" ? v : Number(v))} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="expenses" name="Expenses" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
               <Line type="monotone" dataKey="revenue" name="Revenue" stroke="var(--color-chart-5)" strokeWidth={2} dot={false} />
@@ -1948,6 +1951,7 @@ Create `web/src/pages/analytics/expense-breakdown-chart.tsx`:
 import { useMemo } from "react";
 import { PieChart } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { TooltipValueType } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -1993,7 +1997,7 @@ export function ExpenseBreakdownChart() {
               <CartesianGrid {...chartGridProps} horizontal={false} />
               <XAxis type="number" {...chartAxisProps} />
               <YAxis type="category" dataKey="category" width={100} tickFormatter={humanizeEnum} {...chartAxisProps} />
-              <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: number) => formatMoney(v)} labelFormatter={humanizeEnum} />
+              <Tooltip contentStyle={chartTooltipContentStyle} formatter={(v: TooltipValueType | undefined) => formatMoney(typeof v === "number" ? v : Number(v))} labelFormatter={humanizeEnum} />
               <Bar dataKey="total" radius={[0, 4, 4, 0]}>
                 {rows.map((row, i) => (
                   <Cell key={row.category} fill={row.category === "OTHER" ? OTHER_COLOR : CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]} />
