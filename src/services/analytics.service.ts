@@ -88,6 +88,55 @@ export const AnalyticsService = {
         };
     },
 
+    /** Bulk version of batchPerformance -- one query set for every matching
+     * batch instead of one request per batch. Powers both the batch
+     * comparison chart and the Analytics page's performance table. */
+    async batchesPerformance(status: "RUNNING" | "CLOSED" | "SOLD") {
+        const batches = await prisma.batches.findMany({
+            where: { status },
+            include: { houseBalances: true },
+        });
+        const batchIds = batches.map((b) => b.id);
+
+        const [mortalityByBatch, weightRecords] = await Promise.all([
+            prisma.mortalityLog.groupBy({
+                by: ["batch_id"],
+                where: { batch_id: { in: batchIds } },
+                _sum: { count_died: true },
+            }),
+            prisma.weightRecords.findMany({
+                where: { batch_id: { in: batchIds } },
+                orderBy: { date: "desc" },
+            }),
+        ]);
+
+        const diedByBatch = new Map(mortalityByBatch.map((m) => [m.batch_id, m._sum.count_died ?? 0]));
+        const latestWeightByBatch = new Map<string, (typeof weightRecords)[number]>();
+        for (const record of weightRecords) {
+            if (record.batch_id && !latestWeightByBatch.has(record.batch_id)) {
+                latestWeightByBatch.set(record.batch_id, record);
+            }
+        }
+
+        return batches.map((batch) => {
+            const liveCount = batch.houseBalances.reduce((sum, b) => sum + b.quantity, 0);
+            const died = diedByBatch.get(batch.id) ?? 0;
+            const latestWeight = latestWeightByBatch.get(batch.id);
+            return {
+                batch_id: batch.id,
+                live_count: liveCount,
+                initial_chick_count: batch.initial_chick_count,
+                cumulative_died: died,
+                cumulative_mortality_rate: batch.initial_chick_count > 0 ? died / batch.initial_chick_count : 0,
+                age_days: Math.floor((Date.now() - batch.starting_date.getTime()) / 86_400_000),
+                expected_selling_date: batch.expected_selling_date,
+                actual_end_date: batch.actual_end_date,
+                latest_average_weight_grams: latestWeight?.average_wt_grams ?? null,
+                latest_weight_date: latestWeight?.date ?? null,
+            };
+        });
+    },
+
     /** revenue - purchase cost (chicks, batch-linked) - direct expenses -
      * depreciation share. Shared-period costs stay unallocated -- the
      * bird-days formula that would distribute them is explicitly v2

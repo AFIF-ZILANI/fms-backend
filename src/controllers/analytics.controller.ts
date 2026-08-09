@@ -4,6 +4,7 @@ import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { AnalyticsService } from "@services/analytics.service";
 import type {
+    BatchesPerformanceQuery,
     ExpenseBreakdownQuery,
     FinancialDashboardQuery,
     RevenueVsExpensesQuery,
@@ -22,6 +23,14 @@ export const AnalyticsController = {
         return withHandler(c, async () => {
             const performance = await AnalyticsService.batchPerformance(c.req.param("id") ?? "");
             return sendSuccess(c, performance, "Batch performance computed");
+        });
+    },
+
+    async batchesPerformance(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<BatchesPerformanceQuery>(c, "query");
+            const rows = await AnalyticsService.batchesPerformance(query.status);
+            return sendSuccess(c, rows, "Batch performance list computed");
         });
     },
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
 import { AnalyticsController } from "@controllers/analytics.controller";
 import {
+    batchesPerformanceQuerySchema,
     expenseBreakdownQuerySchema,
     financialDashboardQuerySchema,
     revenueVsExpensesQuerySchema,
@@ -15,6 +16,11 @@ analyticsRoutes.get(
     "/financial",
     zValidatorRfc7807("query", financialDashboardQuerySchema),
     AnalyticsController.financialDashboard,
+);
+analyticsRoutes.get(
+    "/batches/performance",
+    zValidatorRfc7807("query", batchesPerformanceQuerySchema),
+    AnalyticsController.batchesPerformance,
 );
 analyticsRoutes.get("/batches/:id/performance", AnalyticsController.batchPerformance);
 analyticsRoutes.get("/batches/:id/pnl", AnalyticsController.batchPnl);

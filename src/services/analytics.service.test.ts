@@ -142,6 +142,16 @@ describe("AnalyticsService", () => {
         expect(performance.latest_average_weight_grams?.toNumber()).toBe(500);
     });
 
+    test("batchesPerformance('RUNNING') includes this batch with the same numbers as the single-batch endpoint", async () => {
+        const rows = await AnalyticsService.batchesPerformance("RUNNING");
+        const row = rows.find((r) => r.batch_id === batchId);
+        expect(row).toBeDefined();
+        expect(row!.live_count).toBe(680);
+        expect(row!.cumulative_died).toBe(20);
+        expect(row!.cumulative_mortality_rate).toBeCloseTo(0.02, 4);
+        expect(row!.latest_average_weight_grams?.toNumber()).toBe(500);
+    });
+
     test("batchPerformance on unknown batch throws not-found", async () => {
         await expect(
             AnalyticsService.batchPerformance("00000000-0000-0000-0000-000000000000"),

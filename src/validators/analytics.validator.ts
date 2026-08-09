@@ -23,3 +23,9 @@ export const revenueVsExpensesQuerySchema = z.object({
 });
 
 export type RevenueVsExpensesQuery = z.infer<typeof revenueVsExpensesQuerySchema>;
+
+export const batchesPerformanceQuerySchema = z.object({
+    status: z.enum(["RUNNING", "CLOSED", "SOLD"]).default("RUNNING"),
+});
+
+export type BatchesPerformanceQuery = z.infer<typeof batchesPerformanceQuerySchema>;
