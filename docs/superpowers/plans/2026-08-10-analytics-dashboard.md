@@ -1627,6 +1627,12 @@ export function BatchComparisonChart({ batches, performances, isLoading }: Batch
       performances
         .map((p) => ({
           batch_code: batches.find((b) => b.id === p.batch_id)?.batch_code ?? p.batch_id,
+          // Keep the raw rate for toneColor -- thresholding a value already
+          // rounded to 1dp can disagree with BatchPerformanceRow's own
+          // threshold check for the same batch near a boundary (e.g. a raw
+          // 0.0503 rounds to the display value 5.0%, and 0.05 > 0.05 is
+          // false, silently downgrading critical to warning).
+          raw_rate: p.cumulative_mortality_rate,
           mortality_rate: Number((p.cumulative_mortality_rate * 100).toFixed(1)),
         }))
         .sort((a, b) => b.mortality_rate - a.mortality_rate),
@@ -1652,7 +1658,7 @@ export function BatchComparisonChart({ batches, performances, isLoading }: Batch
               <Tooltip contentStyle={chartTooltipContentStyle} formatter={(value: TooltipValueType | undefined) => [`${value}%`, "Mortality rate"]} />
               <Bar dataKey="mortality_rate" radius={[0, 4, 4, 0]}>
                 {rows.map((row) => (
-                  <Cell key={row.batch_code} fill={toneColor(row.mortality_rate / 100)} />
+                  <Cell key={row.batch_code} fill={toneColor(row.raw_rate)} />
                 ))}
               </Bar>
             </BarChart>
