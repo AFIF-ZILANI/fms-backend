@@ -50,4 +50,12 @@ export const AnalyticsController = {
             return sendSuccess(c, trend, "Feed trend computed");
         });
     },
+
+    async salesTrend(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const trend = await AnalyticsService.salesTrend(query.days);
+            return sendSuccess(c, trend, "Sales trend computed");
+        });
+    },
 };

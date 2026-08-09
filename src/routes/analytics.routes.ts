@@ -23,3 +23,8 @@ analyticsRoutes.get(
     zValidatorRfc7807("query", trendsQuerySchema),
     AnalyticsController.feedTrend,
 );
+analyticsRoutes.get(
+    "/trends/sales",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.salesTrend,
+);

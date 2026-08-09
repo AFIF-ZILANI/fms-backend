@@ -202,4 +202,13 @@ describe("AnalyticsService", () => {
         expect(todayBagRow).toBeDefined();
         expect(parseFloat(todayBagRow!.quantity)).toBeGreaterThanOrEqual(5);
     });
+
+    test("salesTrend reports today's revenue and volume-weighted avg price", async () => {
+        const trend = await AnalyticsService.salesTrend(30);
+        const today = new Date().toISOString().slice(0, 10);
+        const todayRow = trend.find((r) => r.date === today);
+        expect(todayRow).toBeDefined();
+        expect(parseFloat(todayRow!.revenue)).toBeGreaterThanOrEqual(118000);
+        expect(parseFloat(todayRow!.avg_price_per_kg)).toBeCloseTo(200, 0);
+    });
 });
