@@ -196,19 +196,23 @@ export const AnalyticsService = {
 
     /** Daily death count across every batch, last `days` days. No zero-fill
      * for days with no logs — the chart fills gaps client-side, this stays
-     * a straight aggregation. */
+     * a straight aggregation. Groups by calendar day (YYYY-MM-DD), not by
+     * raw DateTime; same-day logs at different times are summed into one entry. */
     async mortalityTrend(days: number) {
         const since = new Date(Date.now() - days * 86_400_000);
-        const grouped = await prisma.mortalityLog.groupBy({
-            by: ["date"],
+        const rows = await prisma.mortalityLog.findMany({
             where: { date: { gte: since } },
-            _sum: { count_died: true },
+            select: { date: true, count_died: true },
         });
-        return grouped
-            .map((row) => ({
-                date: row.date.toISOString().slice(0, 10),
-                died: row._sum.count_died ?? 0,
-            }))
+
+        const byDate = new Map<string, number>();
+        for (const row of rows) {
+            const dateKey = row.date.toISOString().slice(0, 10);
+            byDate.set(dateKey, (byDate.get(dateKey) ?? 0) + row.count_died);
+        }
+
+        return Array.from(byDate.entries())
+            .map(([date, died]) => ({ date, died }))
             .sort((a, b) => a.date.localeCompare(b.date));
     },
 };

@@ -144,4 +144,30 @@ describe("AnalyticsService", () => {
         expect(todayRow).toBeDefined();
         expect(todayRow!.died).toBeGreaterThanOrEqual(20);
     });
+
+    test("mortalityTrend sums same-day logs at different times into one entry", async () => {
+        const afternoon = new Date();
+        afternoon.setHours(14, 0, 0, 0);
+
+        const extraLog = await prisma.mortalityLog.create({
+            data: {
+                batch_id: batchId,
+                house_id: houseId,
+                count_died: 3,
+                date: afternoon,
+                recorded_by_id: profileId,
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+
+        try {
+            const trend = await AnalyticsService.mortalityTrend(30);
+            const today = new Date().toISOString().slice(0, 10);
+            const todayRows = trend.filter((r) => r.date === today);
+            expect(todayRows.length).toBe(1);
+            expect(todayRows[0]!.died).toBeGreaterThanOrEqual(23); // 20 from beforeAll's seed + 3 from this test
+        } finally {
+            await prisma.mortalityLog.delete({ where: { id: extraLog.id } });
+        }
+    });
 });
