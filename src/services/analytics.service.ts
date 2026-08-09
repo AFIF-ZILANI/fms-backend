@@ -193,4 +193,22 @@ export const AnalyticsService = {
             })),
         };
     },
+
+    /** Daily death count across every batch, last `days` days. No zero-fill
+     * for days with no logs — the chart fills gaps client-side, this stays
+     * a straight aggregation. */
+    async mortalityTrend(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        const grouped = await prisma.mortalityLog.groupBy({
+            by: ["date"],
+            where: { date: { gte: since } },
+            _sum: { count_died: true },
+        });
+        return grouped
+            .map((row) => ({
+                date: row.date.toISOString().slice(0, 10),
+                died: row._sum.count_died ?? 0,
+            }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+    },
 };

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
 import { AnalyticsController } from "@controllers/analytics.controller";
-import { financialDashboardQuerySchema } from "@validators/analytics.validator";
+import { financialDashboardQuerySchema, trendsQuerySchema } from "@validators/analytics.validator";
 
 export const analyticsRoutes = new Hono();
 
@@ -13,3 +13,8 @@ analyticsRoutes.get(
 );
 analyticsRoutes.get("/batches/:id/performance", AnalyticsController.batchPerformance);
 analyticsRoutes.get("/batches/:id/pnl", AnalyticsController.batchPnl);
+analyticsRoutes.get(
+    "/trends/mortality",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.mortalityTrend,
+);

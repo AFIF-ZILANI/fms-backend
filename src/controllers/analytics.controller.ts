@@ -3,7 +3,7 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { AnalyticsService } from "@services/analytics.service";
-import type { FinancialDashboardQuery } from "@validators/analytics.validator";
+import type { FinancialDashboardQuery, TrendsQuery } from "@validators/analytics.validator";
 
 export const AnalyticsController = {
     async farmOverview(c: Context) {
@@ -32,6 +32,14 @@ export const AnalyticsController = {
             const query = getValid<FinancialDashboardQuery>(c, "query");
             const dashboard = await AnalyticsService.financialDashboard(query);
             return sendSuccess(c, dashboard, "Financial dashboard computed");
+        });
+    },
+
+    async mortalityTrend(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const trend = await AnalyticsService.mortalityTrend(query.days);
+            return sendSuccess(c, trend, "Mortality trend computed");
         });
     },
 };

@@ -136,4 +136,12 @@ describe("AnalyticsService", () => {
         expect(dashboard.revenue.toNumber()).toBeGreaterThanOrEqual(118000);
         expect(dashboard.expenses.toNumber()).toBeGreaterThanOrEqual(2000);
     });
+
+    test("mortalityTrend includes today's seeded 20 deaths within the default window", async () => {
+        const trend = await AnalyticsService.mortalityTrend(30);
+        const today = new Date().toISOString().slice(0, 10);
+        const todayRow = trend.find((r) => r.date === today);
+        expect(todayRow).toBeDefined();
+        expect(todayRow!.died).toBeGreaterThanOrEqual(20);
+    });
 });
