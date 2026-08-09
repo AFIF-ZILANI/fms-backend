@@ -11,3 +11,9 @@ export const financialDashboardQuerySchema = z.object({
 });
 
 export type FinancialDashboardQuery = z.infer<typeof financialDashboardQuerySchema>;
+
+export const expenseBreakdownQuerySchema = z.object({
+    month: z.coerce.date().optional(),
+});
+
+export type ExpenseBreakdownQuery = z.infer<typeof expenseBreakdownQuerySchema>;

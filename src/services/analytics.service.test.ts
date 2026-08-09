@@ -211,4 +211,11 @@ describe("AnalyticsService", () => {
         expect(parseFloat(todayRow!.revenue)).toBeGreaterThanOrEqual(118000);
         expect(parseFloat(todayRow!.avg_price_per_kg)).toBeCloseTo(200, 0);
     });
+
+    test("expenseBreakdown groups the seeded VET_FEE expense by category for the current month", async () => {
+        const breakdown = await AnalyticsService.expenseBreakdown();
+        const vetFeeRow = breakdown.find((r) => r.category === "VET_FEE");
+        expect(vetFeeRow).toBeDefined();
+        expect(parseFloat(vetFeeRow!.total)).toBeGreaterThanOrEqual(2000);
+    });
 });

@@ -274,4 +274,23 @@ export const AnalyticsService = {
             }))
             .sort((a, b) => a.date.localeCompare(b.date));
     },
+
+    async expenseBreakdown(month?: Date) {
+        const resolvedMonth = month ?? new Date();
+        const monthStart = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1));
+        const monthEnd = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth() + 1, 1));
+
+        const grouped = await prisma.expense.groupBy({
+            by: ["category"],
+            where: { date: { gte: monthStart, lt: monthEnd } },
+            _sum: { amount: true },
+        });
+
+        return grouped
+            .map((row) => ({
+                category: row.category,
+                total: (row._sum.amount ?? new Prisma.Decimal(0)).toString(),
+            }))
+            .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
+    },
 };
