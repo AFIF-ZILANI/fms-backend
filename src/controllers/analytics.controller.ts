@@ -42,4 +42,12 @@ export const AnalyticsController = {
             return sendSuccess(c, trend, "Mortality trend computed");
         });
     },
+
+    async feedTrend(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const trend = await AnalyticsService.feedTrend(query.days);
+            return sendSuccess(c, trend, "Feed trend computed");
+        });
+    },
 };

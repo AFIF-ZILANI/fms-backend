@@ -215,4 +215,30 @@ export const AnalyticsService = {
             .map(([date, died]) => ({ date, died }))
             .sort((a, b) => a.date.localeCompare(b.date));
     },
+
+    /** Daily FEED-category consumption, grouped by date AND unit -- quantities
+     * in different units (BAG vs KG) must never be summed together, same
+     * reasoning as the FCR gap noted on batchPerformance. A raw groupBy can't
+     * reach through the item relation for unit, so this groups in memory. */
+    async feedTrend(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        const rows = await prisma.consumption.findMany({
+            where: { date: { gte: since }, item: { category: "FEED" } },
+            select: { date: true, quantity: true, item: { select: { unit: true } } },
+        });
+
+        const byKey = new Map<string, Prisma.Decimal>();
+        for (const row of rows) {
+            const dateKey = row.date.toISOString().slice(0, 10);
+            const key = `${dateKey}|${row.item.unit}`;
+            byKey.set(key, (byKey.get(key) ?? new Prisma.Decimal(0)).plus(row.quantity));
+        }
+
+        return Array.from(byKey.entries())
+            .map(([key, quantity]) => {
+                const [date, unit] = key.split("|") as [string, string];
+                return { date, unit, quantity: quantity.toString() };
+            })
+            .sort((a, b) => a.date.localeCompare(b.date));
+    },
 };

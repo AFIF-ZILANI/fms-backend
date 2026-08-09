@@ -18,3 +18,8 @@ analyticsRoutes.get(
     zValidatorRfc7807("query", trendsQuerySchema),
     AnalyticsController.mortalityTrend,
 );
+analyticsRoutes.get(
+    "/trends/feed",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.feedTrend,
+);

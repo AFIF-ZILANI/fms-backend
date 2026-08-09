@@ -8,6 +8,7 @@ import { AppError } from "@lib/app-error";
 let houseId: string;
 let profileId: string;
 let batchId: string;
+let feedItemId: string;
 
 describe("AnalyticsService", () => {
     beforeAll(async () => {
@@ -90,9 +91,32 @@ describe("AnalyticsService", () => {
             paid_amount: 0,
             recorded_by_id: profileId,
         });
+
+        const feedItem = await prisma.item.create({
+            data: {
+                name: `Analytics Feed ${crypto.randomUUID()}`,
+                normalized_key: `analytics-feed-${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "BAG",
+            },
+        });
+        feedItemId = feedItem.id;
+        await prisma.consumption.create({
+            data: {
+                batch_id: batchId,
+                house_id: houseId,
+                item_id: feedItemId,
+                quantity: 5,
+                date: new Date(),
+                recorded_by_id: profileId,
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
     });
 
     afterAll(async () => {
+        await prisma.consumption.deleteMany({ where: { item_id: feedItemId } });
+        await prisma.item.delete({ where: { id: feedItemId } });
         await prisma.birdSale.deleteMany({ where: { batch_id: batchId } });
         await prisma.expense.deleteMany({ where: { batch_id: batchId } });
         await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } });
@@ -169,5 +193,13 @@ describe("AnalyticsService", () => {
         } finally {
             await prisma.mortalityLog.delete({ where: { id: extraLog.id } });
         }
+    });
+
+    test("feedTrend groups today's 5-BAG consumption by date and unit", async () => {
+        const trend = await AnalyticsService.feedTrend(30);
+        const today = new Date().toISOString().slice(0, 10);
+        const todayBagRow = trend.find((r) => r.date === today && r.unit === "BAG");
+        expect(todayBagRow).toBeDefined();
+        expect(parseFloat(todayBagRow!.quantity)).toBeGreaterThanOrEqual(5);
     });
 });
