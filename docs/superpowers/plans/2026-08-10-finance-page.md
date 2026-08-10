@@ -431,7 +431,7 @@ Insert this block between the "Record expense" button row and the
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Category</Label>
-          <Select value={category} onValueChange={setCategory}>
+          <Select value={category} onValueChange={(v) => setCategory(v ?? "ALL")}>
             <SelectTrigger className="w-40">
               <SelectValue>{(v: string) => (v === "ALL" ? "All categories" : humanizeEnum(v))}</SelectValue>
             </SelectTrigger>
@@ -447,7 +447,7 @@ Insert this block between the "Record expense" button row and the
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Cost type</Label>
-          <Select value={costType} onValueChange={setCostType}>
+          <Select value={costType} onValueChange={(v) => setCostType(v ?? "ALL")}>
             <SelectTrigger className="w-40">
               <SelectValue>{(v: string) => (v === "ALL" ? "All cost types" : humanizeEnum(v))}</SelectValue>
             </SelectTrigger>
@@ -463,7 +463,7 @@ Insert this block between the "Record expense" button row and the
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Batch</Label>
-          <Select value={batchId} onValueChange={setBatchId}>
+          <Select value={batchId} onValueChange={(v) => setBatchId(v ?? "ALL")}>
             <SelectTrigger className="w-40">
               <SelectValue>
                 {(v: string) => (v === "ALL" ? "All batches" : batches?.results.find((b) => b.id === v)?.batch_code ?? "—")}
@@ -579,7 +579,7 @@ Insert above the existing helper `<p>` line:
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Asset</Label>
-          <Select value={assetId} onValueChange={setAssetId}>
+          <Select value={assetId} onValueChange={(v) => setAssetId(v ?? "ALL")}>
             <SelectTrigger className="w-48">
               <SelectValue>
                 {(v: string) => (v === "ALL" ? "All assets" : assets?.results.find((a) => a.id === v)?.name ?? "—")}
@@ -597,7 +597,7 @@ Insert above the existing helper `<p>` line:
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Batch</Label>
-          <Select value={batchId} onValueChange={setBatchId}>
+          <Select value={batchId} onValueChange={(v) => setBatchId(v ?? "ALL")}>
             <SelectTrigger className="w-40">
               <SelectValue>
                 {(v: string) => (v === "ALL" ? "All batches" : batches?.results.find((b) => b.id === v)?.batch_code ?? "—")}
