@@ -169,7 +169,7 @@ describe("AnalyticsService", () => {
         const dashboard = await AnalyticsService.financialDashboard({});
         expect(dashboard.revenue.toNumber()).toBeGreaterThanOrEqual(118000);
         expect(dashboard.expenses.toNumber()).toBeGreaterThanOrEqual(2000);
-        expect(parseFloat(dashboard.outstanding_receivables)).toBeGreaterThanOrEqual(118000);
+        expect(dashboard.outstanding_receivables.toNumber()).toBeGreaterThanOrEqual(118000);
     });
 
     test("mortalityTrend includes today's seeded 20 deaths within the default window", async () => {
