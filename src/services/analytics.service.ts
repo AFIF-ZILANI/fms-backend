@@ -5,13 +5,8 @@ import { PaymentInstrumentService } from "@services/payment-instrument.service";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
 // Reporting is deliberately read-only against every other module's tables
-// (system-design-arc.md §3) -- no state of its own, only queries. Scoped to
-// the aggregates that genuinely need cross-table computation; anything
-// that's just a filtered list (mortality trend, feed consumption trend,
-// growth curve) is already available from the module that owns it --
-// GET /api/mortality-logs, /api/consumptions, /api/weight-records all
-// support date-range filters already, so a redundant "trend" endpoint here
-// would just reshape data the frontend can already chart directly.
+// (system-design-arc.md §3) -- no state of its own, only queries.
+// See docs/analytics-dashboard-design.md for the full aggregate-endpoint design.
 export const AnalyticsService = {
     async farmOverview() {
         const [activeBatchCount, totalBirdsAlive, houses, employeeCount, alertsByLevel] =
@@ -249,8 +244,9 @@ export const AnalyticsService = {
      * raw DateTime; same-day logs at different times are summed into one entry. */
     async mortalityTrend(days: number) {
         const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
         const rows = await prisma.mortalityLog.findMany({
-            where: { date: { gte: since } },
+            where: { date: { gte: since, lte: new Date() } },
             select: { date: true, count_died: true },
         });
 
@@ -271,8 +267,9 @@ export const AnalyticsService = {
      * reach through the item relation for unit, so this groups in memory. */
     async feedTrend(days: number) {
         const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
         const rows = await prisma.consumption.findMany({
-            where: { date: { gte: since }, item: { category: "FEED" } },
+            where: { date: { gte: since, lte: new Date() }, item: { category: "FEED" } },
             select: { date: true, quantity: true, item: { select: { unit: true } } },
         });
 
@@ -300,8 +297,9 @@ export const AnalyticsService = {
      * same trap `mortalityTrend` (Task 1) hit and fixed the same way. */
     async salesTrend(days: number) {
         const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
         const rows = await prisma.birdSale.findMany({
-            where: { sale_date: { gte: since } },
+            where: { sale_date: { gte: since, lte: new Date() } },
             select: { sale_date: true, total_amount: true, net_weight: true },
         });
 
