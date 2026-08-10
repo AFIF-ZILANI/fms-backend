@@ -91,4 +91,58 @@ describe("ExpenseService", () => {
         expect(expenses.some((e) => e.id === inRange!.id)).toBe(true);
         expect(expenses.some((e) => e.id === outOfRange!.id)).toBe(false);
     });
+
+    test("listing filters by date_from alone (no upper bound)", async () => {
+        const recent = await ExpenseService.create({
+            category: "FUEL",
+            cost_type: "DIRECT",
+            amount: 700,
+            date: new Date("2026-05-01"),
+            recorded_by_id: profileId,
+        });
+        createdIds.push(recent!.id);
+        const old = await ExpenseService.create({
+            category: "FUEL",
+            cost_type: "DIRECT",
+            amount: 600,
+            date: new Date("2026-01-01"),
+            recorded_by_id: profileId,
+        });
+        createdIds.push(old!.id);
+
+        const { expenses } = await ExpenseService.getAll({
+            page: 1,
+            limit: 100,
+            date_from: new Date("2026-04-01"),
+        });
+        expect(expenses.some((e) => e.id === recent!.id)).toBe(true);
+        expect(expenses.some((e) => e.id === old!.id)).toBe(false);
+    });
+
+    test("listing filters by date_to alone (no lower bound)", async () => {
+        const recent = await ExpenseService.create({
+            category: "FUEL",
+            cost_type: "DIRECT",
+            amount: 750,
+            date: new Date("2026-05-01"),
+            recorded_by_id: profileId,
+        });
+        createdIds.push(recent!.id);
+        const old = await ExpenseService.create({
+            category: "FUEL",
+            cost_type: "DIRECT",
+            amount: 650,
+            date: new Date("2026-01-01"),
+            recorded_by_id: profileId,
+        });
+        createdIds.push(old!.id);
+
+        const { expenses } = await ExpenseService.getAll({
+            page: 1,
+            limit: 100,
+            date_to: new Date("2026-02-01"),
+        });
+        expect(expenses.some((e) => e.id === old!.id)).toBe(true);
+        expect(expenses.some((e) => e.id === recent!.id)).toBe(false);
+    });
 });
