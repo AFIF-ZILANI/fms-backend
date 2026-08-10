@@ -871,7 +871,7 @@ Append-only (§1.10).
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
-| GET | `/api/expenses` | 200 | query: `batch_id?`, `category?`, `cost_type?` |
+| GET | `/api/expenses` | 200 | query: `batch_id?`, `category?`, `cost_type?`, `date_from?`, `date_to?` |
 | GET | `/api/expenses/:id` | 200 | — |
 | POST | `/api/expenses` | 201 | `{ batch_id?, category: ExpenseCategory, cost_type: CostType, amount, date, remarks?, recorded_by_id }` |
 
@@ -1089,6 +1089,7 @@ month works (normalized server-side).
   "month": "2026-08",
   "revenue": "118000", "expenses": "2000", "gross_profit": "116000",
   "outstanding_payables": "45000",
+  "outstanding_receivables": "25000",
   "cash_position": "70000",
   "cash_by_instrument": [
     { "instrument_id": "...", "label": "Farm Bank", "balance": "70000" }
@@ -1098,7 +1099,9 @@ month works (normalized server-side).
 `revenue`/`expenses` are scoped to the given month (`Sale.sale_date` /
 `BirdSale.sale_date` / `Expense.date` within it). `outstanding_payables` is
 **all-time**, not month-scoped (sum of every `Purchase.due_amount`, across
-every purchase regardless of date). `cash_position` sums every *active*
+every purchase regardless of date). `outstanding_receivables` is also
+**all-time** (sum of `Sale.due_amount` + `BirdSale.due_amount` — what customers
+still owe). `cash_position` sums every *active*
 `PaymentInstrument`'s balance (incoming minus outgoing, all-time,
 deactivated instruments excluded) — same computation as §15.1's
 per-instrument balance endpoint, just totaled. `cash_by_instrument` is only
