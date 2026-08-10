@@ -192,7 +192,7 @@ export const AnalyticsService = {
         const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
         const monthEnd = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
 
-        const [saleRevenue, birdSaleRevenue, expenses, purchasesDue, instruments] =
+        const [saleRevenue, birdSaleRevenue, expenses, purchasesDue, salesDue, birdSalesDue, instruments] =
             await Promise.all([
                 prisma.sale.aggregate({
                     where: { sale_date: { gte: monthStart, lt: monthEnd } },
@@ -207,6 +207,8 @@ export const AnalyticsService = {
                     _sum: { amount: true },
                 }),
                 prisma.purchase.aggregate({ _sum: { due_amount: true } }),
+                prisma.sale.aggregate({ _sum: { due_amount: true } }),
+                prisma.birdSale.aggregate({ _sum: { due_amount: true } }),
                 prisma.paymentInstrument.findMany({ where: { is_active: true } }),
             ]);
 
@@ -214,6 +216,9 @@ export const AnalyticsService = {
             birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0),
         );
         const expenseTotal = expenses._sum.amount ?? new Prisma.Decimal(0);
+        const outstandingReceivables = (salesDue._sum.due_amount ?? new Prisma.Decimal(0)).plus(
+            birdSalesDue._sum.due_amount ?? new Prisma.Decimal(0),
+        ); // raw Prisma.Decimal, not .toString()'d -- matches every sibling
 
         const balances = await Promise.all(
             instruments.map((inst) => PaymentInstrumentService.getBalance(inst.id)),
@@ -229,6 +234,7 @@ export const AnalyticsService = {
             expenses: expenseTotal,
             gross_profit: revenue.minus(expenseTotal),
             outstanding_payables: purchasesDue._sum.due_amount ?? new Prisma.Decimal(0),
+            outstanding_receivables: outstandingReceivables,
             cash_position: cashPosition,
             cash_by_instrument: instruments.map((inst, i) => ({
                 instrument_id: inst.id,
