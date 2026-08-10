@@ -30,6 +30,8 @@ export const listExpensesQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
     category: expenseCategory.optional(),
     cost_type: costType.optional(),
+    date_from: z.coerce.date().optional(),
+    date_to: z.coerce.date().optional(),
 });
 
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;

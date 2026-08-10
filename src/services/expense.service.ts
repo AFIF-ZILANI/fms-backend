@@ -12,6 +12,12 @@ export const ExpenseService = {
             ...(query.batch_id !== undefined && { batch_id: query.batch_id }),
             ...(query.category !== undefined && { category: query.category }),
             ...(query.cost_type !== undefined && { cost_type: query.cost_type }),
+            ...((query.date_from !== undefined || query.date_to !== undefined) && {
+                date: {
+                    ...(query.date_from !== undefined && { gte: query.date_from }),
+                    ...(query.date_to !== undefined && { lte: query.date_to }),
+                },
+            }),
         };
         const [expenses, total] = await Promise.all([
             prisma.expense.findMany({

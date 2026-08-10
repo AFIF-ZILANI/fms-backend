@@ -63,4 +63,32 @@ describe("ExpenseService", () => {
         expect(expenses.some((e) => e.id === expense!.id)).toBe(true);
         expect(expenses.every((e) => e.cost_type === "DIRECT")).toBe(true);
     });
+
+    test("listing filters by date range", async () => {
+        const inRange = await ExpenseService.create({
+            category: "FUEL",
+            cost_type: "DIRECT",
+            amount: 800,
+            date: new Date("2026-03-15"),
+            recorded_by_id: profileId,
+        });
+        createdIds.push(inRange!.id);
+        const outOfRange = await ExpenseService.create({
+            category: "FUEL",
+            cost_type: "DIRECT",
+            amount: 900,
+            date: new Date("2026-06-01"),
+            recorded_by_id: profileId,
+        });
+        createdIds.push(outOfRange!.id);
+
+        const { expenses } = await ExpenseService.getAll({
+            page: 1,
+            limit: 100,
+            date_from: new Date("2026-03-01"),
+            date_to: new Date("2026-03-31"),
+        });
+        expect(expenses.some((e) => e.id === inRange!.id)).toBe(true);
+        expect(expenses.some((e) => e.id === outOfRange!.id)).toBe(false);
+    });
 });
