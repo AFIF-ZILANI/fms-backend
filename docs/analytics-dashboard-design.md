@@ -83,12 +83,17 @@ this API per `docs/api.md`).
 Daily bird-sale revenue and volume-weighted avg price/kg, last N days.
 
 ```
-prisma.birdSale.groupBy({
-  by: ["sale_date"],
+prisma.birdSale.findMany({
   where: { sale_date: { gte: since } },
-  _sum: { total_amount: true, net_weight: true },
+  select: { sale_date: true, total_amount: true, net_weight: true },
 })
 ```
+then group in-memory by calendar day — a raw `groupBy` on `sale_date` can't
+be used here: it's a full-precision DateTime, so a Prisma `groupBy` treats
+two sales on the same day at different times as separate groups instead of
+summing them into one, the same trap `mortalityTrend` (§3.1) hit and fixed
+the same way.
+
 `avg_price_per_kg = total_amount / net_weight` computed in the service
 (volume-weighted, not an average of averages).
 
@@ -147,7 +152,7 @@ palette exists, it just has no renderer yet). Wrap it in a small shared
 legend/theming is defined once, not per chart.
 
 Single-series charts (mortality, feed, sales price) use the grayscale
-`chart-1..5` ramp per `docs/design.md` §2.4. The expense breakdown donut is
+`chart-1..5` ramp per `docs/design.md` §2.4. The expense breakdown bar is
 categorical (5+ distinct categories) — pulls from the **dataviz** skill's
 categorical palette instead, per the same doc section. Loaded at
 implementation time, not during this design pass.
@@ -202,7 +207,7 @@ same page.
 2. Alerts-by-level — same Card, text row replaced by the small bar chart.
 3. 2-col grid: mortality trend | feed consumption trend.
 4. 2-col grid: batch comparison bar | bird-sale price trend.
-5. 2-col grid: revenue vs expenses (6mo) | expense breakdown donut.
+5. 2-col grid: revenue vs expenses (6mo) | expense breakdown bar.
 6. Batch performance table — unchanged content/columns, bulk-fed per §4.3.
 7. "Financials & P&L →" link to Finance — unchanged.
 
