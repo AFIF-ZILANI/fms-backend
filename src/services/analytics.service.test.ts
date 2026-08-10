@@ -9,6 +9,7 @@ let houseId: string;
 let profileId: string;
 let batchId: string;
 let feedItemId: string;
+let saleId: string;
 
 describe("AnalyticsService", () => {
     beforeAll(async () => {
@@ -92,6 +93,19 @@ describe("AnalyticsService", () => {
             recorded_by_id: profileId,
         });
 
+        // a plain Sale (no line items needed at the DB level) with a known partial payment,
+        // so outstanding_receivables coverage isn't limited to the BirdSale half of the aggregate
+        const sale = await prisma.sale.create({
+            data: {
+                sale_date: new Date(),
+                total: 500,
+                paid_amount: 200,
+                due_amount: 300,
+                recorded_by_id: profileId,
+            },
+        });
+        saleId = sale.id;
+
         const feedItem = await prisma.item.create({
             data: {
                 name: `Analytics Feed ${crypto.randomUUID()}`,
@@ -115,6 +129,7 @@ describe("AnalyticsService", () => {
     });
 
     afterAll(async () => {
+        await prisma.sale.delete({ where: { id: saleId } });
         await prisma.consumption.deleteMany({ where: { item_id: feedItemId } });
         await prisma.item.delete({ where: { id: feedItemId } });
         await prisma.birdSale.deleteMany({ where: { batch_id: batchId } });
@@ -167,9 +182,11 @@ describe("AnalyticsService", () => {
 
     test("financialDashboard includes this batch's bird sale revenue and expense for the current month", async () => {
         const dashboard = await AnalyticsService.financialDashboard({});
-        expect(dashboard.revenue.toNumber()).toBeGreaterThanOrEqual(118000);
+        expect(dashboard.revenue.toNumber()).toBeGreaterThanOrEqual(118000 + 500);
         expect(dashboard.expenses.toNumber()).toBeGreaterThanOrEqual(2000);
-        expect(dashboard.outstanding_receivables.toNumber()).toBeGreaterThanOrEqual(118000);
+        // outstanding_receivables = Sale.due_amount sum + BirdSale.due_amount sum -- assert the combined
+        // total, not just the BirdSale half, so a deleted Sale aggregate would fail this test
+        expect(dashboard.outstanding_receivables.toNumber()).toBeGreaterThanOrEqual(118000 + 300);
     });
 
     test("mortalityTrend includes today's seeded 20 deaths within the default window", async () => {
