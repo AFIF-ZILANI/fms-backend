@@ -173,7 +173,7 @@ the shared `beforeAll` — `net_weight: 590`, `price_per_kg: 200`), so
         const dashboard = await AnalyticsService.financialDashboard({});
         expect(dashboard.revenue.toNumber()).toBeGreaterThanOrEqual(118000);
         expect(dashboard.expenses.toNumber()).toBeGreaterThanOrEqual(2000);
-        expect(parseFloat(dashboard.outstanding_receivables)).toBeGreaterThanOrEqual(118000);
+        expect(dashboard.outstanding_receivables.toNumber()).toBeGreaterThanOrEqual(118000);
     });
 ```
 
