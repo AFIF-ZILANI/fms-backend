@@ -609,7 +609,7 @@ import type { Consumption } from "@/pages/batches/types";
 
 ```ts
   const { data: consumptions } = useGetData<Paginated<Consumption>>(
-    `/consumptions?batch_id=${batch.id}&limit=200`,
+    `/consumptions?batch_id=${batch.id}&limit=100`,
     ["consumptions", batch.id],
   );
 ```
