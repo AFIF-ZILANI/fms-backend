@@ -167,6 +167,11 @@ describe("AnalyticsService", () => {
         expect(row!.latest_average_weight_grams?.toNumber()).toBe(500);
     });
 
+    test("batchesPerformance with no status filter includes batches of any status", async () => {
+        const rows = await AnalyticsService.batchesPerformance(undefined);
+        expect(rows.some((r) => r.batch_id === batchId)).toBe(true);
+    });
+
     test("batchPerformance on unknown batch throws not-found", async () => {
         await expect(
             AnalyticsService.batchPerformance("00000000-0000-0000-0000-000000000000"),

@@ -1119,7 +1119,7 @@ state of its own.
 | GET | `/api/analytics/trends/sales` | 200 | `days?` (int, 1-365, default 30) |
 | GET | `/api/analytics/expenses/breakdown` | 200 | `month?` (date, defaults to current month) |
 | GET | `/api/analytics/revenue-vs-expenses` | 200 | `months?` (int, 1-24, default 6) |
-| GET | `/api/analytics/batches/performance` | 200 | `status?` (`RUNNING`\|`CLOSED`\|`SOLD`, default `RUNNING`) |
+| GET | `/api/analytics/batches/performance` | 200 | `status?` (`RUNNING`\|`CLOSED`\|`SOLD`, optional, all statuses when omitted) |
 
 **`/trends/mortality`** — `{ date: string (YYYY-MM-DD), died: number }[]`,
 one row per day with at least one logged death (no zero-fill).

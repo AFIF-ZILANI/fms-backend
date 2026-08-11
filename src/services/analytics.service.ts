@@ -86,9 +86,9 @@ export const AnalyticsService = {
     /** Bulk version of batchPerformance -- one query set for every matching
      * batch instead of one request per batch. Powers both the batch
      * comparison chart and the Analytics page's performance table. */
-    async batchesPerformance(status: "RUNNING" | "CLOSED" | "SOLD") {
+    async batchesPerformance(status?: "RUNNING" | "CLOSED" | "SOLD") {
         const batches = await prisma.batches.findMany({
-            where: { status },
+            where: status !== undefined ? { status } : {},
             include: { houseBalances: true },
         });
         const batchIds = batches.map((b) => b.id);
