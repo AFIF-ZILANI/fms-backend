@@ -137,6 +137,12 @@ export const BatchService = {
         }
 
         return prisma.$transaction(async (tx) => {
+            // force:true can close with birds still on the books -- a CLOSED batch has none live,
+            // so zero the balances too or its houses stay "occupied" forever (see model comment).
+            if (remaining !== 0) {
+                await tx.batchHouseBalance.updateMany({ where: { batch_id: id }, data: { quantity: 0 } });
+            }
+
             const closed = await tx.batches.update({
                 where: { id },
                 data: { status: data.status, actual_end_date: new Date() },
