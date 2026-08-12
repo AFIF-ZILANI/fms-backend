@@ -3,6 +3,7 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type { CreateAlertInput, ListAlertsQuery } from "@validators/alert.validator";
+import { getItemBalances } from "@lib/stock-balance";
 
 const MORTALITY_RATE_THRESHOLD = 0.01; // 1% of a house's live birds dying in 24h
 const EXPIRY_WARNING_DAYS = 30;
@@ -43,20 +44,9 @@ async function checkLowStock() {
     const items = await prisma.item.findMany({
         where: { is_active: true, reorder_level: { not: null } },
     });
+    const balances = await getItemBalances(items.map((i) => i.id));
     for (const item of items) {
-        const [incoming, outgoing] = await Promise.all([
-            prisma.stockLedger.aggregate({
-                where: { item_id: item.id, direction: "IN" },
-                _sum: { quantity: true },
-            }),
-            prisma.stockLedger.aggregate({
-                where: { item_id: item.id, direction: "OUT" },
-                _sum: { quantity: true },
-            }),
-        ]);
-        const balance = (incoming._sum.quantity ?? new Prisma.Decimal(0)).minus(
-            outgoing._sum.quantity ?? new Prisma.Decimal(0),
-        );
+        const balance = balances.get(item.id) ?? new Prisma.Decimal(0);
         if (balance.lessThan(item.reorder_level!)) {
             const type =
                 item.category === "MEDICINE" || item.category === "VACCINE" ? "MEDICINE" : "FEED";

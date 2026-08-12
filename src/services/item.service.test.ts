@@ -8,6 +8,7 @@ const createdIds: string[] = [];
 
 describe("ItemService", () => {
     afterAll(async () => {
+        await prisma.stockLedger.deleteMany({ where: { item_id: { in: createdIds } } });
         await prisma.item.deleteMany({ where: { id: { in: createdIds } } });
     });
 
@@ -73,5 +74,59 @@ describe("ItemService", () => {
         const { items } = await ItemService.getAll({ page: 1, limit: 100, category: "VACCINE" });
         expect(items.some((i) => i.id === item!.id)).toBe(true);
         expect(items.every((i) => i.category === "VACCINE")).toBe(true);
+    });
+
+    test("getLowStock returns only active items below their reorder level, with current_balance", async () => {
+        const below = await ItemService.create({
+            name: `Below Reorder ${crypto.randomUUID()}`,
+            category: "FEED",
+            unit: "BAG",
+            reorder_level: 50,
+        });
+        createdIds.push(below!.id);
+        await prisma.stockLedger.create({
+            data: {
+                item_id: below!.id,
+                quantity: 10,
+                direction: "IN",
+                reason: "OPENING_BALANCE",
+                ref_type: "ADJUSTMENT",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+
+        const above = await ItemService.create({
+            name: `Above Reorder ${crypto.randomUUID()}`,
+            category: "FEED",
+            unit: "BAG",
+            reorder_level: 5,
+        });
+        createdIds.push(above!.id);
+        await prisma.stockLedger.create({
+            data: {
+                item_id: above!.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "OPENING_BALANCE",
+                ref_type: "ADJUSTMENT",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+
+        const noReorderLevel = await ItemService.create({
+            name: `No Reorder Level ${crypto.randomUUID()}`,
+            category: "FEED",
+            unit: "BAG",
+        });
+        createdIds.push(noReorderLevel!.id);
+
+        const lowStock = await ItemService.getLowStock();
+        const belowRow = lowStock.find((i) => i.id === below!.id);
+        expect(belowRow).toBeDefined();
+        expect(belowRow!.current_balance.toNumber()).toBe(10);
+        expect(lowStock.some((i) => i.id === above!.id)).toBe(false);
+        expect(lowStock.some((i) => i.id === noReorderLevel!.id)).toBe(false);
     });
 });

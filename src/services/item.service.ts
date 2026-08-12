@@ -4,6 +4,8 @@ import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { normalizeKey } from "@lib/normalize";
 import type { CreateItemInput, UpdateItemInput, ListItemsQuery } from "@validators/item.validator";
+import { Prisma } from "../../prisma/generated/prisma/client";
+import { getItemBalances } from "@lib/stock-balance";
 
 const include = { suppliers: true } as const;
 
@@ -106,5 +108,20 @@ export const ItemService = {
         const item = await prisma.item.findUnique({ where: { id } });
         if (!item) throw AppError.notFound("Item");
         return prisma.item.update({ where: { id }, data: { is_active }, include });
+    },
+
+    /** Active items under their reorder level, balance computed from StockLedger. No pagination -- this list is meant to be short. */
+    async getLowStock() {
+        const items = await prisma.item.findMany({
+            where: { is_active: true, reorder_level: { not: null } },
+            orderBy: { name: "asc" },
+        });
+        const balances = await getItemBalances(items.map((i) => i.id));
+        return items
+            .map((item) => ({
+                ...item,
+                current_balance: balances.get(item.id) ?? new Prisma.Decimal(0),
+            }))
+            .filter((item) => item.current_balance.lessThan(item.reorder_level!));
     },
 };

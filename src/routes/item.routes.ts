@@ -10,6 +10,7 @@ import {
 export const itemRoutes = new Hono();
 
 itemRoutes.get("/", zValidatorRfc7807("query", listItemsQuerySchema), ItemController.getAll);
+itemRoutes.get("/low-stock", ItemController.getLowStock);
 itemRoutes.get("/:id", ItemController.getById);
 itemRoutes.post("/", zValidatorRfc7807("json", createItemSchema), ItemController.create);
 itemRoutes.patch("/:id", zValidatorRfc7807("json", updateItemSchema), ItemController.update);

@@ -21,6 +21,13 @@ export const ItemController = {
         });
     },
 
+    async getLowStock(c: Context) {
+        return withHandler(c, async () => {
+            const items = await ItemService.getLowStock();
+            return sendSuccess(c, items, "Low-stock items fetched successfully");
+        });
+    },
+
     async create(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreateItemInput>(c, "json");
