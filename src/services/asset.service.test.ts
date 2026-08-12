@@ -78,4 +78,45 @@ describe("AssetService", () => {
         const retired = await AssetService.setStatus(asset!.id, "RETIRED");
         expect(retired.status).toBe("RETIRED");
     });
+
+    test("getAll includes depreciations, getById includes depreciations with batch", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        const asset = await AssetService.create({
+            stock_unit_id: unit!.id,
+            name: "Depreciation Test Asset",
+            purchase_cost: 10000,
+            purchase_date: new Date(),
+            useful_life_batches: 10,
+        });
+        createdAssetIds.push(asset!.id);
+
+        // Batches has no direct profile FK (recorded_by lives on BatchHouseAllocation/MortalityLog,
+        // not Batches itself) and AssetDepreciation has none either -- no profile fixture needed here.
+        const batch = await prisma.batches.create({
+            data: {
+                batch_code: `ASSET-DEP-${crypto.randomUUID()}`,
+                breed: "CLASSIC",
+                expected_selling_date: new Date(Date.now() + 30 * 86400_000),
+                initial_chick_count: 100,
+                init_chicks_avg_wt: 40,
+            },
+        });
+        await prisma.assetDepreciation.create({
+            data: { asset_id: asset!.id, batch_id: batch.id, amount: 1000 },
+        });
+
+        const { assets } = await AssetService.getAll({ page: 1, limit: 100 });
+        const listRow = assets.find((a) => a.id === asset!.id);
+        expect(listRow).toBeDefined();
+        expect(listRow!.depreciations.length).toBe(1);
+        expect(listRow!.depreciations[0]!.amount.toString()).toBe("1000");
+
+        const detail = await AssetService.getById(asset!.id);
+        expect(detail.depreciations[0]!.batch.batch_code).toBe(batch.batch_code);
+
+        await prisma.assetDepreciation.deleteMany({ where: { asset_id: asset!.id } });
+        await prisma.batches.delete({ where: { id: batch.id } });
+    });
 });

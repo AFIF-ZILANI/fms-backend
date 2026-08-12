@@ -10,6 +10,7 @@ export const AssetService = {
         const [assets, total] = await Promise.all([
             prisma.asset.findMany({
                 where,
+                include: { depreciations: true },
                 orderBy: { created_at: "desc" },
                 ...toSkipTake(query),
             }),
@@ -21,7 +22,7 @@ export const AssetService = {
     async getById(id: string) {
         const asset = await prisma.asset.findUnique({
             where: { id },
-            include: { stock_unit: true },
+            include: { stock_unit: true, depreciations: { include: { batch: true } } },
         });
         if (!asset) throw AppError.notFound("Asset");
         return asset;
