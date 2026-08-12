@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
+import { resourceCategorySchema } from "@lib/enums";
 
 const stockUnitStatus = z.enum(["UNASSIGNED", "IN_STOCK", "IN_USE", "CONSUMED", "DISPOSED"]);
 
@@ -20,6 +21,7 @@ export const relocateStockUnitSchema = z.object({
 export const listStockUnitsQuerySchema = paginationQuerySchema.extend({
     status: stockUnitStatus.optional(),
     house_id: z.string().uuid().optional(),
+    category: resourceCategorySchema.optional(),
 });
 
 export type ProvisionStockUnitsInput = z.infer<typeof provisionStockUnitsSchema>;

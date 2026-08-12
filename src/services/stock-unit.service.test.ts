@@ -9,6 +9,9 @@ let houseId: string;
 let profileId: string;
 let itemId: string;
 let purchaseId: string;
+let equipmentPurchaseId: string;
+let equipmentPurchaseItemId: string;
+let equipmentItemId: string;
 
 describe("StockUnitService", () => {
     // Purchases (Phase 7) doesn't exist yet -- seed the PurchaseItem this
@@ -69,6 +72,9 @@ describe("StockUnitService", () => {
         await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });
         await prisma.item.delete({ where: { id: itemId } });
+        await prisma.purchaseItem.delete({ where: { id: equipmentPurchaseItemId } });
+        await prisma.purchase.delete({ where: { id: equipmentPurchaseId } });
+        await prisma.item.delete({ where: { id: equipmentItemId } });
         await prisma.houses.delete({ where: { id: houseId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
@@ -149,5 +155,64 @@ describe("StockUnitService", () => {
         await expect(
             StockUnitService.getById("00000000-0000-0000-0000-000000000000"),
         ).rejects.toBeInstanceOf(AppError);
+    });
+
+    test("getAll includes item/house/asset and filters by category", async () => {
+        const [equipmentUnit] = await StockUnitService.provision(1);
+        createdUnitIds.push(equipmentUnit!.id);
+
+        const equipmentItem = await prisma.item.create({
+            data: {
+                name: `Test Incubator Item ${crypto.randomUUID()}`,
+                normalized_key: `test incubator item ${crypto.randomUUID()}`,
+                category: "EQUIPMENT",
+                unit: "UNIT",
+            },
+        });
+        equipmentItemId = equipmentItem.id;
+        const equipmentPurchase = await prisma.purchase.create({
+            data: {
+                purchase_date: new Date(),
+                total_amount: 200,
+                paid_amount: 200,
+                due_amount: 0,
+                recorded_by_id: profileId,
+            },
+        });
+        equipmentPurchaseId = equipmentPurchase.id;
+        const equipmentPurchaseItem = await prisma.purchaseItem.create({
+            data: {
+                purchase_id: equipmentPurchase.id,
+                item_id: equipmentItem.id,
+                quantity: 1,
+                unit: "UNIT",
+                unit_price: 200,
+                total_price: 200,
+            },
+        });
+        equipmentPurchaseItemId = equipmentPurchaseItem.id;
+        await StockUnitService.bind(equipmentUnit!.id, { purchase_item_id: equipmentPurchaseItem.id });
+        await StockUnitService.relocate(equipmentUnit!.id, houseId);
+
+        const { stockUnits } = await StockUnitService.getAll({
+            page: 1,
+            limit: 100,
+            category: "EQUIPMENT",
+        });
+        const found = stockUnits.find((u) => u.id === equipmentUnit!.id);
+        expect(found).toBeDefined();
+        expect(found!.purchase_item?.item.name).toBe(equipmentItem.name);
+        expect(found!.house?.id).toBe(houseId);
+
+        const [medicineUnit] = await StockUnitService.provision(1);
+        createdUnitIds.push(medicineUnit!.id);
+        await StockUnitService.bind(medicineUnit!.id, { purchase_item_id: purchaseItemId }); // medicine, from beforeAll
+
+        const { stockUnits: equipmentOnly } = await StockUnitService.getAll({
+            page: 1,
+            limit: 100,
+            category: "EQUIPMENT",
+        });
+        expect(equipmentOnly.some((u) => u.id === medicineUnit!.id)).toBe(false);
     });
 });

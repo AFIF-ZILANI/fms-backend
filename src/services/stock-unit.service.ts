@@ -11,10 +11,14 @@ export const StockUnitService = {
         const where = {
             ...(query.status !== undefined && { status: query.status }),
             ...(query.house_id !== undefined && { house_id: query.house_id }),
+            ...(query.category !== undefined && {
+                purchase_item: { item: { category: query.category } },
+            }),
         };
         const [stockUnits, total] = await Promise.all([
             prisma.stockUnit.findMany({
                 where,
+                include: { purchase_item: { include: { item: true } }, house: true, asset: true },
                 orderBy: { created_at: "desc" },
                 ...toSkipTake(query),
             }),
@@ -24,13 +28,19 @@ export const StockUnitService = {
     },
 
     async getById(id: string) {
-        const unit = await prisma.stockUnit.findUnique({ where: { id } });
+        const unit = await prisma.stockUnit.findUnique({
+            where: { id },
+            include: { purchase_item: { include: { item: true } }, house: true, asset: true },
+        });
         if (!unit) throw AppError.notFound("StockUnit");
         return unit;
     },
 
     async getByCode(code: string) {
-        const unit = await prisma.stockUnit.findUnique({ where: { code } });
+        const unit = await prisma.stockUnit.findUnique({
+            where: { code },
+            include: { purchase_item: { include: { item: true } }, house: true, asset: true },
+        });
         if (!unit) throw AppError.notFound("StockUnit");
         return unit;
     },
