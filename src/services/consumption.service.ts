@@ -15,10 +15,17 @@ export const ConsumptionService = {
             ...(query.batch_id !== undefined && { batch_id: query.batch_id }),
             ...(query.house_id !== undefined && { house_id: query.house_id }),
             ...(query.item_id !== undefined && { item_id: query.item_id }),
+            ...((query.occurred_from !== undefined || query.occurred_to !== undefined) && {
+                date: {
+                    ...(query.occurred_from !== undefined && { gte: query.occurred_from }),
+                    ...(query.occurred_to !== undefined && { lte: query.occurred_to }),
+                },
+            }),
         };
         const [consumptions, total] = await Promise.all([
             prisma.consumption.findMany({
                 where,
+                include: { batch: true, house: true, item: true, stock_unit: true },
                 orderBy: { date: "desc" },
                 ...toSkipTake(query),
             }),

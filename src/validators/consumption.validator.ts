@@ -20,6 +20,8 @@ export const listConsumptionsQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
     house_id: z.string().uuid().optional(),
     item_id: z.string().uuid().optional(),
+    occurred_from: z.coerce.date().optional(),
+    occurred_to: z.coerce.date().optional(),
 });
 
 export type CreateConsumptionInput = z.infer<typeof createConsumptionSchema>;

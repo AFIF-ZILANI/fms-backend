@@ -191,4 +191,36 @@ describe("ConsumptionService", () => {
             }),
         ).rejects.toMatchObject({ status: 409 });
     });
+
+    test("getAll includes batch/house/item/stock_unit and filters by date range", async () => {
+        const consumption = await ConsumptionService.create({
+            house_id: houseId,
+            item_id: feedItemId,
+            quantity: 5,
+            date: new Date("2026-01-15T00:00:00Z"),
+            recorded_by_id: profileId,
+        });
+        createdConsumptionIds.push(consumption!.id);
+
+        const { consumptions } = await ConsumptionService.getAll({ page: 1, limit: 100 });
+        const found = consumptions.find((c) => c.id === consumption!.id);
+        expect(found).toBeDefined();
+        expect(found!.item.name).toBe((await prisma.item.findUniqueOrThrow({ where: { id: feedItemId } })).name);
+        expect(found!.house.id).toBe(houseId);
+
+        const { consumptions: inRange } = await ConsumptionService.getAll({
+            page: 1,
+            limit: 100,
+            occurred_from: new Date("2026-01-01T00:00:00Z"),
+            occurred_to: new Date("2026-01-31T00:00:00Z"),
+        });
+        expect(inRange.some((c) => c.id === consumption!.id)).toBe(true);
+
+        const { consumptions: outOfRange } = await ConsumptionService.getAll({
+            page: 1,
+            limit: 100,
+            occurred_from: new Date("2026-02-01T00:00:00Z"),
+        });
+        expect(outOfRange.some((c) => c.id === consumption!.id)).toBe(false);
+    });
 });
