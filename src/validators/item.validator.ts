@@ -1,27 +1,10 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
-import { unitSchema } from "@lib/enums";
-
-const resourceCategory = z.enum([
-    "FEED",
-    "MEDICINE",
-    "VACCINE",
-    "SUPPLEMENT",
-    "BIOSECURITY",
-    "CHICKS",
-    "HUSK",
-    "EQUIPMENT",
-    "UTILITIES",
-    "SALARY",
-    "TRANSPORTATION",
-    "MAINTENANCE",
-    "CLEANING_SUPPLIES",
-    "OTHER",
-]);
+import { unitSchema, resourceCategorySchema } from "@lib/enums";
 
 export const createItemSchema = z.object({
     name: z.string().min(1, "Name is required"),
-    category: resourceCategory,
+    category: resourceCategorySchema,
     unit: unitSchema,
     reorder_level: z.coerce.number().nonnegative().optional(),
     preferred_reorder_qty: z.coerce.number().nonnegative().optional(),
@@ -32,7 +15,7 @@ export const createItemSchema = z.object({
 export const updateItemSchema = createItemSchema.partial();
 
 export const listItemsQuerySchema = paginationQuerySchema.extend({
-    category: resourceCategory.optional(),
+    category: resourceCategorySchema.optional(),
     is_active: z.enum(["true", "false"]).optional(),
 });
 
