@@ -1,13 +1,20 @@
 import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { HouseService } from "./house.service";
+import { BatchService } from "./batch.service";
 import { AppError } from "@lib/app-error";
 
 const createdIds: string[] = [];
+const createdBatchIds: string[] = [];
+const createdProfileIds: string[] = [];
 
 describe("HouseService", () => {
     afterAll(async () => {
+        await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
+        await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
+        await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: createdIds } } });
+        await prisma.profiles.deleteMany({ where: { id: { in: createdProfileIds } } });
     });
 
     test("create then getById round-trips", async () => {
@@ -72,5 +79,34 @@ describe("HouseService", () => {
         const { houses } = await HouseService.getAll({ page: 1, limit: 100, type: "LAYER" });
         expect(houses.some((h) => h.id === house.id)).toBe(true);
         expect(houses.every((h) => h.type === "LAYER")).toBe(true);
+    });
+
+    test("listing filters by is_available", async () => {
+        const empty = await HouseService.create({ name: "Shed G", type: "BROODER", number: 7 });
+        const occupied = await HouseService.create({ name: "Shed H", type: "BROODER", number: 8 });
+        createdIds.push(empty.id, occupied.id);
+
+        const profile = await prisma.profiles.create({
+            data: { name: "House Test Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+        });
+        createdProfileIds.push(profile.id);
+        const batch = await BatchService.create({
+            batch_code: `HOUSE-AVAIL-${crypto.randomUUID()}`,
+            breed: "CLASSIC",
+            expected_selling_date: new Date(Date.now() + 30 * 86400_000),
+            initial_chick_count: 100,
+            init_chicks_avg_wt: 40,
+            house_id: occupied.id,
+            recorded_by_id: profile.id,
+        });
+        createdBatchIds.push(batch!.id);
+
+        const available = await HouseService.getAll({ page: 1, limit: 100, is_available: "true" });
+        expect(available.houses.some((h) => h.id === empty.id)).toBe(true);
+        expect(available.houses.some((h) => h.id === occupied.id)).toBe(false);
+
+        const unavailable = await HouseService.getAll({ page: 1, limit: 100, is_available: "false" });
+        expect(unavailable.houses.some((h) => h.id === occupied.id)).toBe(true);
+        expect(unavailable.houses.some((h) => h.id === empty.id)).toBe(false);
     });
 });
