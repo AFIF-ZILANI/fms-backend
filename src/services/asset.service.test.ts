@@ -6,11 +6,13 @@ import { AppError } from "@lib/app-error";
 
 const createdAssetIds: string[] = [];
 const createdUnitIds: string[] = [];
+const createdHouseIds: string[] = [];
 
 describe("AssetService", () => {
     afterAll(async () => {
         await prisma.asset.deleteMany({ where: { id: { in: createdAssetIds } } });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
+        await prisma.houses.deleteMany({ where: { id: { in: createdHouseIds } } });
     });
 
     test("create then getById round-trips", async () => {
@@ -30,6 +32,31 @@ describe("AssetService", () => {
         expect(found.name).toBe("Incubator");
         expect(found.status).toBe("ACTIVE");
         expect(found.stock_unit.id).toBe(unit!.id);
+    });
+
+    test("getById includes stock_unit.house when stock unit relocated", async () => {
+        const house = await prisma.houses.create({
+            data: { name: "Test House", type: "BROODER", number: 1 },
+        });
+        createdHouseIds.push(house.id);
+
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        await StockUnitService.relocate(unit!.id, house.id);
+
+        const asset = await AssetService.create({
+            stock_unit_id: unit!.id,
+            name: "Relocated Asset",
+            purchase_cost: 25000,
+            purchase_date: new Date(),
+            useful_life_batches: 15,
+        });
+        createdAssetIds.push(asset!.id);
+
+        const found = await AssetService.getById(asset!.id);
+        expect(found.stock_unit.house?.id).toBe(house.id);
+        expect(found.stock_unit.house?.name).toBe("Test House");
     });
 
     test("duplicate stock_unit_id throws a conflict", async () => {

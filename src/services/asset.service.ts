@@ -22,7 +22,10 @@ export const AssetService = {
     async getById(id: string) {
         const asset = await prisma.asset.findUnique({
             where: { id },
-            include: { stock_unit: true, depreciations: { include: { batch: true } } },
+            include: {
+                stock_unit: { include: { house: true } },
+                depreciations: { include: { batch: true } },
+            },
         });
         if (!asset) throw AppError.notFound("Asset");
         return asset;
