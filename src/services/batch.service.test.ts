@@ -138,6 +138,13 @@ describe("BatchService", () => {
         const closed = await BatchService.close(batch!.id, { status: "CLOSED", force: true });
         expect(closed.status).toBe("CLOSED");
         expect(closed.actual_end_date).not.toBeNull();
+
+        // Force-closing with birds still on the books must zero the house balance too --
+        // a CLOSED batch has none live, so the house should read as available again.
+        const balance = await prisma.batchHouseBalance.findUnique({
+            where: { batch_id_house_id: { batch_id: batch!.id, house_id: houseId } },
+        });
+        expect(balance!.quantity).toBe(0);
     });
 
     test("cannot edit a batch that isn't RUNNING", async () => {
