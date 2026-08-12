@@ -15,6 +15,8 @@ export const updateHouseSchema = createHouseSchema.partial();
 export const listHousesQuerySchema = paginationQuerySchema.extend({
     type: houseType.optional(),
     is_active: z.enum(["true", "false"]).optional(),
+    // true = no batch currently occupying it (no BatchHouseBalance row with quantity > 0)
+    is_available: z.enum(["true", "false"]).optional(),
 });
 
 export type CreateHouseInput = z.infer<typeof createHouseSchema>;

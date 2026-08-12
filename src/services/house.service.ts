@@ -12,6 +12,11 @@ export const HouseService = {
         const where = {
             ...(query.type !== undefined && { type: query.type }),
             ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
+            ...(query.is_available !== undefined && {
+                batchHouseBalances: {
+                    [query.is_available === "true" ? "none" : "some"]: { quantity: { gt: 0 } },
+                },
+            }),
         };
         const [houses, total] = await Promise.all([
             prisma.houses.findMany({
