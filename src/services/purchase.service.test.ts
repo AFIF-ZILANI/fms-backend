@@ -150,4 +150,48 @@ describe("PurchaseService", () => {
         expect(purchaseItems.some((pi) => pi.purchase_id === purchase!.id)).toBe(true);
         expect(purchaseItems.every((pi) => pi.item_id === itemId)).toBe(true);
     });
+
+    test("getAll filters by date_from/date_to and item_category", async () => {
+        const recentPurchase = await PurchaseService.create({
+            supplier_id: supplierId,
+            purchase_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [{ item_id: itemId, quantity: 1, unit: "BOTTLE", unit_price: 10 }],
+        });
+        createdPurchaseIds.push(recentPurchase!.id);
+
+        const oldPurchase = await PurchaseService.create({
+            supplier_id: supplierId,
+            purchase_date: new Date(Date.now() - 10 * 86_400_000),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [{ item_id: itemId, quantity: 1, unit: "BOTTLE", unit_price: 10 }],
+        });
+        createdPurchaseIds.push(oldPurchase!.id);
+
+        const { purchases: dateFiltered } = await PurchaseService.getAll({
+            page: 1,
+            limit: 100,
+            date_from: new Date(Date.now() - 86_400_000),
+        });
+        expect(dateFiltered.some((p) => p.id === recentPurchase!.id)).toBe(true);
+        expect(dateFiltered.some((p) => p.id === oldPurchase!.id)).toBe(false);
+
+        // itemId's category is MEDICINE (see beforeAll) -- filtering on it should
+        // find these purchases; filtering on a different category should not.
+        const { purchases: categoryFiltered } = await PurchaseService.getAll({
+            page: 1,
+            limit: 100,
+            item_category: "MEDICINE",
+        });
+        expect(categoryFiltered.some((p) => p.id === recentPurchase!.id)).toBe(true);
+
+        const { purchases: wrongCategoryFiltered } = await PurchaseService.getAll({
+            page: 1,
+            limit: 100,
+            item_category: "FEED",
+        });
+        expect(wrongCategoryFiltered.some((p) => p.id === recentPurchase!.id)).toBe(false);
+    });
 });

@@ -17,6 +17,15 @@ export const PurchaseService = {
     async getAll(query: ListPurchasesQuery) {
         const where = {
             ...(query.supplier_id !== undefined && { supplier_id: query.supplier_id }),
+            ...((query.date_from !== undefined || query.date_to !== undefined) && {
+                purchase_date: {
+                    ...(query.date_from !== undefined && { gte: query.date_from }),
+                    ...(query.date_to !== undefined && { lte: query.date_to }),
+                },
+            }),
+            ...(query.item_category !== undefined && {
+                items: { some: { item: { category: query.item_category } } },
+            }),
         };
         const [purchases, total] = await Promise.all([
             prisma.purchase.findMany({
