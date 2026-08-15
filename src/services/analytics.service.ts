@@ -384,6 +384,29 @@ export const AnalyticsService = {
             .sort((a, b) => b.birds_count - a.birds_count);
     },
 
+    /** Spend per category over `days` days -- PurchaseItem cost grouped by
+     * Item.category. Unlike salesByProductLine, no synthetic category is
+     * needed here: every PurchaseItem always has a real Item/category. */
+    async purchasesByCategory(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+
+        const purchaseItems = await prisma.purchaseItem.findMany({
+            where: { purchase: { purchase_date: { gte: since, lte: new Date() } } },
+            select: { total_price: true, item: { select: { category: true } } },
+        });
+
+        const byCategory = new Map<string, Prisma.Decimal>();
+        for (const row of purchaseItems) {
+            const category = row.item.category;
+            byCategory.set(category, (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price));
+        }
+
+        return Array.from(byCategory.entries())
+            .map(([category, total]) => ({ category, total: total.toString() }))
+            .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
+    },
+
     async expenseBreakdown(month?: Date) {
         const resolvedMonth = month ?? new Date();
         const monthStart = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1));

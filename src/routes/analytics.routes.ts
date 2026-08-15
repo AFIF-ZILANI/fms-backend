@@ -50,6 +50,11 @@ analyticsRoutes.get(
     AnalyticsController.birdGradeDistribution,
 );
 analyticsRoutes.get(
+    "/purchases/by-category",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.purchasesByCategory,
+);
+analyticsRoutes.get(
     "/expenses/breakdown",
     zValidatorRfc7807("query", expenseBreakdownQuerySchema),
     AnalyticsController.expenseBreakdown,
