@@ -55,6 +55,11 @@ analyticsRoutes.get(
     AnalyticsController.purchasesByCategory,
 );
 analyticsRoutes.get(
+    "/purchases/trend",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.purchasesTrend,
+);
+analyticsRoutes.get(
     "/expenses/breakdown",
     zValidatorRfc7807("query", expenseBreakdownQuerySchema),
     AnalyticsController.expenseBreakdown,

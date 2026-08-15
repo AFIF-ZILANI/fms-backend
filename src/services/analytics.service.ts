@@ -407,6 +407,30 @@ export const AnalyticsService = {
             .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
     },
 
+    /** Daily total purchase spend over `days` days -- buckets in memory by
+     * calendar day rather than a raw groupBy: `purchase_date` is a
+     * full-precision DateTime, so a Prisma groupBy on it would treat two
+     * purchases on the same day at different times as separate groups --
+     * same trap salesTrend/mortalityTrend work around the same way. */
+    async purchasesTrend(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+        const rows = await prisma.purchase.findMany({
+            where: { purchase_date: { gte: since, lte: new Date() } },
+            select: { purchase_date: true, total_amount: true },
+        });
+
+        const byDate = new Map<string, Prisma.Decimal>();
+        for (const row of rows) {
+            const dateKey = row.purchase_date.toISOString().slice(0, 10);
+            byDate.set(dateKey, (byDate.get(dateKey) ?? new Prisma.Decimal(0)).plus(row.total_amount));
+        }
+
+        return Array.from(byDate.entries())
+            .map(([date, total]) => ({ date, total: total.toString() }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+    },
+
     async expenseBreakdown(month?: Date) {
         const resolvedMonth = month ?? new Date();
         const monthStart = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1));

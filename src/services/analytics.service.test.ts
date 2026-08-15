@@ -360,4 +360,39 @@ describe("AnalyticsService", () => {
             await prisma.profiles.delete({ where: { id: supplierProfile.id } });
         }
     });
+
+    test("purchasesTrend reports today's purchase spend, bucketed by day", async () => {
+        const supplierProfile = await prisma.profiles.create({
+            data: {
+                name: "Trend Supplier",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "SUPPLIER",
+            },
+        });
+        const supplier = await prisma.suppliers.create({
+            data: { profile_id: supplierProfile.id, role: "DISTRIBUTOR", supplies: ["FEED"] },
+        });
+        const purchase = await prisma.purchase.create({
+            data: {
+                supplier_id: supplier.id,
+                purchase_date: new Date(),
+                total_amount: 750,
+                paid_amount: 0,
+                due_amount: 750,
+                recorded_by_id: profileId,
+            },
+        });
+
+        try {
+            const trend = await AnalyticsService.purchasesTrend(30);
+            const today = new Date().toISOString().slice(0, 10);
+            const todayRow = trend.find((r) => r.date === today);
+            expect(todayRow).toBeDefined();
+            expect(parseFloat(todayRow!.total)).toBeGreaterThanOrEqual(750);
+        } finally {
+            await prisma.purchase.delete({ where: { id: purchase.id } });
+            await prisma.suppliers.delete({ where: { id: supplier.id } });
+            await prisma.profiles.delete({ where: { id: supplierProfile.id } });
+        }
+    });
 });
