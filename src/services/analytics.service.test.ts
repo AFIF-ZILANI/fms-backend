@@ -260,4 +260,42 @@ describe("AnalyticsService", () => {
         expect(parseFloat(currentRow!.revenue)).toBeGreaterThanOrEqual(118000);
         expect(parseFloat(currentRow!.expenses)).toBeGreaterThanOrEqual(2000);
     });
+
+    test("salesByProductLine folds BirdSale revenue into a BIRD entry and buckets SaleItem revenue by Item.category", async () => {
+        const wasteItem = await prisma.item.create({
+            data: {
+                name: `Manure ${crypto.randomUUID()}`,
+                normalized_key: `manure-${crypto.randomUUID()}`,
+                category: "WASTE",
+                unit: "BAG",
+            },
+        });
+        const wasteSale = await prisma.sale.create({
+            data: { sale_date: new Date(), total: 300, paid_amount: 0, due_amount: 300, recorded_by_id: profileId },
+        });
+        await prisma.saleItem.create({
+            data: {
+                sale_id: wasteSale.id,
+                item_id: wasteItem.id,
+                quantity: 10,
+                unit: "BAG",
+                unit_price: 30,
+                total_price: 300,
+            },
+        });
+
+        try {
+            const rows = await AnalyticsService.salesByProductLine(30);
+            const birdRow = rows.find((r) => r.category === "BIRD");
+            const wasteRow = rows.find((r) => r.category === "WASTE");
+            expect(birdRow).toBeDefined();
+            expect(parseFloat(birdRow!.revenue)).toBeGreaterThanOrEqual(118000);
+            expect(wasteRow).toBeDefined();
+            expect(parseFloat(wasteRow!.revenue)).toBeGreaterThanOrEqual(300);
+        } finally {
+            await prisma.saleItem.deleteMany({ where: { sale_id: wasteSale.id } });
+            await prisma.sale.delete({ where: { id: wasteSale.id } });
+            await prisma.item.delete({ where: { id: wasteItem.id } });
+        }
+    });
 });

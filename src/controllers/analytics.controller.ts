@@ -73,6 +73,14 @@ export const AnalyticsController = {
         });
     },
 
+    async salesByProductLine(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const rows = await AnalyticsService.salesByProductLine(query.days);
+            return sendSuccess(c, rows, "Sales by product line computed");
+        });
+    },
+
     async expenseBreakdown(c: Context) {
         return withHandler(c, async () => {
             const query = getValid<ExpenseBreakdownQuery>(c, "query");

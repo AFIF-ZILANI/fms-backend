@@ -40,6 +40,11 @@ analyticsRoutes.get(
     AnalyticsController.salesTrend,
 );
 analyticsRoutes.get(
+    "/sales/by-product-line",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.salesByProductLine,
+);
+analyticsRoutes.get(
     "/expenses/breakdown",
     zValidatorRfc7807("query", expenseBreakdownQuerySchema),
     AnalyticsController.expenseBreakdown,

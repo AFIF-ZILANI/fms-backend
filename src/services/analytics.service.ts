@@ -328,6 +328,39 @@ export const AnalyticsService = {
             .sort((a, b) => a.date.localeCompare(b.date));
     },
 
+    /** Revenue per product line over `days` days -- Regular Sale line-item
+     * revenue grouped by Item.category, plus total BirdSale revenue folded
+     * in as its own "BIRD" entry (BirdSale has no Item/category of its own). */
+    async salesByProductLine(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+
+        const [saleItems, birdSaleRevenue] = await Promise.all([
+            prisma.saleItem.findMany({
+                where: { sale: { sale_date: { gte: since, lte: new Date() } } },
+                select: { total_price: true, item: { select: { category: true } } },
+            }),
+            prisma.birdSale.aggregate({
+                where: { sale_date: { gte: since, lte: new Date() } },
+                _sum: { total_amount: true },
+            }),
+        ]);
+
+        const byCategory = new Map<string, Prisma.Decimal>();
+        for (const row of saleItems) {
+            const category = row.item.category;
+            byCategory.set(category, (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price));
+        }
+        const birdRevenue = birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0);
+        if (!birdRevenue.isZero()) {
+            byCategory.set("BIRD", (byCategory.get("BIRD") ?? new Prisma.Decimal(0)).plus(birdRevenue));
+        }
+
+        return Array.from(byCategory.entries())
+            .map(([category, revenue]) => ({ category, revenue: revenue.toString() }))
+            .sort((a, b) => parseFloat(b.revenue) - parseFloat(a.revenue));
+    },
+
     async expenseBreakdown(month?: Date) {
         const resolvedMonth = month ?? new Date();
         const monthStart = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1));
