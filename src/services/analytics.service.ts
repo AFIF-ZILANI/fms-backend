@@ -361,6 +361,29 @@ export const AnalyticsService = {
             .sort((a, b) => parseFloat(b.revenue) - parseFloat(a.revenue));
     },
 
+    /** Bird count and revenue per grade over `days` days. Safe to `groupBy`
+     * directly on `grade` (unlike salesTrend/mortalityTrend) -- `sale_date`
+     * is only used to filter the range here, not as a groupBy key, so the
+     * DateTime-precision trap those two work around doesn't apply. */
+    async birdGradeDistribution(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+
+        const grouped = await prisma.birdSale.groupBy({
+            by: ["grade"],
+            where: { sale_date: { gte: since, lte: new Date() } },
+            _sum: { birds_count: true, total_amount: true },
+        });
+
+        return grouped
+            .map((row) => ({
+                grade: row.grade,
+                birds_count: row._sum.birds_count ?? 0,
+                revenue: (row._sum.total_amount ?? new Prisma.Decimal(0)).toString(),
+            }))
+            .sort((a, b) => b.birds_count - a.birds_count);
+    },
+
     async expenseBreakdown(month?: Date) {
         const resolvedMonth = month ?? new Date();
         const monthStart = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1));

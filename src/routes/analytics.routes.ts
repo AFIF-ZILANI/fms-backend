@@ -45,6 +45,11 @@ analyticsRoutes.get(
     AnalyticsController.salesByProductLine,
 );
 analyticsRoutes.get(
+    "/sales/grade-distribution",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.birdGradeDistribution,
+);
+analyticsRoutes.get(
     "/expenses/breakdown",
     zValidatorRfc7807("query", expenseBreakdownQuerySchema),
     AnalyticsController.expenseBreakdown,

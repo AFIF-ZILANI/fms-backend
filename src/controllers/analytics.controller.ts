@@ -81,6 +81,14 @@ export const AnalyticsController = {
         });
     },
 
+    async birdGradeDistribution(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const rows = await AnalyticsService.birdGradeDistribution(query.days);
+            return sendSuccess(c, rows, "Bird grade distribution computed");
+        });
+    },
+
     async expenseBreakdown(c: Context) {
         return withHandler(c, async () => {
             const query = getValid<ExpenseBreakdownQuery>(c, "query");

@@ -298,4 +298,12 @@ describe("AnalyticsService", () => {
             await prisma.item.delete({ where: { id: wasteItem.id } });
         }
     });
+
+    test("birdGradeDistribution groups today's seeded HIGH-grade sale", async () => {
+        const rows = await AnalyticsService.birdGradeDistribution(30);
+        const highRow = rows.find((r) => r.grade === "HIGH");
+        expect(highRow).toBeDefined();
+        expect(highRow!.birds_count).toBeGreaterThanOrEqual(300);
+        expect(parseFloat(highRow!.revenue)).toBeGreaterThanOrEqual(118000);
+    });
 });
