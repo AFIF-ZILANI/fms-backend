@@ -147,4 +147,52 @@ describe("BirdSaleService", () => {
             }),
         ).rejects.toMatchObject({ status: 400 });
     });
+
+    test("getAll filters by date_from/date_to and grade", async () => {
+        const batch = await newRunningBatch(500);
+
+        const cullSale = await BirdSaleService.create({
+            batch_id: batch.id,
+            house_id: houseId,
+            sale_date: new Date(),
+            grade: "CULL",
+            birds_count: 20,
+            dholta_in_g: 50,
+            total_katha: 2,
+            total_weight: 20,
+            net_weight: 19,
+            price_per_kg: 100,
+            paid_amount: 0,
+            recorded_by_id: profileId,
+        });
+        createdSaleIds.push(cullSale!.id);
+
+        const oldHighSale = await BirdSaleService.create({
+            batch_id: batch.id,
+            house_id: houseId,
+            sale_date: new Date(Date.now() - 10 * 86_400_000),
+            grade: "HIGH",
+            birds_count: 20,
+            dholta_in_g: 50,
+            total_katha: 2,
+            total_weight: 20,
+            net_weight: 19,
+            price_per_kg: 100,
+            paid_amount: 0,
+            recorded_by_id: profileId,
+        });
+        createdSaleIds.push(oldHighSale!.id);
+
+        const { birdSales: gradeFiltered } = await BirdSaleService.getAll({ page: 1, limit: 100, grade: "CULL" });
+        expect(gradeFiltered.some((s) => s.id === cullSale!.id)).toBe(true);
+        expect(gradeFiltered.some((s) => s.id === oldHighSale!.id)).toBe(false);
+
+        const { birdSales: dateFiltered } = await BirdSaleService.getAll({
+            page: 1,
+            limit: 100,
+            date_from: new Date(Date.now() - 86_400_000),
+        });
+        expect(dateFiltered.some((s) => s.id === cullSale!.id)).toBe(true);
+        expect(dateFiltered.some((s) => s.id === oldHighSale!.id)).toBe(false);
+    });
 });

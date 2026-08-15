@@ -35,6 +35,9 @@ export const createBirdSaleSchema = z
 export const listBirdSalesQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
     customer_id: z.string().uuid().optional(),
+    date_from: z.coerce.date().optional(),
+    date_to: z.coerce.date().optional(),
+    grade: z.enum(["HIGH", "LOW", "CULL"]).optional(),
 });
 
 export type CreateBirdSaleInput = z.infer<typeof createBirdSaleSchema>;

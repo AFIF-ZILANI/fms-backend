@@ -10,6 +10,13 @@ export const BirdSaleService = {
         const where = {
             ...(query.batch_id !== undefined && { batch_id: query.batch_id }),
             ...(query.customer_id !== undefined && { customer_id: query.customer_id }),
+            ...(query.grade !== undefined && { grade: query.grade }),
+            ...((query.date_from !== undefined || query.date_to !== undefined) && {
+                sale_date: {
+                    ...(query.date_from !== undefined && { gte: query.date_from }),
+                    ...(query.date_to !== undefined && { lte: query.date_to }),
+                },
+            }),
         };
         const [birdSales, total] = await Promise.all([
             prisma.birdSale.findMany({
