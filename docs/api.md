@@ -271,7 +271,7 @@ Every enum used in a request body, spelled exactly as the API expects
 | `SupplierSupplyCategories` | `FEED`, `MEDICINE`, `CHICKS`, `HUSK`, `EQUIPMENT`, `UTILITIES`, `TRANSPORTATION`, `CLEANING_SUPPLIES`, `OFFICE_SUPPLIES`, `SOFTWARE`, `OTHER` |
 | `HouseType` | `BROODER`, `GROWER`, `LAYER` |
 | `Units` | `BIRD`, `KG`, `LITER`, `BAG`, `BOX`, `UNIT`, `SACHETS`, `BOTTLE`, `ML`, `L`, `G`, `PCS`, `VIAL`, `DOSE`, `OTHER` |
-| `ResourceCategories` (`Item.category`) | `FEED`, `MEDICINE`, `VACCINE`, `SUPPLEMENT`, `BIOSECURITY`, `CHICKS`, `HUSK`, `EQUIPMENT`, `UTILITIES`, `SALARY`, `TRANSPORTATION`, `MAINTENANCE`, `CLEANING_SUPPLIES`, `OTHER` |
+| `ResourceCategories` (`Item.category`) | `FEED`, `MEDICINE`, `VACCINE`, `SUPPLEMENT`, `BIOSECURITY`, `CHICKS`, `HUSK`, `EQUIPMENT`, `UTILITIES`, `SALARY`, `TRANSPORTATION`, `MAINTENANCE`, `CLEANING_SUPPLIES`, `WASTE`, `OTHER` |
 | `StockUnitStatus` (read-only, server-managed) | `UNASSIGNED`, `IN_STOCK`, `IN_USE`, `CONSUMED`, `DISPOSED` |
 | `AssetStatus` | `ACTIVE`, `RETIRED`, `DISPOSED` |
 | `OrganizationRole` | `MANUFACTURER`, `IMPORTER`, `MARKETER`, `DISTRIBUTOR` |
@@ -812,7 +812,7 @@ Exact mirror of Purchases' money-math pattern.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
-| GET | `/api/sales` | 200 | query: `customer_id?` |
+| GET | `/api/sales` | 200 | query: `customer_id?`, `date_from?`, `date_to?`, `item_category?` (`ResourceCategories`) |
 | GET | `/api/sales/:id` | 200 | includes `items`, `customer` |
 | POST | `/api/sales` | 201 | `{ customer_id?, sale_date, paid_amount? (default 0), recorded_by_id, items: [{ item_id, quantity, unit, unit_price }, ...] (min 1) }` |
 
@@ -832,7 +832,7 @@ of only three things allowed to (with `MortalityLog` and
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
-| GET | `/api/bird-sales` | 200 | query: `batch_id?`, `customer_id?` |
+| GET | `/api/bird-sales` | 200 | query: `batch_id?`, `customer_id?`, `date_from?`, `date_to?`, `grade?` (`BirdGrade`) |
 | GET | `/api/bird-sales/:id` | 200 | — |
 | POST | `/api/bird-sales` | 201 | see below |
 
@@ -1117,6 +1117,8 @@ state of its own.
 | GET | `/api/analytics/trends/mortality` | 200 | `days?` (int, 1-365, default 30) |
 | GET | `/api/analytics/trends/feed` | 200 | `days?` (int, 1-365, default 30) |
 | GET | `/api/analytics/trends/sales` | 200 | `days?` (int, 1-365, default 30) |
+| GET | `/api/analytics/sales/by-product-line` | 200 | `days?` (int, 1-365, default 30) |
+| GET | `/api/analytics/sales/grade-distribution` | 200 | `days?` (int, 1-365, default 30) |
 | GET | `/api/analytics/expenses/breakdown` | 200 | `month?` (date, defaults to current month) |
 | GET | `/api/analytics/revenue-vs-expenses` | 200 | `months?` (int, 1-24, default 6) |
 | GET | `/api/analytics/batches/performance` | 200 | `status?` (`RUNNING`\|`CLOSED`\|`SOLD`, optional, all statuses when omitted) |
@@ -1131,6 +1133,18 @@ in different units are never summed together.
 **`/trends/sales`** — `{ date: string, revenue: string, avg_price_per_kg: string }[]`,
 `avg_price_per_kg` is volume-weighted (`total revenue / total net weight`
 for the day), not an average of per-sale averages.
+
+**`/sales/by-product-line`** — `{ category: string, revenue: string }[]`,
+sorted descending by revenue. Regular Sale line-item revenue grouped by
+`Item.category`; BirdSale revenue is folded in as a synthetic `"BIRD"`
+entry (not a real `ResourceCategories` value) since BirdSale has no
+`Item`/category relation of its own. Omitted entirely (not zero-filled)
+when there's no revenue for a category in the window, same no-zero-fill
+convention as `/trends/mortality`.
+
+**`/sales/grade-distribution`** — `{ grade: BirdGrade, birds_count: number, revenue: string }[]`,
+sorted descending by `birds_count`. One row per grade (`HIGH`/`LOW`/`CULL`)
+with at least one bird sold in the window.
 
 **`/expenses/breakdown`** — `{ category: ExpenseCategory, total: string }[]`,
 sorted descending by total.
