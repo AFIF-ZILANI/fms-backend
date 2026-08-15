@@ -34,5 +34,6 @@ export const resourceCategorySchema = z.enum([
     "TRANSPORTATION",
     "MAINTENANCE",
     "CLEANING_SUPPLIES",
+    "WASTE",
     "OTHER",
 ]);

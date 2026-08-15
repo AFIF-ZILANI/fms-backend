@@ -81,6 +81,7 @@ enum ResourceCategories {
   TRANSPORTATION
   MAINTENANCE
   CLEANING_SUPPLIES
+  WASTE
   OTHER
 }
 

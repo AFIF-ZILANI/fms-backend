@@ -129,4 +129,16 @@ describe("ItemService", () => {
         expect(lowStock.some((i) => i.id === above!.id)).toBe(false);
         expect(lowStock.some((i) => i.id === noReorderLevel!.id)).toBe(false);
     });
+
+    test("WASTE category can be used for poultry-waste items", async () => {
+        const item = await ItemService.create({
+            name: `Poultry Waste ${crypto.randomUUID()}`,
+            category: "WASTE",
+            unit: "BAG",
+        });
+        createdIds.push(item!.id);
+
+        const found = await ItemService.getById(item!.id);
+        expect(found.category).toBe("WASTE");
+    });
 });
