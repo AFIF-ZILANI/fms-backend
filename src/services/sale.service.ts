@@ -12,6 +12,15 @@ export const SaleService = {
     async getAll(query: ListSalesQuery) {
         const where = {
             ...(query.customer_id !== undefined && { customer_id: query.customer_id }),
+            ...((query.date_from !== undefined || query.date_to !== undefined) && {
+                sale_date: {
+                    ...(query.date_from !== undefined && { gte: query.date_from }),
+                    ...(query.date_to !== undefined && { lte: query.date_to }),
+                },
+            }),
+            ...(query.item_category !== undefined && {
+                items: { some: { item: { category: query.item_category } } },
+            }),
         };
         const [sales, total] = await Promise.all([
             prisma.sale.findMany({

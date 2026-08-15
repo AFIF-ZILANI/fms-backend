@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
-import { unitSchema } from "@lib/enums";
+import { unitSchema, resourceCategorySchema } from "@lib/enums";
 
 const saleItemInput = z.object({
     item_id: z.string().uuid(),
@@ -19,6 +19,9 @@ export const createSaleSchema = z.object({
 
 export const listSalesQuerySchema = paginationQuerySchema.extend({
     customer_id: z.string().uuid().optional(),
+    date_from: z.coerce.date().optional(),
+    date_to: z.coerce.date().optional(),
+    item_category: resourceCategorySchema.optional(),
 });
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;

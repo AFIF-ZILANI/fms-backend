@@ -6,6 +6,7 @@ import { AppError } from "@lib/app-error";
 let itemId: string;
 let profileId: string;
 const createdSaleIds: string[] = [];
+const createdItemIds: string[] = [];
 
 describe("SaleService", () => {
     beforeAll(async () => {
@@ -31,6 +32,7 @@ describe("SaleService", () => {
     afterAll(async () => {
         await prisma.saleItem.deleteMany({ where: { sale_id: { in: createdSaleIds } } });
         await prisma.sale.deleteMany({ where: { id: { in: createdSaleIds } } });
+        await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
         await prisma.item.delete({ where: { id: itemId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
@@ -67,5 +69,49 @@ describe("SaleService", () => {
         await expect(
             SaleService.getById("00000000-0000-0000-0000-000000000000"),
         ).rejects.toBeInstanceOf(AppError);
+    });
+
+    test("getAll filters by date_from/date_to and item_category", async () => {
+        const medicineItem = await prisma.item.create({
+            data: {
+                name: `Filter Medicine ${crypto.randomUUID()}`,
+                normalized_key: `filter-medicine-${crypto.randomUUID()}`,
+                category: "MEDICINE",
+                unit: "BOTTLE",
+            },
+        });
+        createdItemIds.push(medicineItem.id);
+
+        const recentSale = await SaleService.create({
+            sale_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [{ item_id: medicineItem.id, quantity: 1, unit: "BOTTLE", unit_price: 20 }],
+        });
+        createdSaleIds.push(recentSale!.id);
+
+        const oldSale = await SaleService.create({
+            sale_date: new Date(Date.now() - 10 * 86_400_000),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [{ item_id: itemId, quantity: 1, unit: "BAG", unit_price: 5 }],
+        });
+        createdSaleIds.push(oldSale!.id);
+
+        const { sales: dateFiltered } = await SaleService.getAll({
+            page: 1,
+            limit: 100,
+            date_from: new Date(Date.now() - 86_400_000),
+        });
+        expect(dateFiltered.some((s) => s.id === recentSale!.id)).toBe(true);
+        expect(dateFiltered.some((s) => s.id === oldSale!.id)).toBe(false);
+
+        const { sales: categoryFiltered } = await SaleService.getAll({
+            page: 1,
+            limit: 100,
+            item_category: "MEDICINE",
+        });
+        expect(categoryFiltered.some((s) => s.id === recentSale!.id)).toBe(true);
+        expect(categoryFiltered.some((s) => s.id === oldSale!.id)).toBe(false);
     });
 });
