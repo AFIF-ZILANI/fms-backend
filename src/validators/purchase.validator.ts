@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
-import { unitSchema } from "@lib/enums";
+import { unitSchema, resourceCategorySchema } from "@lib/enums";
 
 const purchaseItemInput = z.object({
     item_id: z.string().uuid(),
@@ -23,6 +23,9 @@ export const createPurchaseSchema = z.object({
 
 export const listPurchasesQuerySchema = paginationQuerySchema.extend({
     supplier_id: z.string().uuid().optional(),
+    date_from: z.coerce.date().optional(),
+    date_to: z.coerce.date().optional(),
+    item_category: resourceCategorySchema.optional(),
 });
 
 export const listPurchaseItemsQuerySchema = paginationQuerySchema.extend({
