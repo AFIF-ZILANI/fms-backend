@@ -59,3 +59,24 @@ analyticsRoutes.get(
     zValidatorRfc7807("query", revenueVsExpensesQuerySchema),
     AnalyticsController.revenueVsExpenses,
 );
+analyticsRoutes.get("/inventory/stock-value-by-category", AnalyticsController.stockValueByCategory);
+analyticsRoutes.get(
+    "/inventory/stock-movement-trend",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.stockMovementTrend,
+);
+analyticsRoutes.get(
+    "/inventory/consumption-by-category",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.consumptionByCategory,
+);
+analyticsRoutes.get(
+    "/inventory/consumption-trend",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.consumptionTrend,
+);
+analyticsRoutes.get(
+    "/inventory/wastage-by-category",
+    zValidatorRfc7807("query", trendsQuerySchema),
+    AnalyticsController.wastageByCategory,
+);

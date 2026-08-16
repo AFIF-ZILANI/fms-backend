@@ -1,6 +1,8 @@
 import prisma from "@lib/db";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
+import { getItemBalances } from "@lib/stock-balance";
+import { getItemAvgCosts } from "@lib/stock-value";
 import { PaymentInstrumentService } from "@services/payment-instrument.service";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
@@ -440,5 +442,126 @@ export const AnalyticsService = {
         );
 
         return rows.sort((a, b) => a.month.localeCompare(b.month));
+    },
+
+    /** Current on-hand value per category -- balance (StockLedger IN-OUT,
+     * via getItemBalances) x avg purchase cost (getItemAvgCosts). Items with
+     * no purchase history contribute nothing (unknown cost, not free). */
+    async stockValueByCategory() {
+        const items = await prisma.item.findMany({
+            where: { is_active: true },
+            select: { id: true, category: true },
+        });
+        const itemIds = items.map((i) => i.id);
+        const [balances, avgCosts] = await Promise.all([getItemBalances(itemIds), getItemAvgCosts(itemIds)]);
+
+        const byCategory = new Map<string, Prisma.Decimal>();
+        for (const item of items) {
+            const balance = balances.get(item.id) ?? new Prisma.Decimal(0);
+            const avgCost = avgCosts.get(item.id);
+            if (!avgCost || balance.lessThanOrEqualTo(0)) continue;
+            const value = balance.times(avgCost);
+            byCategory.set(item.category, (byCategory.get(item.category) ?? new Prisma.Decimal(0)).plus(value));
+        }
+
+        return Array.from(byCategory.entries())
+            .map(([category, total]) => ({ category, total: total.toString() }))
+            .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
+    },
+
+    /** Daily IN vs OUT stock *value* over `days` days -- not raw quantity,
+     * which can't be summed across items with different units (BAG vs KG),
+     * same trap feedTrend's own comment flags. Both directions valued at the
+     * same avg purchase cost per item (moving-average costing). */
+    async stockMovementTrend(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+        const rows = await prisma.stockLedger.findMany({
+            where: { occurred_at: { gte: since, lte: new Date() } },
+            select: { item_id: true, quantity: true, direction: true, occurred_at: true },
+        });
+        const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
+
+        const byDate = new Map<string, { in: Prisma.Decimal; out: Prisma.Decimal }>();
+        for (const row of rows) {
+            const dateKey = row.occurred_at.toISOString().slice(0, 10);
+            const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            const bucket = byDate.get(dateKey) ?? { in: new Prisma.Decimal(0), out: new Prisma.Decimal(0) };
+            if (row.direction === "IN") bucket.in = bucket.in.plus(value);
+            else bucket.out = bucket.out.plus(value);
+            byDate.set(dateKey, bucket);
+        }
+
+        return Array.from(byDate.entries())
+            .map(([date, v]) => ({ date, in: v.in.toString(), out: v.out.toString() }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+    },
+
+    /** Consumption valued at avg purchase cost, grouped by item category
+     * over `days` days -- mirrors purchasesByCategory's shape. */
+    async consumptionByCategory(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+        const rows = await prisma.consumption.findMany({
+            where: { date: { gte: since, lte: new Date() } },
+            select: { item_id: true, quantity: true, item: { select: { category: true } } },
+        });
+        const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
+
+        const byCategory = new Map<string, Prisma.Decimal>();
+        for (const row of rows) {
+            const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            byCategory.set(row.item.category, (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value));
+        }
+
+        return Array.from(byCategory.entries())
+            .map(([category, total]) => ({ category, total: total.toString() }))
+            .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
+    },
+
+    /** Daily total consumption value over `days` days -- mirrors purchasesTrend's shape. */
+    async consumptionTrend(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+        const rows = await prisma.consumption.findMany({
+            where: { date: { gte: since, lte: new Date() } },
+            select: { item_id: true, quantity: true, date: true },
+        });
+        const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
+
+        const byDate = new Map<string, Prisma.Decimal>();
+        for (const row of rows) {
+            const dateKey = row.date.toISOString().slice(0, 10);
+            const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            byDate.set(dateKey, (byDate.get(dateKey) ?? new Prisma.Decimal(0)).plus(value));
+        }
+
+        return Array.from(byDate.entries())
+            .map(([date, total]) => ({ date, total: total.toString() }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+    },
+
+    /** Value lost to WASTAGE/EXPIRED stock-ledger entries, by category, over
+     * `days` days. No current write path posts those reasons (adjustments
+     * always log as ADJUSTMENT) -- this is forward-compatible and will read
+     * empty until one does, not a bug. */
+    async wastageByCategory(days: number) {
+        const since = new Date(Date.now() - days * 86_400_000);
+        since.setUTCHours(0, 0, 0, 0);
+        const rows = await prisma.stockLedger.findMany({
+            where: { occurred_at: { gte: since, lte: new Date() }, reason: { in: ["WASTAGE", "EXPIRED"] } },
+            select: { item_id: true, quantity: true, item: { select: { category: true } } },
+        });
+        const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
+
+        const byCategory = new Map<string, Prisma.Decimal>();
+        for (const row of rows) {
+            const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            byCategory.set(row.item.category, (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value));
+        }
+
+        return Array.from(byCategory.entries())
+            .map(([category, total]) => ({ category, total: total.toString() }))
+            .sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
     },
 };
