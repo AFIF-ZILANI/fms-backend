@@ -104,4 +104,43 @@ export const AnalyticsController = {
             return sendSuccess(c, rows, "Revenue vs expenses computed");
         });
     },
+
+    async stockValueByCategory(c: Context) {
+        return withHandler(c, async () => {
+            const rows = await AnalyticsService.stockValueByCategory();
+            return sendSuccess(c, rows, "Stock value by category computed");
+        });
+    },
+
+    async stockMovementTrend(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const trend = await AnalyticsService.stockMovementTrend(query.days);
+            return sendSuccess(c, trend, "Stock movement trend computed");
+        });
+    },
+
+    async consumptionByCategory(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const rows = await AnalyticsService.consumptionByCategory(query.days);
+            return sendSuccess(c, rows, "Consumption by category computed");
+        });
+    },
+
+    async consumptionTrend(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const trend = await AnalyticsService.consumptionTrend(query.days);
+            return sendSuccess(c, trend, "Consumption trend computed");
+        });
+    },
+
+    async wastageByCategory(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TrendsQuery>(c, "query");
+            const rows = await AnalyticsService.wastageByCategory(query.days);
+            return sendSuccess(c, rows, "Wastage by category computed");
+        });
+    },
 };
