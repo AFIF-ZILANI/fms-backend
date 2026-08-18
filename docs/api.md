@@ -87,7 +87,7 @@ before parsing the body, or catch the parse failure.
 | Status | When | Body shape |
 |---|---|---|
 | 200 | Every successful response except resource creation — list, get, update, and every action endpoint (`deactivate`, `reactivate`, `resolve`, `close`, `bind`, `relocate`, `dispose`, `scan`, `generate`, `/status`, etc.) | success envelope |
-| 201 | The 31 endpoints that create a brand-new resource — see §1.4 for the exact list | success envelope |
+| 201 | The 35 endpoints that create a brand-new resource — see §1.4 for the exact list | success envelope |
 | 400 | Zod validation failure, OR a business-rule rejection (a computed total exceeded, a cross-field mismatch), OR a client-supplied foreign id that doesn't reference an existing row (P2003 → mapped to 400, not 404 — see §1.7) | RFC 7807 |
 | 404 | Resource not found by `:id`, OR (unrelated to any specific resource) hitting a URL that doesn't match any route at all | RFC 7807 |
 | 409 | Duplicate unique field, invalid state transition, or a business-rule conflict (oversell, insufficient balance, already-in-that-state) | RFC 7807 |
@@ -111,7 +111,9 @@ factory exists in the codebase but nothing currently throws it).
 `/api/weight-records`, `/api/batch-feeding-programs`, `/api/sales`,
 `/api/bird-sales`, `/api/expenses`, `/api/performance-score-entries`,
 `/api/payroll-records/generate`, `/api/alerts`, `/api/payment-instruments`,
-`/api/payments`, `/api/inventory-adjustments`. Every other `POST`
+`/api/payments`, `/api/inventory-adjustments`, `/api/item-categories`,
+`/api/units`, `/api/expense-categories`, `/api/supplier-supply-categories`
+(§6.8). Every other `POST`
 (deactivate/reactivate/resolve/close/bind/relocate/dispose/scan) mutates an
 existing row rather than creating a new one, and returns 200.
 
@@ -261,17 +263,23 @@ just an untyped string the server trusts:
 ### 1.14 Enums quick reference
 
 Every enum used in a request body, spelled exactly as the API expects
-(case-sensitive):
+(case-sensitive). **Four of these are no longer fixed enums** — `Item.category`,
+`Item.unit`/`PurchaseItem.unit`/`SaleItem.unit`, `Expense.category`, and
+`Suppliers` supply categories are now database-backed lookup tables a farm
+owner can add to/rename/deactivate through Settings. For those four, this
+table is replaced with a pointer to the lookup endpoint that returns the
+current valid `code`s — see §6.8 for the shared shape and endpoint list.
+Everything else below is still a real Prisma enum, fixed at deploy time:
 
 | Enum | Values |
 |---|---|
 | `UserRole` | `ADMIN`, `EMPLOYEE`, `CUSTOMER`, `SUPPLIER`, `DOCTOR` |
 | `EmployeeRoleNames` | `MANAGER`, `WORKER`, `INTERN` |
 | `SupplierRoleNames` | `SALES_MAN`, `OWNER`, `DISTRIBUTOR`, `DEALER`, `WHOLESALER`, `RETAILER`, `MANUFACTURER`, `IMPORTER`, `REPRESENTATIVE` |
-| `SupplierSupplyCategories` | `FEED`, `MEDICINE`, `CHICKS`, `HUSK`, `EQUIPMENT`, `UTILITIES`, `TRANSPORTATION`, `CLEANING_SUPPLIES`, `OFFICE_SUPPLIES`, `SOFTWARE`, `OTHER` |
+| Supplier supply categories | no longer a fixed enum — a string matching an active `SupplierSupplyCategory.code`; fetch valid values from `GET /api/supplier-supply-categories?active=true` (§6.8) |
 | `HouseType` | `BROODER`, `GROWER`, `LAYER` |
-| `Units` | `BIRD`, `KG`, `LITER`, `BAG`, `BOX`, `UNIT`, `SACHETS`, `BOTTLE`, `ML`, `L`, `G`, `PCS`, `VIAL`, `DOSE`, `OTHER` |
-| `ResourceCategories` (`Item.category`) | `FEED`, `MEDICINE`, `VACCINE`, `SUPPLEMENT`, `BIOSECURITY`, `CHICKS`, `HUSK`, `EQUIPMENT`, `UTILITIES`, `SALARY`, `TRANSPORTATION`, `MAINTENANCE`, `CLEANING_SUPPLIES`, `WASTE`, `OTHER` |
+| Units (`Item.unit`, `PurchaseItem.unit`, `SaleItem.unit`) | no longer a fixed enum — a string matching an active `Unit.code`; fetch valid values from `GET /api/units?active=true` (§6.8) |
+| `Item.category` | no longer a fixed enum — a string matching an active `ItemCategory.code`; fetch valid values from `GET /api/item-categories?active=true` (§6.8) |
 | `StockUnitStatus` (read-only, server-managed) | `UNASSIGNED`, `IN_STOCK`, `IN_USE`, `CONSUMED`, `DISPOSED` |
 | `AssetStatus` | `ACTIVE`, `RETIRED`, `DISPOSED` |
 | `OrganizationRole` | `MANUFACTURER`, `IMPORTER`, `MARKETER`, `DISTRIBUTOR` |
@@ -283,7 +291,7 @@ Every enum used in a request body, spelled exactly as the API expects
 | `FeedType` | `PRE_STARTER`, `STARTER`, `GROWER`, `FINISHER`, `LAYER` |
 | `BirdGrade` | `HIGH`, `LOW`, `CULL` |
 | `CostType` | `DIRECT`, `SHARED_PERIOD`, `SHARED_CAPITAL` |
-| `ExpenseCategory` | `LABOR`, `ELECTRICITY`, `WATER`, `RENT`, `TRANSPORT`, `FUEL`, `MAINTENANCE`, `VET_FEE`, `INTERNET`, `MISC` |
+| `Expense.category` | no longer a fixed enum — a string matching an active `ExpenseCategoryLookup.code`; fetch valid values from `GET /api/expense-categories?active=true` (§6.8) |
 | `PaymentMethod` | `CASH`, `BANK_TRANSFER`, `MFS` |
 | `MfsType` | `BKASH`, `NAGAD`, `ROCKET` |
 | `PaymentType` (`Payment.direction`) | `INCOMING`, `OUTGOING` |
@@ -358,7 +366,7 @@ empty `PATCH` body.
 |---|---|---|---|
 | GET | `/api/suppliers` | 200 | query: `role?`, `supplies?` (single category, array-contains match), `is_active?` |
 | GET | `/api/suppliers/:id` | 200 | — |
-| POST | `/api/suppliers` | 201 | `{ name, mobile, email?, address?, role, supplies: [SupplierSupplyCategories, ...] (min 1), company? }` |
+| POST | `/api/suppliers` | 201 | `{ name, mobile, email?, address?, role, supplies: [string, ...] (min 1) — each a code matching an active SupplierSupplyCategory.code, see §6.8, company? }` |
 | PATCH | `/api/suppliers/:id` | 200 | any subset of create fields |
 | POST | `/api/suppliers/:id/deactivate` | 200 | — |
 | POST | `/api/suppliers/:id/reactivate` | 200 | — |
@@ -576,6 +584,55 @@ quantity_before"`); **400** if `item_id`/`warehouse_id`/`house_id`/
 `recorded_by_id` don't reference real rows (§1.7); **400** if neither
 `warehouse_id` nor `house_id` is given (validator-level, before hitting the
 database).
+
+### 6.8 Lookup tables — categories & units (formerly fixed enums)
+
+`Item.category`, `Item.unit`/`PurchaseItem.unit`/`SaleItem.unit`,
+`Expense.category`, and `Suppliers`' supply categories used to be fixed
+Prisma enums; they're now database-backed lookup tables a farm owner can
+add to, rename, or deactivate through Settings, with every referencing
+record's foreign key following a rename automatically (`onUpdate: Cascade`
+on the Postgres FK — renaming `ItemCategory.code` from `FEED` to
+`ANIMAL_FEED` rewrites every `Item.category = 'FEED'` row to `ANIMAL_FEED`
+in the same statement, no app-level migration needed).
+
+All four lookup resources — `item-categories`, `units`, `expense-categories`,
+`supplier-supply-categories` — share one identical shape:
+
+**Row shape**: `{ id, code, label, is_active, created_at, updated_at }`.
+`code` is server-derived from `label` (uppercased, non-alphanumerics
+stripped, whitespace collapsed to `_` — e.g. `"Cleaning Supplies"` →
+`CLEANING_SUPPLIES`) and is what every referencing field above actually
+stores; **you never send `code` directly**, on create or update.
+
+| Method | Path | Status | Body / Query |
+|---|---|---|---|
+| GET | `/api/item-categories` | 200 | query: `active?` (`"true"`/`"false"`) |
+| POST | `/api/item-categories` | 201 | `{ label }` |
+| PATCH | `/api/item-categories/:id` | 200 | `{ label }` — recomputes `code` from the new label; this is the rename that cascades |
+| POST | `/api/item-categories/:id/deactivate` | 200 | — |
+| POST | `/api/item-categories/:id/reactivate` | 200 | — |
+
+Same 5-route shape, swap the base path:
+
+| Resource | Base path |
+|---|---|
+| Item categories (`Item.category`) | `/api/item-categories` |
+| Units (`Item.unit`, `PurchaseItem.unit`, `SaleItem.unit`) | `/api/units` |
+| Expense categories (`Expense.category`) | `/api/expense-categories` |
+| Supplier supply categories (`Suppliers` supplies) | `/api/supplier-supply-categories` |
+
+A deactivated row (`is_active: false`) still satisfies existing FK
+references (nothing referencing it breaks), but should be filtered out of
+any client-side "pick a category" dropdown — that's what `?active=true`
+is for. Deactivating a code currently in use on records doesn't retroactively
+change or block anything; it only stops it from being offered for new picks.
+
+**Errors** (all four resources, same rules): **404** unknown `:id` on
+`PATCH`/deactivate/reactivate; **400** if the label has no letters or
+digits at all (`detail`: `"Label must contain at least one letter or
+number"` — an empty `code` would result); **409** if the derived `code`
+collides with an existing row's `code` (`detail`: `"code already in use"`).
 
 ---
 
@@ -812,7 +869,7 @@ Exact mirror of Purchases' money-math pattern.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
-| GET | `/api/sales` | 200 | query: `customer_id?`, `date_from?`, `date_to?`, `item_category?` (`ResourceCategories`) |
+| GET | `/api/sales` | 200 | query: `customer_id?`, `date_from?`, `date_to?`, `item_category?` (a string matching an `ItemCategory.code`, §6.8) |
 | GET | `/api/sales/:id` | 200 | includes `items`, `customer` |
 | POST | `/api/sales` | 201 | `{ customer_id?, sale_date, paid_amount? (default 0), recorded_by_id, items: [{ item_id, quantity, unit, unit_price }, ...] (min 1) }` |
 
@@ -873,7 +930,7 @@ Append-only (§1.10).
 |---|---|---|---|
 | GET | `/api/expenses` | 200 | query: `batch_id?`, `category?`, `cost_type?`, `date_from?`, `date_to?` |
 | GET | `/api/expenses/:id` | 200 | — |
-| POST | `/api/expenses` | 201 | `{ batch_id?, category: ExpenseCategory, cost_type: CostType, amount, date, remarks?, recorded_by_id }` |
+| POST | `/api/expenses` | 201 | `{ batch_id?, category: string (a code matching an active ExpenseCategoryLookup.code, §6.8), cost_type: CostType, amount, date, remarks?, recorded_by_id }` |
 
 `cost_type = SHARED_PERIOD` expenses currently show as **unallocated** in
 batch P&L (§14.3) — the bird-days formula that would distribute them across
@@ -1126,9 +1183,9 @@ state of its own.
 **`/trends/mortality`** — `{ date: string (YYYY-MM-DD), died: number }[]`,
 one row per day with at least one logged death (no zero-fill).
 
-**`/trends/feed`** — `{ date: string, unit: Units, quantity: string }[]`,
-grouped by date **and** unit (FEED-category consumption only) — quantities
-in different units are never summed together.
+**`/trends/feed`** — `{ date: string, unit: string, quantity: string }[]`,
+`unit` is a `Unit.code` (§6.8), grouped by date **and** unit (FEED-category
+consumption only) — quantities in different units are never summed together.
 
 **`/trends/sales`** — `{ date: string, revenue: string, avg_price_per_kg: string }[]`,
 `avg_price_per_kg` is volume-weighted (`total revenue / total net weight`
@@ -1137,7 +1194,7 @@ for the day), not an average of per-sale averages.
 **`/sales/by-product-line`** — `{ category: string, revenue: string }[]`,
 sorted descending by revenue. Regular Sale line-item revenue grouped by
 `Item.category`; BirdSale revenue is folded in as a synthetic `"BIRD"`
-entry (not a real `ResourceCategories` value) since BirdSale has no
+entry (not a real `ItemCategory.code` value) since BirdSale has no
 `Item`/category relation of its own. Omitted entirely (not zero-filled)
 when there's no revenue for a category in the window, same no-zero-fill
 convention as `/trends/mortality`.
@@ -1146,8 +1203,9 @@ convention as `/trends/mortality`.
 sorted descending by `birds_count`. One row per grade (`HIGH`/`LOW`/`CULL`)
 with at least one bird sold in the window.
 
-**`/expenses/breakdown`** — `{ category: ExpenseCategory, total: string }[]`,
-sorted descending by total.
+**`/expenses/breakdown`** — `{ category: string, total: string }[]`,
+`category` is an `ExpenseCategoryLookup.code` (§6.8), sorted descending by
+total.
 
 **`/revenue-vs-expenses`** — `{ month: string (YYYY-MM), revenue: string, expenses: string }[]`,
 ascending by month. `revenue` = `Sale.total` + `BirdSale.total_amount` for

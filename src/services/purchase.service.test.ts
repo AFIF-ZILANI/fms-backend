@@ -38,7 +38,7 @@ describe("PurchaseService", () => {
             },
         });
         const supplier = await prisma.suppliers.create({
-            data: { profile_id: supplierProfile.id, role: "DISTRIBUTOR", supplies: ["MEDICINE"] },
+            data: { profile_id: supplierProfile.id, role: "DISTRIBUTOR" },
         });
         supplierId = supplier.id;
     });

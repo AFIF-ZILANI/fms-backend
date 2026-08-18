@@ -13,19 +13,7 @@ const supplierRole = z.enum([
     "REPRESENTATIVE",
 ]);
 
-const supplyCategory = z.enum([
-    "FEED",
-    "MEDICINE",
-    "CHICKS",
-    "HUSK",
-    "EQUIPMENT",
-    "UTILITIES",
-    "TRANSPORTATION",
-    "CLEANING_SUPPLIES",
-    "OFFICE_SUPPLIES",
-    "SOFTWARE",
-    "OTHER",
-]);
+const supplyCategory = z.string().min(1, "Supply category is required");
 
 export const createSupplierSchema = z.object({
     name: z.string().min(1, "Name is required"),

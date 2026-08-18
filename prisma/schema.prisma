@@ -49,56 +49,6 @@ enum ContactMethods {
   TELEGRAM
 }
 
-enum Units {
-  BIRD
-  KG
-  LITER
-  BAG
-  BOX
-  UNIT
-  SACHETS
-  BOTTLE
-  ML
-  L
-  G
-  PCS
-  VIAL
-  DOSE
-  OTHER
-}
-
-enum ResourceCategories {
-  FEED
-  MEDICINE
-  VACCINE
-  SUPPLEMENT
-  BIOSECURITY
-  CHICKS
-  HUSK
-  EQUIPMENT
-  UTILITIES
-  SALARY
-  TRANSPORTATION
-  MAINTENANCE
-  CLEANING_SUPPLIES
-  WASTE
-  OTHER
-}
-
-enum SupplierSupplyCategories {
-  FEED
-  MEDICINE
-  CHICKS
-  HUSK
-  EQUIPMENT
-  UTILITIES
-  TRANSPORTATION
-  CLEANING_SUPPLIES
-  OFFICE_SUPPLIES
-  SOFTWARE
-  OTHER
-}
-
 enum HouseType {
   BROODER
   GROWER
@@ -153,19 +103,6 @@ enum CostType {
   DIRECT // traceable to one batch
   SHARED_PERIOD // recurring, farm-wide, allocated later by bird-days
   SHARED_CAPITAL // equipment/assets, depreciated via useful_life_batches
-}
-
-enum ExpenseCategory {
-  LABOR
-  ELECTRICITY
-  WATER
-  RENT
-  TRANSPORT
-  FUEL
-  MAINTENANCE
-  VET_FEE
-  INTERNET
-  MISC
 }
 
 enum StockUnitStatus {
@@ -303,6 +240,66 @@ enum AlertActionTypes {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// SOFT-CODED LOOKUPS (categories, units) -- see
+// docs/superpowers/specs/2026-08-18-soft-coded-categories-and-units-design.md
+// ════════════════════════════════════════════════════════════════════
+
+model ItemCategory {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  items Item[]
+}
+
+model Unit {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  items         Item[]
+  purchaseItems PurchaseItem[]
+  saleItems     SaleItem[]
+}
+
+model ExpenseCategoryLookup {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  expenses Expense[]
+}
+
+model SupplierSupplyCategory {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  supplierLinks SupplierSupplyLink[]
+}
+
+model SupplierSupplyLink {
+  supplier_id String
+  supplier    Suppliers              @relation(fields: [supplier_id], references: [id])
+  category_id String
+  category    SupplierSupplyCategory @relation(fields: [category_id], references: [id])
+
+  @@id([supplier_id, category_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
 // PEOPLE
 // ════════════════════════════════════════════════════════════════════
 
@@ -386,20 +383,18 @@ model Customers {
 }
 
 model Suppliers {
-  id         String                     @id @default(uuid())
-  profile_id String                     @unique
-  profile    Profiles                   @relation(fields: [profile_id], references: [id], onDelete: Cascade)
-  role       SupplierRoleNames
-  supplies   SupplierSupplyCategories[]
-  company    String?
-  is_active  Boolean                    @default(true)
-  created_at DateTime                   @default(now())
-  updated_at DateTime                   @updatedAt
+  id          String               @id @default(uuid())
+  profile_id  String               @unique
+  profile     Profiles             @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  role        SupplierRoleNames
+  supplyLinks SupplierSupplyLink[]
+  company     String?
+  is_active   Boolean              @default(true)
+  created_at  DateTime             @default(now())
+  updated_at  DateTime             @updatedAt
 
   items     Item[]
   purchases Purchase[]
-
-  @@index([supplies])
 }
 
 model Doctors {
@@ -547,18 +542,20 @@ model MortalityLog {
 // ════════════════════════════════════════════════════════════════════
 
 model Item {
-  id                    String             @id @default(uuid())
+  id                    String       @id @default(uuid())
   name                  String
-  normalized_key        String             @unique // app-computed dedup key — prevents "Amoxicillin" and "amoxicillin" splitting inventory
-  category              ResourceCategories
-  unit                  Units
+  normalized_key        String       @unique // app-computed dedup key — prevents "Amoxicillin" and "amoxicillin" splitting inventory
+  category              String
+  categoryRef           ItemCategory @relation(fields: [category], references: [code], onUpdate: Cascade)
+  unit                  String
+  unitRef               Unit         @relation(fields: [unit], references: [code], onUpdate: Cascade)
   meta_data             Json?
-  reorder_level         Decimal?           @db.Decimal(10, 3)
-  preferred_reorder_qty Decimal?           @db.Decimal(10, 3)
+  reorder_level         Decimal?     @db.Decimal(10, 3)
+  preferred_reorder_qty Decimal?     @db.Decimal(10, 3)
   lead_time_days        Int?
-  is_active             Boolean            @default(true)
-  created_at            DateTime           @default(now())
-  updated_at            DateTime           @updatedAt
+  is_active             Boolean      @default(true)
+  created_at            DateTime     @default(now())
+  updated_at            DateTime     @updatedAt
 
   purchaseItems        PurchaseItem[]
   ledgerEntries        StockLedger[]
@@ -599,7 +596,8 @@ model PurchaseItem {
   batch_id        String? // set for chicks — the batch this delivery funds. Repeatable: no unique
   batch           Batches?  @relation(fields: [batch_id], references: [id]) // constraint blocks a 2nd delivery at a different price/date.
   quantity        Decimal   @db.Decimal(10, 3)
-  unit            Units
+  unit            String
+  unitRef         Unit      @relation(fields: [unit], references: [code], onUpdate: Cascade)
   unit_price      Decimal   @db.Decimal(10, 2)
   total_price     Decimal   @db.Decimal(10, 2)
   mfg_date        DateTime?
@@ -887,7 +885,8 @@ model SaleItem {
   item_id     String
   item        Item    @relation(fields: [item_id], references: [id])
   quantity    Decimal @db.Decimal(10, 3)
-  unit        Units
+  unit        String
+  unitRef     Unit    @relation(fields: [unit], references: [code], onUpdate: Cascade)
   unit_price  Decimal @db.Decimal(10, 2)
   total_price Decimal @db.Decimal(10, 2)
 
@@ -930,17 +929,18 @@ model BirdSale {
 // ════════════════════════════════════════════════════════════════════
 
 model Expense {
-  id             String          @id @default(uuid())
+  id             String                @id @default(uuid())
   batch_id       String?
-  batch          Batches?        @relation(fields: [batch_id], references: [id])
-  category       ExpenseCategory
+  batch          Batches?              @relation(fields: [batch_id], references: [id])
+  category       String
+  categoryRef    ExpenseCategoryLookup @relation(fields: [category], references: [code], onUpdate: Cascade)
   cost_type      CostType
-  amount         Decimal         @db.Decimal(10, 2)
+  amount         Decimal               @db.Decimal(10, 2)
   date           DateTime
   remarks        String?
   recorded_by_id String
-  recorded_by    Profiles        @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime        @default(now())
+  recorded_by    Profiles              @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime              @default(now())
 
   @@index([batch_id, date])
   @@index([cost_type])

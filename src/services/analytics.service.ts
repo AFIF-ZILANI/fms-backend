@@ -276,6 +276,8 @@ export const AnalyticsService = {
     async feedTrend(days: number) {
         const since = new Date(Date.now() - days * 86_400_000);
         since.setUTCHours(0, 0, 0, 0);
+        // ponytail: this string is a live FK code (ItemCategory.code) a user can rename via Settings,
+        // which silently breaks this comparison with no error -- needs a stable-key mechanism if this keeps mattering.
         const rows = await prisma.consumption.findMany({
             where: { date: { gte: since, lte: new Date() }, item: { category: "FEED" } },
             select: { date: true, quantity: true, item: { select: { unit: true } } },

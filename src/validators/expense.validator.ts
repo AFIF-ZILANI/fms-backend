@@ -1,18 +1,7 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 
-const expenseCategory = z.enum([
-    "LABOR",
-    "ELECTRICITY",
-    "WATER",
-    "RENT",
-    "TRANSPORT",
-    "FUEL",
-    "MAINTENANCE",
-    "VET_FEE",
-    "INTERNET",
-    "MISC",
-]);
+const expenseCategory = z.string().min(1, "Category is required");
 
 const costType = z.enum(["DIRECT", "SHARED_PERIOD", "SHARED_CAPITAL"]);
 
