@@ -383,15 +383,15 @@ model Customers {
 }
 
 model Suppliers {
-  id         String            @id @default(uuid())
-  profile_id String            @unique
-  profile    Profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade)
-  role       SupplierRoleNames
+  id          String               @id @default(uuid())
+  profile_id  String               @unique
+  profile     Profiles             @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  role        SupplierRoleNames
   supplyLinks SupplierSupplyLink[]
-  company    String?
-  is_active  Boolean           @default(true)
-  created_at DateTime          @default(now())
-  updated_at DateTime          @updatedAt
+  company     String?
+  is_active   Boolean              @default(true)
+  created_at  DateTime             @default(now())
+  updated_at  DateTime             @updatedAt
 
   items     Item[]
   purchases Purchase[]
@@ -929,18 +929,18 @@ model BirdSale {
 // ════════════════════════════════════════════════════════════════════
 
 model Expense {
-  id             String          @id @default(uuid())
+  id             String                @id @default(uuid())
   batch_id       String?
-  batch          Batches?        @relation(fields: [batch_id], references: [id])
+  batch          Batches?              @relation(fields: [batch_id], references: [id])
   category       String
   categoryRef    ExpenseCategoryLookup @relation(fields: [category], references: [code], onUpdate: Cascade)
   cost_type      CostType
-  amount         Decimal         @db.Decimal(10, 2)
+  amount         Decimal               @db.Decimal(10, 2)
   date           DateTime
   remarks        String?
   recorded_by_id String
-  recorded_by    Profiles        @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime        @default(now())
+  recorded_by    Profiles              @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime              @default(now())
 
   @@index([batch_id, date])
   @@index([cost_type])
