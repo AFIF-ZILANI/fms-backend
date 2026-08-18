@@ -48,6 +48,8 @@ async function checkLowStock() {
     for (const item of items) {
         const balance = balances.get(item.id) ?? new Prisma.Decimal(0);
         if (balance.lessThan(item.reorder_level!)) {
+            // ponytail: this string is a live FK code (ItemCategory.code) a user can rename via Settings,
+            // which silently breaks this comparison with no error -- needs a stable-key mechanism if this keeps mattering.
             const type =
                 item.category === "MEDICINE" || item.category === "VACCINE" ? "MEDICINE" : "FEED";
             await upsertActiveAlert({

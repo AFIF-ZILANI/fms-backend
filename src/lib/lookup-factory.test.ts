@@ -52,4 +52,29 @@ describe("createLookupService (against ItemCategory)", () => {
         const { rows } = await service.getAll({ active: "true", page: 1, limit: 100 });
         expect(rows.find((r) => r.id === row.id)).toBeUndefined();
     });
+
+    test("renaming a lookup row cascades its new code onto a referencing Item.category via onUpdate: Cascade", async () => {
+        const category = await service.create("Cascade Rename Test");
+        createdIds.push(category.id);
+
+        const item = await prisma.item.create({
+            data: {
+                name: `Cascade Test Item ${crypto.randomUUID()}`,
+                normalized_key: `cascade test item ${crypto.randomUUID()}`,
+                category: category.code,
+                unit: "BAG",
+            },
+        });
+
+        try {
+            const renamed = await service.update(category.id, "Cascade Renamed Test");
+            expect(renamed.code).not.toBe(category.code);
+
+            const refetched = await prisma.item.findUnique({ where: { id: item.id } });
+            expect(refetched?.category).toBe(renamed.code);
+            expect(refetched?.category).not.toBe(category.code);
+        } finally {
+            await prisma.item.delete({ where: { id: item.id } });
+        }
+    });
 });
