@@ -24,6 +24,25 @@ ALTER TABLE "Expense" ALTER COLUMN "category" TYPE TEXT USING "category"::TEXT;
 -- DropIndex
 DROP INDEX "Suppliers_supplies_idx";
 
+-- Backfill: catch any Suppliers.supplies data not yet migrated into SupplierSupplyLink
+-- (Task 3's backfill script covers dev; this guards any environment where the script
+-- didn't run between migrations, so the DROP COLUMN below never silently loses data).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "Suppliers" s, unnest(s.supplies) AS code
+    WHERE NOT EXISTS (SELECT 1 FROM "SupplierSupplyCategory" c WHERE c.code = code)
+  ) THEN
+    RAISE EXCEPTION 'Suppliers.supplies contains a code with no matching SupplierSupplyCategory -- run scripts/backfill-lookup-tables.ts first';
+  END IF;
+END $$;
+
+INSERT INTO "SupplierSupplyLink" (supplier_id, category_id)
+SELECT s.id, c.id
+FROM "Suppliers" s, unnest(s.supplies) AS code
+JOIN "SupplierSupplyCategory" c ON c.code = code
+ON CONFLICT DO NOTHING;
+
 -- AlterTable
 ALTER TABLE "Suppliers" DROP COLUMN "supplies";
 
