@@ -30,8 +30,8 @@ DROP INDEX "Suppliers_supplies_idx";
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1 FROM "Suppliers" s, unnest(s.supplies) AS code
-    WHERE NOT EXISTS (SELECT 1 FROM "SupplierSupplyCategory" c WHERE c.code = code)
+    SELECT 1 FROM "Suppliers" s, unnest(s.supplies) AS supply_code
+    WHERE NOT EXISTS (SELECT 1 FROM "SupplierSupplyCategory" c WHERE c.code = supply_code::text)
   ) THEN
     RAISE EXCEPTION 'Suppliers.supplies contains a code with no matching SupplierSupplyCategory -- run scripts/backfill-lookup-tables.ts first';
   END IF;
@@ -39,8 +39,8 @@ END $$;
 
 INSERT INTO "SupplierSupplyLink" (supplier_id, category_id)
 SELECT s.id, c.id
-FROM "Suppliers" s, unnest(s.supplies) AS code
-JOIN "SupplierSupplyCategory" c ON c.code = code
+FROM "Suppliers" s, unnest(s.supplies) AS supply_code
+JOIN "SupplierSupplyCategory" c ON c.code = supply_code::text
 ON CONFLICT DO NOTHING;
 
 -- AlterTable
