@@ -163,4 +163,47 @@ describe("SupplierService supplies (join-table backed)", () => {
         const found = await SupplierService.getById(supplier.id);
         expect(found.supplies).toEqual(["EQUIPMENT"]);
     });
+
+    test("create rejects an unknown supply category code", async () => {
+        await expect(
+            SupplierService.create({
+                name: "Bad Code Supplier",
+                mobile: "01700000099",
+                role: "DEALER",
+                supplies: ["NOT_A_REAL_CODE"],
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("update rejects an unknown supply category code", async () => {
+        const supplier = await SupplierService.create({
+            name: "Test Supplier 4",
+            mobile: mobile(),
+            role: "DEALER",
+            supplies: ["FEED"],
+        });
+        createdSupplierIds.push(supplier.id);
+
+        await expect(
+            SupplierService.update(supplier.id, { supplies: ["NOT_A_REAL_CODE"] }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("create rejects a deactivated supply category code", async () => {
+        const inactive = await prisma.supplierSupplyCategory.create({
+            data: { code: "TEST_INACTIVE_CODE", label: "Inactive test code", is_active: false },
+        });
+        try {
+            await expect(
+                SupplierService.create({
+                    name: "Deactivated Code Supplier",
+                    mobile: "01700000098",
+                    role: "DEALER",
+                    supplies: ["TEST_INACTIVE_CODE"],
+                }),
+            ).rejects.toMatchObject({ status: 400 });
+        } finally {
+            await prisma.supplierSupplyCategory.delete({ where: { id: inactive.id } });
+        }
+    });
 });

@@ -62,7 +62,7 @@ export const SupplierService = {
                     },
                 });
                 const categories = await tx.supplierSupplyCategory.findMany({
-                    where: { code: { in: data.supplies } },
+                    where: { code: { in: data.supplies }, is_active: true },
                 });
                 if (categories.length !== data.supplies.length) {
                     throw AppError.badRequest("One or more supply categories are unknown or inactive");
@@ -106,7 +106,7 @@ export const SupplierService = {
             return await prisma.$transaction(async (tx) => {
                 if (supplies) {
                     const categories = await tx.supplierSupplyCategory.findMany({
-                        where: { code: { in: supplies } },
+                        where: { code: { in: supplies }, is_active: true },
                     });
                     if (categories.length !== supplies.length) {
                         throw AppError.badRequest("One or more supply categories are unknown or inactive");
