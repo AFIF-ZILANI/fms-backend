@@ -303,6 +303,54 @@ enum AlertActionTypes {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// SOFT-CODED LOOKUPS (categories, units) -- see
+// docs/superpowers/specs/2026-08-18-soft-coded-categories-and-units-design.md
+// ════════════════════════════════════════════════════════════════════
+
+model ItemCategory {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Unit {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model ExpenseCategoryLookup {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model SupplierSupplyCategory {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model SupplierSupplyLink {
+  supplier_id String
+  category_id String
+
+  @@id([supplier_id, category_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
 // PEOPLE
 // ════════════════════════════════════════════════════════════════════
 
