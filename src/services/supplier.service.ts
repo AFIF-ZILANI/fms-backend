@@ -8,13 +8,27 @@ import type {
     ListSuppliersQuery,
 } from "@validators/supplier.validator";
 
-const include = { profile: true } as const;
+const include = { profile: true, supplyLinks: { include: { category: true } } } as const;
+
+/** Suppliers.supplies moved from a scalar enum array to a SupplierSupplyLink
+ * join table (2026-08-18 lookup-tables migration), but every caller outside
+ * this service still expects `supplies: string[]` of codes -- this shape
+ * is reconstructed here so nothing downstream (frontend included) has to
+ * change how it reads a Supplier. */
+function toSupplierShape<T extends { supplyLinks: { category: { code: string } }[] }>(
+    supplier: T,
+): Omit<T, "supplyLinks"> & { supplies: string[] } {
+    const { supplyLinks, ...rest } = supplier;
+    return { ...rest, supplies: supplyLinks.map((link) => link.category.code) };
+}
 
 export const SupplierService = {
     async getAll(query: ListSuppliersQuery) {
         const where = {
             ...(query.role !== undefined && { role: query.role }),
-            ...(query.supplies !== undefined && { supplies: { has: query.supplies } }),
+            ...(query.supplies !== undefined && {
+                supplyLinks: { some: { category: { code: query.supplies } } },
+            }),
             ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
         };
         const [suppliers, total] = await Promise.all([
@@ -26,13 +40,13 @@ export const SupplierService = {
             }),
             prisma.suppliers.count({ where }),
         ]);
-        return { suppliers, meta: buildMeta(total, query) };
+        return { suppliers: suppliers.map(toSupplierShape), meta: buildMeta(total, query) };
     },
 
     async getById(id: string) {
         const supplier = await prisma.suppliers.findUnique({ where: { id }, include });
         if (!supplier) throw AppError.notFound("Supplier");
-        return supplier;
+        return toSupplierShape(supplier);
     },
 
     async create(data: CreateSupplierInput) {
@@ -47,15 +61,24 @@ export const SupplierService = {
                         ...(data.address !== undefined && { address: data.address }),
                     },
                 });
-                return tx.suppliers.create({
+                const categories = await tx.supplierSupplyCategory.findMany({
+                    where: { code: { in: data.supplies } },
+                });
+                if (categories.length !== data.supplies.length) {
+                    throw AppError.badRequest("One or more supply categories are unknown or inactive");
+                }
+                const supplier = await tx.suppliers.create({
                     data: {
                         profile_id: profile.id,
                         role: data.role,
-                        supplies: data.supplies,
                         ...(data.company !== undefined && { company: data.company }),
+                        supplyLinks: {
+                            create: categories.map((cat) => ({ category_id: cat.id })),
+                        },
                     },
                     include,
                 });
+                return toSupplierShape(supplier);
             });
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -80,22 +103,37 @@ export const SupplierService = {
         }
 
         try {
-            return await prisma.suppliers.update({
-                where: { id },
-                data: {
-                    ...(role && { role }),
-                    ...(supplies && { supplies }),
-                    ...(company !== undefined && { company }),
-                    profile: {
-                        update: {
-                            ...(name && { name }),
-                            ...(mobile && { mobile }),
-                            ...(email && { email }),
-                            ...(address !== undefined && { address }),
+            return await prisma.$transaction(async (tx) => {
+                if (supplies) {
+                    const categories = await tx.supplierSupplyCategory.findMany({
+                        where: { code: { in: supplies } },
+                    });
+                    if (categories.length !== supplies.length) {
+                        throw AppError.badRequest("One or more supply categories are unknown or inactive");
+                    }
+                    await tx.supplierSupplyLink.deleteMany({ where: { supplier_id: id } });
+                    await tx.supplierSupplyLink.createMany({
+                        data: categories.map((cat) => ({ supplier_id: id, category_id: cat.id })),
+                    });
+                }
+
+                const updated = await tx.suppliers.update({
+                    where: { id },
+                    data: {
+                        ...(role && { role }),
+                        ...(company !== undefined && { company }),
+                        profile: {
+                            update: {
+                                ...(name && { name }),
+                                ...(mobile && { mobile }),
+                                ...(email && { email }),
+                                ...(address !== undefined && { address }),
+                            },
                         },
                     },
-                },
-                include,
+                    include,
+                });
+                return toSupplierShape(updated);
             });
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -109,6 +147,7 @@ export const SupplierService = {
     async setActive(id: string, is_active: boolean) {
         const supplier = await prisma.suppliers.findUnique({ where: { id } });
         if (!supplier) throw AppError.notFound("Supplier");
-        return prisma.suppliers.update({ where: { id }, data: { is_active }, include });
+        const updated = await prisma.suppliers.update({ where: { id }, data: { is_active }, include });
+        return toSupplierShape(updated);
     },
 };
