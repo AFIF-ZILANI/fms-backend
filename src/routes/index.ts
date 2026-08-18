@@ -34,6 +34,10 @@ import { payrollRecordRoutes } from "@routes/payroll-record.routes";
 import { alertRoutes } from "@routes/alert.routes";
 import { auditLogRoutes } from "@routes/audit-log.routes";
 import { analyticsRoutes } from "@routes/analytics.routes";
+import { itemCategoryRoutes } from "@routes/item-category.routes";
+import { unitRoutes } from "@routes/unit.routes";
+import { expenseCategoryRoutes } from "@routes/expense-category.routes";
+import { supplierSupplyCategoryRoutes } from "@routes/supplier-supply-category.routes";
 
 export const appRoutes = new Hono();
 
@@ -74,3 +78,7 @@ appRoutes.route("/payroll-records", payrollRecordRoutes);
 appRoutes.route("/alerts", alertRoutes);
 appRoutes.route("/audit-logs", auditLogRoutes);
 appRoutes.route("/analytics", analyticsRoutes);
+appRoutes.route("/item-categories", itemCategoryRoutes);
+appRoutes.route("/units", unitRoutes);
+appRoutes.route("/expense-categories", expenseCategoryRoutes);
+appRoutes.route("/supplier-supply-categories", supplierSupplyCategoryRoutes);
