@@ -19,6 +19,13 @@ export const listItemsQuerySchema = paginationQuerySchema.extend({
     is_active: z.enum(["true", "false"]).optional(),
 });
 
+export const createItemUnitSchema = z.object({
+    item_id: z.string().uuid(),
+    unit: unitSchema,
+    factor_to_base: z.coerce.number().positive("factor_to_base must be positive"),
+});
+
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 export type ListItemsQuery = z.infer<typeof listItemsQuerySchema>;
+export type CreateItemUnitInput = z.infer<typeof createItemUnitSchema>;
