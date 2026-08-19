@@ -28,6 +28,7 @@ export const BatchService = {
             }),
             prisma.batches.count({ where }),
         ]);
+        console.log(batches);
         return { batches, meta: buildMeta(total, query) };
     },
 
