@@ -30,7 +30,7 @@ logs
 .DS_Store
 /graphify-out
 # prisma generated client
-prisma/generated
+/prisma/generated/
 
 # local worktrees for isolated agent work
 .worktrees
