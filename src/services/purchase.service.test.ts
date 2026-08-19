@@ -5,6 +5,8 @@ import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
 
 const createdPurchaseIds: string[] = [];
+const createdItemIds: string[] = [];
+const createdItemUnitIds: string[] = [];
 let itemId: string;
 let profileId: string;
 let supplierId: string;
@@ -48,10 +50,15 @@ describe("PurchaseService", () => {
             where: { purchase_id: { in: createdPurchaseIds } },
         });
         await prisma.purchase.deleteMany({ where: { id: { in: createdPurchaseIds } } });
-        // purchases now post StockLedger IN entries against itemId -- clear those
-        // before deleting the item, or the delete trips StockLedger_item_id_fkey.
-        await prisma.stockLedger.deleteMany({ where: { item_id: itemId } });
+        // purchases now post StockLedger IN entries against itemId (and every
+        // conversion-test item) -- clear those before deleting the items, or the
+        // delete trips StockLedger_item_id_fkey.
+        await prisma.stockLedger.deleteMany({
+            where: { item_id: { in: [itemId, ...createdItemIds] } },
+        });
+        await prisma.itemUnit.deleteMany({ where: { id: { in: createdItemUnitIds } } });
         await prisma.item.delete({ where: { id: itemId } });
+        await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
         const supplier = await prisma.suppliers.findUnique({ where: { id: supplierId } });
         await prisma.suppliers.delete({ where: { id: supplierId } });
         await prisma.profiles.deleteMany({
@@ -207,9 +214,11 @@ describe("PurchaseService", () => {
                 unit: "KG",
             },
         });
+        createdItemIds.push(kgItem.id);
         const itemUnit = await prisma.itemUnit.create({
             data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50 },
         });
+        createdItemUnitIds.push(itemUnit.id);
 
         const purchase = await PurchaseService.create({
             purchase_date: new Date(),
@@ -230,14 +239,6 @@ describe("PurchaseService", () => {
         expect(ledgerEntry?.direction).toBe("IN");
         expect(ledgerEntry?.reason).toBe("PURCHASE");
         expect(ledgerEntry?.quantity.toNumber()).toBe(100);
-
-        // this purchase's StockLedger/PurchaseItem rows still reference kgItem;
-        // clear them now instead of waiting on afterAll's createdPurchaseIds sweep,
-        // since this test deletes kgItem itself immediately below.
-        await prisma.stockLedger.deleteMany({ where: { item_id: kgItem.id } });
-        await prisma.purchaseItem.deleteMany({ where: { item_id: kgItem.id } });
-        await prisma.itemUnit.delete({ where: { id: itemUnit.id } });
-        await prisma.item.delete({ where: { id: kgItem.id } });
     });
 
     test("purchasing in a unit with no ItemUnit conversion row throws bad-request", async () => {

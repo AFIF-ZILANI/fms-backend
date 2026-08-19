@@ -21,10 +21,10 @@ export async function getItemAvgCosts(itemIds: string[]): Promise<Map<string, Pr
 
     const costs = new Map<string, Prisma.Decimal>();
     for (const row of grouped) {
-        const quantity = row._sum.base_quantity ?? new Prisma.Decimal(0);
+        const baseQuantity = row._sum.base_quantity ?? new Prisma.Decimal(0);
         const totalPrice = row._sum.total_price ?? new Prisma.Decimal(0);
-        if (quantity.isZero()) continue;
-        costs.set(row.item_id, totalPrice.div(quantity));
+        if (baseQuantity.isZero()) continue;
+        costs.set(row.item_id, totalPrice.div(baseQuantity));
     }
     return costs;
 }

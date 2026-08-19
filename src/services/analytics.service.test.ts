@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { BirdSaleService } from "./bird-sale.service";
+import { ConsumptionService } from "./consumption.service";
 import { AnalyticsService } from "./analytics.service";
 import { AppError } from "@lib/app-error";
 
@@ -238,6 +239,65 @@ describe("AnalyticsService", () => {
         expect(parseFloat(todayBagRow!.quantity)).toBeGreaterThanOrEqual(5);
     });
 
+    test("consumptionByCategory values a non-base-unit consumption using base_quantity, not raw quantity", async () => {
+        const kgItem = await prisma.item.create({
+            data: {
+                name: `Analytics Conversion Item ${crypto.randomUUID()}`,
+                normalized_key: `analytics-conversion-item-${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "KG",
+            },
+        });
+        const itemUnit = await prisma.itemUnit.create({
+            data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50 },
+        });
+        const purchase = await prisma.purchase.create({
+            data: {
+                purchase_date: new Date(),
+                total_amount: 1000,
+                paid_amount: 0,
+                due_amount: 1000,
+                recorded_by_id: profileId,
+            },
+        });
+        await prisma.purchaseItem.create({
+            data: {
+                purchase_id: purchase.id,
+                item_id: kgItem.id,
+                quantity: 2,
+                unit: "BAG",
+                base_quantity: 100, // 2 BAG * 50 KG/BAG -- avg cost = 1000 / 100 = 10 per KG (base unit)
+                unit_price: 500,
+                total_price: 1000,
+            },
+        });
+
+        // entered as 1 BAG -> base_quantity 50 KG. Valued at base_quantity: 50 * 10 = 500.
+        // The pre-fix bug valued raw quantity instead: 1 * 10 = 10.
+        const consumption = await ConsumptionService.create({
+            house_id: houseId,
+            item_id: kgItem.id,
+            quantity: 1,
+            unit: "BAG",
+            date: new Date(),
+            recorded_by_id: profileId,
+        });
+
+        try {
+            const rows = await AnalyticsService.consumptionByCategory(30);
+            const feedRow = rows.find((r) => r.category === "FEED");
+            expect(feedRow).toBeDefined();
+            expect(parseFloat(feedRow!.total)).toBeGreaterThanOrEqual(499.99);
+        } finally {
+            await prisma.consumption.delete({ where: { id: consumption!.id } });
+            await prisma.stockLedger.deleteMany({ where: { item_id: kgItem.id } });
+            await prisma.purchaseItem.deleteMany({ where: { item_id: kgItem.id } });
+            await prisma.purchase.delete({ where: { id: purchase.id } });
+            await prisma.itemUnit.delete({ where: { id: itemUnit.id } });
+            await prisma.item.delete({ where: { id: kgItem.id } });
+        }
+    });
+
     test("salesTrend reports today's revenue and volume-weighted avg price", async () => {
         const trend = await AnalyticsService.salesTrend(30);
         const today = new Date().toISOString().slice(0, 10);
@@ -273,7 +333,13 @@ describe("AnalyticsService", () => {
             },
         });
         const wasteSale = await prisma.sale.create({
-            data: { sale_date: new Date(), total: 300, paid_amount: 0, due_amount: 300, recorded_by_id: profileId },
+            data: {
+                sale_date: new Date(),
+                total: 300,
+                paid_amount: 0,
+                due_amount: 300,
+                recorded_by_id: profileId,
+            },
         });
         await prisma.saleItem.create({
             data: {

@@ -22,6 +22,11 @@ ALTER TABLE "ItemUnit" ADD CONSTRAINT "ItemUnit_unit_fkey" FOREIGN KEY ("unit") 
 -- `quantity` column before being made required -- pre-conversion rows had no
 -- other unit to convert from, so their entered quantity is already the only
 -- value that could go here.
+-- Before running this against a DB with real purchase history predating this
+-- feature, verify that assumption: SELECT pi.id FROM "PurchaseItem" pi JOIN "Item" i
+-- ON i.id = pi.item_id WHERE pi.unit <> i.unit (and the equivalent join for
+-- "Consumption") -- hand-correct any hits first. This project's dev DB was
+-- already audited with this query and found clean.
 ALTER TABLE "PurchaseItem" ADD COLUMN "base_quantity" DECIMAL(10,3);
 UPDATE "PurchaseItem" SET "base_quantity" = "quantity" WHERE "base_quantity" IS NULL;
 ALTER TABLE "PurchaseItem" ALTER COLUMN "base_quantity" SET NOT NULL;

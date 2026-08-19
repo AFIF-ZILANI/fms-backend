@@ -280,14 +280,14 @@ export const AnalyticsService = {
         // which silently breaks this comparison with no error -- needs a stable-key mechanism if this keeps mattering.
         const rows = await prisma.consumption.findMany({
             where: { date: { gte: since, lte: new Date() }, item: { category: "FEED" } },
-            select: { date: true, quantity: true, item: { select: { unit: true } } },
+            select: { date: true, base_quantity: true, item: { select: { unit: true } } },
         });
 
         const byKey = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
             const dateKey = row.date.toISOString().slice(0, 10);
             const key = `${dateKey}|${row.item.unit}`;
-            byKey.set(key, (byKey.get(key) ?? new Prisma.Decimal(0)).plus(row.quantity));
+            byKey.set(key, (byKey.get(key) ?? new Prisma.Decimal(0)).plus(row.base_quantity));
         }
 
         return Array.from(byKey.entries())
@@ -553,13 +553,13 @@ export const AnalyticsService = {
         since.setUTCHours(0, 0, 0, 0);
         const rows = await prisma.consumption.findMany({
             where: { date: { gte: since, lte: new Date() } },
-            select: { item_id: true, quantity: true, item: { select: { category: true } } },
+            select: { item_id: true, base_quantity: true, item: { select: { category: true } } },
         });
         const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
 
         const byCategory = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
-            const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            const value = row.base_quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
             byCategory.set(row.item.category, (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value));
         }
 
@@ -574,14 +574,14 @@ export const AnalyticsService = {
         since.setUTCHours(0, 0, 0, 0);
         const rows = await prisma.consumption.findMany({
             where: { date: { gte: since, lte: new Date() } },
-            select: { item_id: true, quantity: true, date: true },
+            select: { item_id: true, base_quantity: true, date: true },
         });
         const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
 
         const byDate = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
             const dateKey = row.date.toISOString().slice(0, 10);
-            const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            const value = row.base_quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
             byDate.set(dateKey, (byDate.get(dateKey) ?? new Prisma.Decimal(0)).plus(value));
         }
 

@@ -11,6 +11,10 @@ let purchaseId: string;
 let purchaseItemId: string;
 const createdConsumptionIds: string[] = [];
 const createdStockUnitIds: string[] = [];
+const createdItemIds: string[] = [];
+const createdItemUnitIds: string[] = [];
+const createdPurchaseItemIds: string[] = [];
+const createdPurchaseIds: string[] = [];
 
 describe("ConsumptionService", () => {
     beforeAll(async () => {
@@ -74,11 +78,23 @@ describe("ConsumptionService", () => {
 
     afterAll(async () => {
         await prisma.consumption.deleteMany({ where: { id: { in: createdConsumptionIds } } });
-        await prisma.stockLedger.deleteMany({ where: { item_id: feedItemId } });
+        // coded draws now post StockLedger OUT entries too (Critical #2 fix) --
+        // clear medicineItemId's + every conversion-test item's ledger rows as well,
+        // or the item deletes below trip StockLedger_item_id_fkey.
+        await prisma.stockLedger.deleteMany({
+            where: { item_id: { in: [feedItemId, medicineItemId, ...createdItemIds] } },
+        });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdStockUnitIds } } });
-        await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
-        await prisma.purchase.delete({ where: { id: purchaseId } });
-        await prisma.item.deleteMany({ where: { id: { in: [feedItemId, medicineItemId] } } });
+        await prisma.purchaseItem.deleteMany({
+            where: { id: { in: [purchaseItemId, ...createdPurchaseItemIds] } },
+        });
+        await prisma.purchase.deleteMany({
+            where: { id: { in: [purchaseId, ...createdPurchaseIds] } },
+        });
+        await prisma.itemUnit.deleteMany({ where: { id: { in: createdItemUnitIds } } });
+        await prisma.item.deleteMany({
+            where: { id: { in: [feedItemId, medicineItemId, ...createdItemIds] } },
+        });
         await prisma.houses.delete({ where: { id: houseId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
@@ -124,11 +140,14 @@ describe("ConsumptionService", () => {
         expect(updatedUnit.remaining_quantity?.toNumber()).toBe(70);
         expect(updatedUnit.status).toBe("IN_USE");
 
-        // coded draws don't touch StockLedger -- that's the aggregate path only
+        // coded draws now also post a StockLedger OUT entry, symmetric with
+        // purchase's unconditional StockLedger IN -- keeps balance/low-stock
+        // checks accurate for medicine/vaccine/equipment too.
         const ledgerEntry = await prisma.stockLedger.findFirst({
             where: { ref_type: "CONSUMPTION", ref_id: consumption!.id },
         });
-        expect(ledgerEntry).toBeNull();
+        expect(ledgerEntry?.direction).toBe("OUT");
+        expect(ledgerEntry?.quantity.toNumber()).toBe(30);
     });
 
     test("coded draw that exactly empties the unit flips to CONSUMED", async () => {
@@ -212,7 +231,9 @@ describe("ConsumptionService", () => {
         const { consumptions } = await ConsumptionService.getAll({ page: 1, limit: 100 });
         const found = consumptions.find((c) => c.id === consumption!.id);
         expect(found).toBeDefined();
-        expect(found!.item.name).toBe((await prisma.item.findUniqueOrThrow({ where: { id: feedItemId } })).name);
+        expect(found!.item.name).toBe(
+            (await prisma.item.findUniqueOrThrow({ where: { id: feedItemId } })).name,
+        );
         expect(found!.house.id).toBe(houseId);
 
         const { consumptions: inRange } = await ConsumptionService.getAll({
@@ -240,9 +261,11 @@ describe("ConsumptionService", () => {
                 unit: "KG",
             },
         });
+        createdItemIds.push(kgItem.id);
         const itemUnit = await prisma.itemUnit.create({
             data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50 },
         });
+        createdItemUnitIds.push(itemUnit.id);
 
         const consumption = await ConsumptionService.create({
             house_id: houseId,
@@ -252,6 +275,7 @@ describe("ConsumptionService", () => {
             date: new Date(),
             recorded_by_id: profileId,
         });
+        createdConsumptionIds.push(consumption!.id);
 
         expect(consumption!.quantity.toNumber()).toBe(2);
         expect(consumption!.unit).toBe("BAG");
@@ -261,11 +285,6 @@ describe("ConsumptionService", () => {
             where: { ref_type: "CONSUMPTION", ref_id: consumption!.id },
         });
         expect(ledgerEntry?.quantity.toNumber()).toBe(100);
-
-        await prisma.consumption.delete({ where: { id: consumption!.id } });
-        await prisma.stockLedger.deleteMany({ where: { item_id: kgItem.id } });
-        await prisma.itemUnit.delete({ where: { id: itemUnit.id } });
-        await prisma.item.delete({ where: { id: kgItem.id } });
     });
 
     test("coded draw entered in a non-base unit converts before depleting StockUnit.remaining_quantity", async () => {
@@ -277,9 +296,11 @@ describe("ConsumptionService", () => {
                 unit: "ML",
             },
         });
+        createdItemIds.push(mlItem.id);
         const itemUnit = await prisma.itemUnit.create({
             data: { item_id: mlItem.id, unit: "L", factor_to_base: 1000 },
         });
+        createdItemUnitIds.push(itemUnit.id);
         const mlPurchase = await prisma.purchase.create({
             data: {
                 purchase_date: new Date(),
@@ -289,6 +310,7 @@ describe("ConsumptionService", () => {
                 recorded_by_id: profileId,
             },
         });
+        createdPurchaseIds.push(mlPurchase.id);
         const mlPurchaseItem = await prisma.purchaseItem.create({
             data: {
                 purchase_id: mlPurchase.id,
@@ -300,8 +322,10 @@ describe("ConsumptionService", () => {
                 total_price: 300,
             },
         });
+        createdPurchaseItemIds.push(mlPurchaseItem.id);
 
         const [unit] = await StockUnitService.provision(1);
+        createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, {
             purchase_item_id: mlPurchaseItem.id,
             initial_quantity: 3000, // a 3L bottle, in mL (base unit)
@@ -316,15 +340,9 @@ describe("ConsumptionService", () => {
             date: new Date(),
             recorded_by_id: profileId,
         });
+        createdConsumptionIds.push(consumption!.id);
 
         const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
         expect(updatedUnit.remaining_quantity?.toNumber()).toBe(2500);
-
-        await prisma.consumption.delete({ where: { id: consumption!.id } });
-        await prisma.stockUnit.delete({ where: { id: unit!.id } });
-        await prisma.purchaseItem.delete({ where: { id: mlPurchaseItem.id } });
-        await prisma.purchase.delete({ where: { id: mlPurchase.id } });
-        await prisma.itemUnit.delete({ where: { id: itemUnit.id } });
-        await prisma.item.delete({ where: { id: mlItem.id } });
     });
 });

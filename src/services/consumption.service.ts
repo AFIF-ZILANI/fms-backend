@@ -38,14 +38,22 @@ export const ConsumptionService = {
      *  - coded (medicine/vaccine/equipment): decrements StockUnit.remaining_quantity,
      *    flips status IN_STOCK -> IN_USE, or -> CONSUMED once it hits zero.
      *    Equipment (remaining_quantity null) just flips to IN_USE once, non-depleting.
-     *  - aggregate (feed etc.): no StockUnit -- writes a StockLedger OUT entry instead.
+     *  - aggregate (feed etc.): no StockUnit to decrement.
+     *  Both paths post a StockLedger OUT entry, symmetric with purchase.service.ts's
+     *  unconditional StockLedger IN -- otherwise coded draws never leave the ledger,
+     *  which breaks low-stock checks for medicine/vaccine/equipment.
      *  Both paths use base_quantity (data.quantity converted to Item.unit via
      *  toBaseQuantity), never the raw entered quantity -- StockUnit.remaining_quantity
      *  and StockLedger are always in the item's base unit. */
     async create(data: CreateConsumptionInput) {
         try {
             return await prisma.$transaction(async (tx) => {
-                const base_quantity = await toBaseQuantity(tx, data.item_id, data.unit, data.quantity);
+                const base_quantity = await toBaseQuantity(
+                    tx,
+                    data.item_id,
+                    data.unit,
+                    data.quantity,
+                );
 
                 if (data.stock_unit_id !== undefined) {
                     const unitId = data.stock_unit_id;
@@ -97,16 +105,14 @@ export const ConsumptionService = {
                     },
                 });
 
-                if (data.stock_unit_id === undefined) {
-                    await StockLedgerService.record(tx, {
-                        item_id: data.item_id,
-                        quantity: base_quantity,
-                        direction: "OUT",
-                        reason: "CONSUMPTION",
-                        ref_type: "CONSUMPTION",
-                        ref_id: consumption.id,
-                    });
-                }
+                await StockLedgerService.record(tx, {
+                    item_id: data.item_id,
+                    quantity: base_quantity,
+                    direction: "OUT",
+                    reason: "CONSUMPTION",
+                    ref_type: "CONSUMPTION",
+                    ref_id: consumption.id,
+                });
 
                 return consumption;
             });

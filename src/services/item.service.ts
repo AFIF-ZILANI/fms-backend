@@ -70,7 +70,6 @@ export const ItemService = {
         const {
             name,
             category,
-            unit,
             reorder_level,
             preferred_reorder_qty,
             lead_time_days,
@@ -79,7 +78,6 @@ export const ItemService = {
         if (
             !name &&
             !category &&
-            !unit &&
             reorder_level === undefined &&
             preferred_reorder_qty === undefined &&
             lead_time_days === undefined &&
@@ -94,7 +92,6 @@ export const ItemService = {
                 data: {
                     ...(name && { name, normalized_key: normalizeKey(name) }),
                     ...(category && { category }),
-                    ...(unit && { unit }),
                     ...(reorder_level !== undefined && { reorder_level }),
                     ...(preferred_reorder_qty !== undefined && { preferred_reorder_qty }),
                     ...(lead_time_days !== undefined && { lead_time_days }),
@@ -133,8 +130,18 @@ export const ItemService = {
 
 export const ItemUnitService = {
     async create(data: CreateItemUnitInput) {
+        const item = await prisma.item.findUnique({
+            where: { id: data.item_id },
+            select: { unit: true },
+        });
+        if (item && item.unit === data.unit) {
+            throw AppError.badRequest(
+                "unit already is this item's base unit -- no conversion factor needed",
+            );
+        }
+
         try {
-            return await prisma.itemUnit.create({ data, include: { item: true } });
+            return await prisma.itemUnit.create({ data });
         } catch (err) {
             return handlePrismaWriteError(err);
         }

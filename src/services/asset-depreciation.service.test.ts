@@ -81,6 +81,10 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
     afterAll(async () => {
         await prisma.assetDepreciation.deleteMany({ where: { asset_id: assetId } });
         await prisma.consumption.deleteMany({ where: { stock_unit_id: stockUnitId } });
+        // coded draws now post StockLedger OUT entries too (Critical #2 fix) --
+        // clear itemId's ledger rows as well, or the item delete below trips
+        // StockLedger_item_id_fkey.
+        await prisma.stockLedger.deleteMany({ where: { item_id: itemId } });
         await prisma.asset.delete({ where: { id: assetId } });
         await prisma.stockUnit.delete({ where: { id: stockUnitId } });
         await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
