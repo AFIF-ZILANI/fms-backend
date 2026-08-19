@@ -3,6 +3,8 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { toBaseQuantity } from "@lib/unit-conversion";
+import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     CreatePurchaseInput,
     ListPurchasesQuery,
@@ -77,21 +79,38 @@ export const PurchaseService = {
                     },
                 });
 
-                await tx.purchaseItem.createMany({
-                    data: itemsWithTotals.map((item) => ({
-                        purchase_id: purchase.id,
+                for (const item of itemsWithTotals) {
+                    const base_quantity = await toBaseQuantity(
+                        tx,
+                        item.item_id,
+                        item.unit,
+                        item.quantity,
+                    );
+                    const purchaseItem = await tx.purchaseItem.create({
+                        data: {
+                            purchase_id: purchase.id,
+                            item_id: item.item_id,
+                            quantity: item.quantity,
+                            unit: item.unit,
+                            base_quantity,
+                            unit_price: item.unit_price,
+                            total_price: item.total_price,
+                            ...(item.batch_id !== undefined && { batch_id: item.batch_id }),
+                            ...(item.mfg_date !== undefined && { mfg_date: item.mfg_date }),
+                            ...(item.expiration_date !== undefined && {
+                                expiration_date: item.expiration_date,
+                            }),
+                        },
+                    });
+                    await StockLedgerService.record(tx, {
                         item_id: item.item_id,
-                        quantity: item.quantity,
-                        unit: item.unit,
-                        unit_price: item.unit_price,
-                        total_price: item.total_price,
-                        ...(item.batch_id !== undefined && { batch_id: item.batch_id }),
-                        ...(item.mfg_date !== undefined && { mfg_date: item.mfg_date }),
-                        ...(item.expiration_date !== undefined && {
-                            expiration_date: item.expiration_date,
-                        }),
-                    })),
-                });
+                        quantity: base_quantity,
+                        direction: "IN",
+                        reason: "PURCHASE",
+                        ref_type: "PURCHASE",
+                        ref_id: purchaseItem.id,
+                    });
+                }
 
                 return tx.purchase.findUniqueOrThrow({ where: { id: purchase.id }, include });
             });
