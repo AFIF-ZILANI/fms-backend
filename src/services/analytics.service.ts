@@ -559,7 +559,9 @@ export const AnalyticsService = {
 
         const byCategory = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
-            const value = row.base_quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            const value = row.base_quantity.times(
+                avgCosts.get(row.item_id) ?? new Prisma.Decimal(0),
+            );
             byCategory.set(row.item.category, (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value));
         }
 
@@ -581,7 +583,9 @@ export const AnalyticsService = {
         const byDate = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
             const dateKey = row.date.toISOString().slice(0, 10);
-            const value = row.base_quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
+            const value = row.base_quantity.times(
+                avgCosts.get(row.item_id) ?? new Prisma.Decimal(0),
+            );
             byDate.set(dateKey, (byDate.get(dateKey) ?? new Prisma.Decimal(0)).plus(value));
         }
 
