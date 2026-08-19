@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
-import { ItemController } from "@controllers/item.controller";
+import { ItemController, ItemUnitController } from "@controllers/item.controller";
 import {
     createItemSchema,
     updateItemSchema,
     listItemsQuerySchema,
+    createItemUnitSchema,
 } from "@validators/item.validator";
 
 export const itemRoutes = new Hono();
@@ -16,3 +17,12 @@ itemRoutes.post("/", zValidatorRfc7807("json", createItemSchema), ItemController
 itemRoutes.patch("/:id", zValidatorRfc7807("json", updateItemSchema), ItemController.update);
 itemRoutes.post("/:id/deactivate", ItemController.deactivate);
 itemRoutes.post("/:id/reactivate", ItemController.reactivate);
+
+export const itemUnitRoutes = new Hono();
+
+itemUnitRoutes.post(
+    "/",
+    zValidatorRfc7807("json", createItemUnitSchema),
+    ItemUnitController.create,
+);
+itemUnitRoutes.delete("/:id", ItemUnitController.remove);

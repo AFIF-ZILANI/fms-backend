@@ -3,11 +3,16 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { normalizeKey } from "@lib/normalize";
-import type { CreateItemInput, UpdateItemInput, ListItemsQuery } from "@validators/item.validator";
+import type {
+    CreateItemInput,
+    UpdateItemInput,
+    ListItemsQuery,
+    CreateItemUnitInput,
+} from "@validators/item.validator";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { getItemBalances } from "@lib/stock-balance";
 
-const include = { suppliers: true } as const;
+const include = { suppliers: true, itemUnits: true } as const;
 
 export const ItemService = {
     async getAll(query: ListItemsQuery) {
@@ -65,7 +70,6 @@ export const ItemService = {
         const {
             name,
             category,
-            unit,
             reorder_level,
             preferred_reorder_qty,
             lead_time_days,
@@ -74,7 +78,6 @@ export const ItemService = {
         if (
             !name &&
             !category &&
-            !unit &&
             reorder_level === undefined &&
             preferred_reorder_qty === undefined &&
             lead_time_days === undefined &&
@@ -89,7 +92,6 @@ export const ItemService = {
                 data: {
                     ...(name && { name, normalized_key: normalizeKey(name) }),
                     ...(category && { category }),
-                    ...(unit && { unit }),
                     ...(reorder_level !== undefined && { reorder_level }),
                     ...(preferred_reorder_qty !== undefined && { preferred_reorder_qty }),
                     ...(lead_time_days !== undefined && { lead_time_days }),
@@ -123,5 +125,31 @@ export const ItemService = {
                 current_balance: balances.get(item.id) ?? new Prisma.Decimal(0),
             }))
             .filter((item) => item.current_balance.lessThan(item.reorder_level!));
+    },
+};
+
+export const ItemUnitService = {
+    async create(data: CreateItemUnitInput) {
+        const item = await prisma.item.findUnique({
+            where: { id: data.item_id },
+            select: { unit: true },
+        });
+        if (item && item.unit === data.unit) {
+            throw AppError.badRequest(
+                "unit already is this item's base unit -- no conversion factor needed",
+            );
+        }
+
+        try {
+            return await prisma.itemUnit.create({ data });
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
+    },
+
+    async remove(id: string) {
+        const link = await prisma.itemUnit.findUnique({ where: { id } });
+        if (!link) throw AppError.notFound("ItemUnit conversion");
+        await prisma.itemUnit.delete({ where: { id } });
     },
 };

@@ -5,6 +5,8 @@ import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
 
 const createdPurchaseIds: string[] = [];
+const createdItemIds: string[] = [];
+const createdItemUnitIds: string[] = [];
 let itemId: string;
 let profileId: string;
 let supplierId: string;
@@ -48,7 +50,15 @@ describe("PurchaseService", () => {
             where: { purchase_id: { in: createdPurchaseIds } },
         });
         await prisma.purchase.deleteMany({ where: { id: { in: createdPurchaseIds } } });
+        // purchases now post StockLedger IN entries against itemId (and every
+        // conversion-test item) -- clear those before deleting the items, or the
+        // delete trips StockLedger_item_id_fkey.
+        await prisma.stockLedger.deleteMany({
+            where: { item_id: { in: [itemId, ...createdItemIds] } },
+        });
+        await prisma.itemUnit.deleteMany({ where: { id: { in: createdItemUnitIds } } });
         await prisma.item.delete({ where: { id: itemId } });
+        await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
         const supplier = await prisma.suppliers.findUnique({ where: { id: supplierId } });
         await prisma.suppliers.delete({ where: { id: supplierId } });
         await prisma.profiles.deleteMany({
@@ -193,5 +203,63 @@ describe("PurchaseService", () => {
             item_category: "FEED",
         });
         expect(wrongCategoryFiltered.some((p) => p.id === recentPurchase!.id)).toBe(false);
+    });
+
+    test("converts a purchased quantity to the item's base unit and posts a StockLedger IN entry", async () => {
+        const kgItem = await prisma.item.create({
+            data: {
+                name: `Purchase Conversion Item ${crypto.randomUUID()}`,
+                normalized_key: `purchase conversion item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "KG",
+            },
+        });
+        createdItemIds.push(kgItem.id);
+        const itemUnit = await prisma.itemUnit.create({
+            data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50 },
+        });
+        createdItemUnitIds.push(itemUnit.id);
+
+        const purchase = await PurchaseService.create({
+            purchase_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [{ item_id: kgItem.id, quantity: 2, unit: "BAG", unit_price: 1000 }],
+        });
+        createdPurchaseIds.push(purchase!.id);
+
+        const purchaseItem = purchase!.items[0]!;
+        expect(purchaseItem.quantity.toNumber()).toBe(2);
+        expect(purchaseItem.unit).toBe("BAG");
+        expect(purchaseItem.base_quantity.toNumber()).toBe(100);
+
+        const ledgerEntry = await prisma.stockLedger.findFirst({
+            where: { ref_type: "PURCHASE", ref_id: purchaseItem.id },
+        });
+        expect(ledgerEntry?.direction).toBe("IN");
+        expect(ledgerEntry?.reason).toBe("PURCHASE");
+        expect(ledgerEntry?.quantity.toNumber()).toBe(100);
+    });
+
+    test("purchasing in a unit with no ItemUnit conversion row throws bad-request", async () => {
+        const kgItem = await prisma.item.create({
+            data: {
+                name: `Purchase No Conversion Item ${crypto.randomUUID()}`,
+                normalized_key: `purchase no conversion item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "KG",
+            },
+        });
+
+        await expect(
+            PurchaseService.create({
+                purchase_date: new Date(),
+                paid_amount: 0,
+                recorded_by_id: profileId,
+                items: [{ item_id: kgItem.id, quantity: 1, unit: "BAG", unit_price: 1000 }],
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+
+        await prisma.item.delete({ where: { id: kgItem.id } });
     });
 });

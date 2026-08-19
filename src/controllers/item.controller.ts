@@ -2,8 +2,13 @@ import type { Context } from "hono";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
-import { ItemService } from "@services/item.service";
-import type { CreateItemInput, UpdateItemInput, ListItemsQuery } from "@validators/item.validator";
+import { ItemService, ItemUnitService } from "@services/item.service";
+import type {
+    CreateItemInput,
+    UpdateItemInput,
+    ListItemsQuery,
+    CreateItemUnitInput,
+} from "@validators/item.validator";
 
 export const ItemController = {
     async getAll(c: Context) {
@@ -55,6 +60,23 @@ export const ItemController = {
         return withHandler(c, async () => {
             const item = await ItemService.setActive(c.req.param("id") ?? "", true);
             return sendSuccess(c, item, "Item reactivated");
+        });
+    },
+};
+
+export const ItemUnitController = {
+    async create(c: Context) {
+        return withHandler(c, async () => {
+            const body = getValid<CreateItemUnitInput>(c, "json");
+            const itemUnit = await ItemUnitService.create(body);
+            return sendSuccess(c, itemUnit, "Item unit conversion created", 201);
+        });
+    },
+
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await ItemUnitService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "Item unit conversion deleted");
         });
     },
 };

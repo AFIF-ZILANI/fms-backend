@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
+import { unitSchema } from "@lib/enums";
 
 export const createConsumptionSchema = z.object({
     batch_id: z.string().uuid().optional(),
@@ -10,6 +11,7 @@ export const createConsumptionSchema = z.object({
     // branch this drives.
     stock_unit_id: z.string().uuid().optional(),
     quantity: z.coerce.number().positive("Quantity must be positive"),
+    unit: unitSchema,
     date: z.coerce.date(),
     note: z.string().optional(),
     recorded_by_id: z.string().uuid(),

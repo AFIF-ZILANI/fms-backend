@@ -263,9 +263,11 @@ model Unit {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  items         Item[]
-  purchaseItems PurchaseItem[]
-  saleItems     SaleItem[]
+  items                Item[]
+  purchaseItems        PurchaseItem[]
+  saleItems            SaleItem[]
+  itemUnitConversions  ItemUnit[]
+  consumptions         Consumption[]
 }
 
 model ExpenseCategoryLookup {
@@ -562,11 +564,24 @@ model Item {
   consumptions         Consumption[]
   saleItems            SaleItem[]
   suppliers            Suppliers[]
+  itemUnits            ItemUnit[]
   feedingPrograms      BatchFeedingProgram[]
   itemOrganizations    ItemOrganization[]
   inventoryAdjustments InventoryAdjustment[]
 
   @@index([category])
+}
+
+model ItemUnit {
+  id             String   @id @default(uuid())
+  item_id        String
+  item           Item     @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  unit           String
+  unitRef        Unit     @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  factor_to_base Decimal  @db.Decimal(10, 4) // 1 of `unit` = this many of Item.unit
+  created_at     DateTime @default(now())
+
+  @@unique([item_id, unit])
 }
 
 model Purchase {
@@ -598,6 +613,7 @@ model PurchaseItem {
   quantity        Decimal   @db.Decimal(10, 3)
   unit            String
   unitRef         Unit      @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  base_quantity   Decimal   @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
   unit_price      Decimal   @db.Decimal(10, 2)
   total_price     Decimal   @db.Decimal(10, 2)
   mfg_date        DateTime?
@@ -677,6 +693,9 @@ model Consumption {
   stock_unit_id   String? // set when drawn from a specific coded unit (medicine/vaccine/equipment)
   stock_unit      StockUnit? @relation(fields: [stock_unit_id], references: [id])
   quantity        Decimal    @db.Decimal(10, 3) // feed: allocation amount; medicine: dose drawn; equipment: 1 (non-depleting)
+  unit            String
+  unitRef         Unit       @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  base_quantity   Decimal    @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
   date            DateTime
   note            String?
   recorded_by_id  String

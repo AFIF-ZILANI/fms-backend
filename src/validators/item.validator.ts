@@ -12,13 +12,23 @@ export const createItemSchema = z.object({
     supplier_ids: z.array(z.string().uuid()).optional(),
 });
 
-export const updateItemSchema = createItemSchema.partial();
+// unit is intentionally excluded -- ItemUnit conversion factors and every
+// PurchaseItem/Consumption base_quantity snapshot are keyed off Item.unit at
+// write time, so changing it after the fact would silently invalidate them.
+export const updateItemSchema = createItemSchema.omit({ unit: true }).partial();
 
 export const listItemsQuerySchema = paginationQuerySchema.extend({
     category: resourceCategorySchema.optional(),
     is_active: z.enum(["true", "false"]).optional(),
 });
 
+export const createItemUnitSchema = z.object({
+    item_id: z.string().uuid(),
+    unit: unitSchema,
+    factor_to_base: z.coerce.number().positive("factor_to_base must be positive"),
+});
+
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 export type ListItemsQuery = z.infer<typeof listItemsQuerySchema>;
+export type CreateItemUnitInput = z.infer<typeof createItemUnitSchema>;
