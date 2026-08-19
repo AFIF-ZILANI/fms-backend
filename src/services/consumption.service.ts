@@ -1,8 +1,8 @@
 import prisma from "@lib/db";
-import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { toBaseQuantity } from "@lib/unit-conversion";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     CreateConsumptionInput,
@@ -38,10 +38,15 @@ export const ConsumptionService = {
      *  - coded (medicine/vaccine/equipment): decrements StockUnit.remaining_quantity,
      *    flips status IN_STOCK -> IN_USE, or -> CONSUMED once it hits zero.
      *    Equipment (remaining_quantity null) just flips to IN_USE once, non-depleting.
-     *  - aggregate (feed etc.): no StockUnit -- writes a StockLedger OUT entry instead. */
+     *  - aggregate (feed etc.): no StockUnit -- writes a StockLedger OUT entry instead.
+     *  Both paths use base_quantity (data.quantity converted to Item.unit via
+     *  toBaseQuantity), never the raw entered quantity -- StockUnit.remaining_quantity
+     *  and StockLedger are always in the item's base unit. */
     async create(data: CreateConsumptionInput) {
         try {
             return await prisma.$transaction(async (tx) => {
+                const base_quantity = await toBaseQuantity(tx, data.item_id, data.unit, data.quantity);
+
                 if (data.stock_unit_id !== undefined) {
                     const unitId = data.stock_unit_id;
                     const unit = await tx.stockUnit.findUnique({ where: { id: unitId } });
@@ -53,13 +58,12 @@ export const ConsumptionService = {
                     }
 
                     if (unit.remaining_quantity !== null) {
-                        const quantity = new Prisma.Decimal(data.quantity);
-                        if (unit.remaining_quantity.lessThan(quantity)) {
+                        if (unit.remaining_quantity.lessThan(base_quantity)) {
                             throw AppError.conflict(
                                 "Consumption quantity exceeds remaining stock in this unit",
                             );
                         }
-                        const remaining = unit.remaining_quantity.minus(quantity);
+                        const remaining = unit.remaining_quantity.minus(base_quantity);
                         await tx.stockUnit.update({
                             where: { id: unitId },
                             data: {
@@ -80,6 +84,8 @@ export const ConsumptionService = {
                         house_id: data.house_id,
                         item_id: data.item_id,
                         quantity: data.quantity,
+                        unit: data.unit,
+                        base_quantity,
                         date: data.date,
                         recorded_by_id: data.recorded_by_id,
                         idempotency_key: data.idempotency_key ?? crypto.randomUUID(),
@@ -94,7 +100,7 @@ export const ConsumptionService = {
                 if (data.stock_unit_id === undefined) {
                     await StockLedgerService.record(tx, {
                         item_id: data.item_id,
-                        quantity: data.quantity,
+                        quantity: base_quantity,
                         direction: "OUT",
                         reason: "CONSUMPTION",
                         ref_type: "CONSUMPTION",

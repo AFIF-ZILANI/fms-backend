@@ -113,6 +113,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
             item_id: itemId,
             stock_unit_id: stockUnitId,
             quantity: 1,
+            unit: "UNIT",
             date: new Date(),
             recorded_by_id: profileId,
         });
@@ -169,6 +170,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
             item_id: itemId,
             stock_unit_id: stockUnitId,
             quantity: 1,
+            unit: "UNIT",
             date: new Date(),
             recorded_by_id: profileId,
         });
