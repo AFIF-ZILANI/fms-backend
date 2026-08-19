@@ -55,6 +55,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
                 item_id: item.id,
                 quantity: 1,
                 unit: "UNIT",
+                base_quantity: 1,
                 unit_price: 10000,
                 total_price: 10000,
             },

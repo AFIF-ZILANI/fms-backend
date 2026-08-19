@@ -64,6 +64,7 @@ describe("ConsumptionService", () => {
                 item_id: medicineItem.id,
                 quantity: 1,
                 unit: "BOTTLE",
+                base_quantity: 1,
                 unit_price: 50,
                 total_price: 50,
             },
