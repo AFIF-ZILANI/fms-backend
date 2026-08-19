@@ -14,3 +14,4 @@ supplierSupplyCategoryRoutes.post("/", zValidatorRfc7807("json", createLookupSch
 supplierSupplyCategoryRoutes.patch("/:id", zValidatorRfc7807("json", updateLookupSchema), controller.update);
 supplierSupplyCategoryRoutes.post("/:id/deactivate", controller.deactivate);
 supplierSupplyCategoryRoutes.post("/:id/reactivate", controller.reactivate);
+supplierSupplyCategoryRoutes.delete("/:id", controller.remove);

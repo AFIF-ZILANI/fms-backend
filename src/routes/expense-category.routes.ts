@@ -14,3 +14,4 @@ expenseCategoryRoutes.post("/", zValidatorRfc7807("json", createLookupSchema), c
 expenseCategoryRoutes.patch("/:id", zValidatorRfc7807("json", updateLookupSchema), controller.update);
 expenseCategoryRoutes.post("/:id/deactivate", controller.deactivate);
 expenseCategoryRoutes.post("/:id/reactivate", controller.reactivate);
+expenseCategoryRoutes.delete("/:id", controller.remove);

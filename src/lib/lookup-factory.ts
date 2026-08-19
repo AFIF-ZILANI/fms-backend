@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -40,6 +41,7 @@ type LookupDelegate = {
         where: { id: string };
         data: { code?: string; label?: string; is_active?: boolean };
     }): Promise<LookupRow>;
+    delete(args: { where: { id: string } }): Promise<LookupRow>;
 };
 
 export function createLookupService(delegate: LookupDelegate, resourceName: string) {
@@ -79,6 +81,27 @@ export function createLookupService(delegate: LookupDelegate, resourceName: stri
             const existing = await delegate.findUnique({ where: { id } });
             if (!existing) throw AppError.notFound(resourceName);
             return delegate.update({ where: { id }, data: { is_active } });
+        },
+
+        /**
+         * Hard delete. Relies on the `ON DELETE RESTRICT` FK from every
+         * referencing table (Item, PurchaseItem, SaleItem, Expense,
+         * SupplierSupplyLink) instead of pre-checking usage ourselves --
+         * the DB constraint is the source of truth and races nothing.
+         */
+        async remove(id: string) {
+            const existing = await delegate.findUnique({ where: { id } });
+            if (!existing) throw AppError.notFound(resourceName);
+            try {
+                return await delegate.delete({ where: { id } });
+            } catch (err) {
+                if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+                    throw AppError.conflict(
+                        `${resourceName} is still in use and cannot be deleted. Deactivate it instead.`,
+                    );
+                }
+                throw err;
+            }
         },
     };
 }
@@ -122,6 +145,13 @@ export function createLookupController(service: LookupService) {
             return withHandler(c, async () => {
                 const row = await service.setActive(c.req.param("id") ?? "", true);
                 return sendSuccess(c, row, "Reactivated");
+            });
+        },
+
+        async remove(c: Context) {
+            return withHandler(c, async () => {
+                await service.remove(c.req.param("id") ?? "");
+                return sendSuccess(c, null, "Deleted");
             });
         },
     };

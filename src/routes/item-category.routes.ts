@@ -14,3 +14,4 @@ itemCategoryRoutes.post("/", zValidatorRfc7807("json", createLookupSchema), cont
 itemCategoryRoutes.patch("/:id", zValidatorRfc7807("json", updateLookupSchema), controller.update);
 itemCategoryRoutes.post("/:id/deactivate", controller.deactivate);
 itemCategoryRoutes.post("/:id/reactivate", controller.reactivate);
+itemCategoryRoutes.delete("/:id", controller.remove);

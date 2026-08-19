@@ -14,3 +14,4 @@ unitRoutes.post("/", zValidatorRfc7807("json", createLookupSchema), controller.c
 unitRoutes.patch("/:id", zValidatorRfc7807("json", updateLookupSchema), controller.update);
 unitRoutes.post("/:id/deactivate", controller.deactivate);
 unitRoutes.post("/:id/reactivate", controller.reactivate);
+unitRoutes.delete("/:id", controller.remove);
