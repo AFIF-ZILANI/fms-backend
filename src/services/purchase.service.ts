@@ -150,6 +150,10 @@ export const PurchaseService = {
                         reason: "PURCHASE",
                         ref_type: "PURCHASE",
                         ref_id: purchaseItem.id,
+                        // Net line cost per base unit, not the raw unit_price -- base_quantity
+                        // is in the item's base unit while unit_price is per purchase unit, and
+                        // total_price is already net of the line's own discount.
+                        unit_cost: item.total_price.dividedBy(base_quantity),
                     });
                 }
 
