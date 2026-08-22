@@ -241,6 +241,102 @@ describe("PurchaseService", () => {
         expect(ledgerEntry?.quantity.toNumber()).toBe(100);
     });
 
+    test("the user's own example: 1010 gross, 10 flat discount, paid in full nets to 1000 due", async () => {
+        const purchase = await PurchaseService.create({
+            purchase_date: new Date(),
+            paid_amount: 1000,
+            recorded_by_id: profileId,
+            discount_type: "FLAT",
+            discount_value: 10,
+            items: [{ item_id: itemId, quantity: 1, unit: "BOTTLE", unit_price: 1010 }],
+        });
+        createdPurchaseIds.push(purchase!.id);
+
+        expect(purchase!.total_amount.toNumber()).toBe(1000);
+        expect(purchase!.due_amount.toNumber()).toBe(0);
+    });
+
+    test("per-line PERCENT discount nets the line total, and feeds the purchase subtotal", async () => {
+        const purchase = await PurchaseService.create({
+            purchase_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [
+                {
+                    item_id: itemId,
+                    quantity: 10,
+                    unit: "BOTTLE",
+                    unit_price: 100,
+                    discount_type: "PERCENT",
+                    discount_value: 10,
+                },
+            ],
+        });
+        createdPurchaseIds.push(purchase!.id);
+
+        // 10 * 100 = 1000 gross, 10% off = 900 net
+        expect(purchase!.items[0]!.total_price.toNumber()).toBe(900);
+        expect(purchase!.total_amount.toNumber()).toBe(900);
+    });
+
+    test("line and global discounts stack: line discount nets the line, global discount nets the subtotal", async () => {
+        const purchase = await PurchaseService.create({
+            purchase_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            discount_type: "FLAT",
+            discount_value: 50,
+            items: [
+                {
+                    item_id: itemId,
+                    quantity: 10,
+                    unit: "BOTTLE",
+                    unit_price: 100,
+                    discount_type: "FLAT",
+                    discount_value: 100,
+                },
+            ],
+        });
+        createdPurchaseIds.push(purchase!.id);
+
+        // line: 1000 gross - 100 flat = 900 net -> subtotal 900 -> global 50 flat off -> 850
+        expect(purchase!.items[0]!.total_price.toNumber()).toBe(900);
+        expect(purchase!.total_amount.toNumber()).toBe(850);
+    });
+
+    test("a flat discount larger than the amount it discounts throws bad-request", async () => {
+        await expect(
+            PurchaseService.create({
+                purchase_date: new Date(),
+                paid_amount: 0,
+                recorded_by_id: profileId,
+                items: [
+                    {
+                        item_id: itemId,
+                        quantity: 1,
+                        unit: "BOTTLE",
+                        unit_price: 10,
+                        discount_type: "FLAT",
+                        discount_value: 11,
+                    },
+                ],
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("a percent discount over 100 throws bad-request", async () => {
+        await expect(
+            PurchaseService.create({
+                purchase_date: new Date(),
+                paid_amount: 0,
+                recorded_by_id: profileId,
+                discount_type: "PERCENT",
+                discount_value: 101,
+                items: [{ item_id: itemId, quantity: 1, unit: "BOTTLE", unit_price: 10 }],
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
     test("purchasing in a unit with no ItemUnit conversion row throws bad-request", async () => {
         const kgItem = await prisma.item.create({
             data: {

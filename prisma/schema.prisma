@@ -105,6 +105,11 @@ enum CostType {
   SHARED_CAPITAL // equipment/assets, depreciated via useful_life_batches
 }
 
+enum DiscountType {
+  FLAT // discount_value is a currency amount
+  PERCENT // discount_value is a percentage (0-100) of the amount it discounts
+}
+
 enum StockUnitStatus {
   UNASSIGNED // printed, not yet bound to a purchase
   IN_STOCK // bound, sitting in storage, untouched
@@ -585,17 +590,22 @@ model ItemUnit {
 }
 
 model Purchase {
-  id             String     @id @default(uuid())
-  supplier_id    String?
-  supplier       Suppliers? @relation(fields: [supplier_id], references: [id])
-  invoice_no     String?
-  purchase_date  DateTime
-  total_amount   Decimal    @db.Decimal(10, 2)
-  paid_amount    Decimal    @db.Decimal(10, 2)
-  due_amount     Decimal    @db.Decimal(10, 2)
-  recorded_by_id String
-  recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime   @default(now())
+  id              String        @id @default(uuid())
+  supplier_id     String?
+  supplier        Suppliers?    @relation(fields: [supplier_id], references: [id])
+  invoice_no      String?
+  purchase_date   DateTime
+  // Global discount, applied to the sum of the (already net-of-their-own-discount) line totals.
+  // Null discount_value = no global discount. total_amount is always the net figure -- everything
+  // that reads it (due_amount, Payment reconciliation, Analytics) needs no discount-awareness of its own.
+  discount_type   DiscountType?
+  discount_value  Decimal?      @db.Decimal(10, 2)
+  total_amount    Decimal       @db.Decimal(10, 2)
+  paid_amount     Decimal       @db.Decimal(10, 2)
+  due_amount      Decimal       @db.Decimal(10, 2)
+  recorded_by_id  String
+  recorded_by     Profiles      @relation(fields: [recorded_by_id], references: [id])
+  created_at      DateTime      @default(now())
 
   items PurchaseItem[]
 
@@ -603,22 +613,27 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id              String    @id @default(uuid())
+  id              String        @id @default(uuid())
   purchase_id     String
-  purchase        Purchase  @relation(fields: [purchase_id], references: [id])
+  purchase        Purchase      @relation(fields: [purchase_id], references: [id])
   item_id         String
-  item            Item      @relation(fields: [item_id], references: [id])
+  item            Item          @relation(fields: [item_id], references: [id])
   batch_id        String? // set for chicks — the batch this delivery funds. Repeatable: no unique
-  batch           Batches?  @relation(fields: [batch_id], references: [id]) // constraint blocks a 2nd delivery at a different price/date.
-  quantity        Decimal   @db.Decimal(10, 3)
+  batch           Batches?      @relation(fields: [batch_id], references: [id]) // constraint blocks a 2nd delivery at a different price/date.
+  quantity        Decimal       @db.Decimal(10, 3)
   unit            String
-  unitRef         Unit      @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  base_quantity   Decimal   @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
-  unit_price      Decimal   @db.Decimal(10, 2)
-  total_price     Decimal   @db.Decimal(10, 2)
+  unitRef         Unit          @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  base_quantity   Decimal       @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
+  unit_price      Decimal       @db.Decimal(10, 2)
+  // Per-line discount, e.g. a supplier knocking a few taka off one line. Null discount_value = none.
+  discount_type   DiscountType?
+  discount_value  Decimal?      @db.Decimal(10, 2)
+  // Net of this line's own discount -- (quantity * unit_price) minus the discount above. This is
+  // what feeds Purchase.total_amount and stock valuation, so discounts need no special-casing there.
+  total_price     Decimal       @db.Decimal(10, 2)
   mfg_date        DateTime?
   expiration_date DateTime?
-  created_at      DateTime  @default(now())
+  created_at      DateTime      @default(now())
 
   stockUnits StockUnit[]
 
