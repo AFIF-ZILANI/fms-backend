@@ -584,6 +584,11 @@ model ItemUnit {
   unit           String
   unitRef        Unit     @relation(fields: [unit], references: [code], onUpdate: Cascade)
   factor_to_base Decimal  @db.Decimal(10, 4) // 1 of `unit` = this many of Item.unit
+  // Purpose flags -- one conversion factor per unit can serve either or both flows.
+  // toBaseQuantity() filters on whichever flag matches the caller (purchase.service
+  // vs consumption.service), so a unit valid for buying isn't automatically valid for use.
+  is_purchasable Boolean  @default(true)
+  is_usable      Boolean  @default(false)
   created_at     DateTime @default(now())
 
   @@unique([item_id, unit])

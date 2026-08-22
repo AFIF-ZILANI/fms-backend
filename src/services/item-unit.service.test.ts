@@ -29,6 +29,8 @@ describe("ItemUnitService", () => {
             item_id: itemId,
             unit: "BAG",
             factor_to_base: 50,
+            is_purchasable: true,
+            is_usable: false,
         });
         createdItemUnitIds.push(itemUnit!.id);
         expect(itemUnit!.factor_to_base.toNumber()).toBe(50);
@@ -40,17 +42,31 @@ describe("ItemUnitService", () => {
             item_id: itemId,
             unit: "LITER",
             factor_to_base: 20,
+            is_purchasable: true,
+            is_usable: false,
         });
         createdItemUnitIds.push(itemUnit!.id);
 
         await expect(
-            ItemUnitService.create({ item_id: itemId, unit: "LITER", factor_to_base: 25 }),
+            ItemUnitService.create({
+                item_id: itemId,
+                unit: "LITER",
+                factor_to_base: 25,
+                is_purchasable: true,
+                is_usable: false,
+            }),
         ).rejects.toMatchObject({ status: 409 });
     });
 
     test("create with a unit equal to the item's own base unit throws bad-request", async () => {
         await expect(
-            ItemUnitService.create({ item_id: itemId, unit: "KG", factor_to_base: 1 }),
+            ItemUnitService.create({
+                item_id: itemId,
+                unit: "KG",
+                factor_to_base: 1,
+                is_purchasable: true,
+                is_usable: false,
+            }),
         ).rejects.toMatchObject({ status: 400 });
     });
 
@@ -60,6 +76,8 @@ describe("ItemUnitService", () => {
                 item_id: "00000000-0000-0000-0000-000000000000",
                 unit: "BAG",
                 factor_to_base: 50,
+                is_purchasable: true,
+                is_usable: false,
             }),
         ).rejects.toMatchObject({ status: 400 });
     });
@@ -69,6 +87,8 @@ describe("ItemUnitService", () => {
             item_id: itemId,
             unit: "BOX",
             factor_to_base: 12,
+            is_purchasable: true,
+            is_usable: false,
         });
 
         await ItemUnitService.remove(itemUnit!.id);

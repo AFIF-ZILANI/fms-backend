@@ -53,6 +53,7 @@ export const ConsumptionService = {
                     data.item_id,
                     data.unit,
                     data.quantity,
+                    "USABLE",
                 );
 
                 if (data.stock_unit_id !== undefined) {
