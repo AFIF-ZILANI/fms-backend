@@ -23,6 +23,7 @@ export const ItemService = {
         const [items, total] = await Promise.all([
             prisma.item.findMany({
                 where,
+                include,
                 orderBy: { created_at: "desc" },
                 ...toSkipTake(query),
             }),
