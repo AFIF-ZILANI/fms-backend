@@ -76,6 +76,20 @@ describe("ItemService", () => {
         expect(items.every((i) => i.category === "VACCINE")).toBe(true);
     });
 
+    test("listing includes each item's itemUnits (purchase-unit picker needs this without an N+1 getById)", async () => {
+        const item = await ItemService.create({ name: name(), category: "FEED", unit: "KG" });
+        createdIds.push(item!.id);
+        const itemUnit = await prisma.itemUnit.create({
+            data: { item_id: item!.id, unit: "BAG", factor_to_base: 50 },
+        });
+
+        const { items } = await ItemService.getAll({ page: 1, limit: 100 });
+        const found = items.find((i) => i.id === item!.id) as (typeof items)[number] & {
+            itemUnits: { id: string }[];
+        };
+        expect(found.itemUnits.map((u) => u.id)).toContain(itemUnit.id);
+    });
+
     test("getLowStock returns only active items below their reorder level, with current_balance", async () => {
         const below = await ItemService.create({
             name: `Below Reorder ${crypto.randomUUID()}`,
