@@ -56,6 +56,7 @@ export const ItemService = {
                     ...(data.supplier_ids !== undefined && {
                         suppliers: { connect: data.supplier_ids.map((id) => ({ id })) },
                     }),
+                    ...(data.meta_data !== undefined && { meta_data: data.meta_data }),
                 },
                 include,
             });
@@ -75,6 +76,7 @@ export const ItemService = {
             preferred_reorder_qty,
             lead_time_days,
             supplier_ids,
+            meta_data,
         } = data;
         if (
             !name &&
@@ -82,7 +84,8 @@ export const ItemService = {
             reorder_level === undefined &&
             preferred_reorder_qty === undefined &&
             lead_time_days === undefined &&
-            !supplier_ids
+            !supplier_ids &&
+            meta_data === undefined
         ) {
             throw AppError.badRequest("No update fields provided");
         }
@@ -99,6 +102,7 @@ export const ItemService = {
                     ...(supplier_ids !== undefined && {
                         suppliers: { set: supplier_ids.map((id) => ({ id })) },
                     }),
+                    ...(meta_data !== undefined && { meta_data }),
                 },
                 include,
             });

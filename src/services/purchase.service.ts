@@ -121,6 +121,7 @@ export const PurchaseService = {
                         item.item_id,
                         item.unit,
                         item.quantity,
+                        "PURCHASE",
                     );
                     const purchaseItem = await tx.purchaseItem.create({
                         data: {

@@ -249,7 +249,7 @@ describe("AnalyticsService", () => {
             },
         });
         const itemUnit = await prisma.itemUnit.create({
-            data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50 },
+            data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50, is_usable: true },
         });
         const purchase = await prisma.purchase.create({
             data: {
