@@ -13,6 +13,31 @@ import type {
 
 const include = { items: { include: { item: true } }, supplier: true } as const;
 
+type DiscountType = "FLAT" | "PERCENT";
+
+/** Discount amount taken off `gross` -- FLAT is a currency amount, PERCENT is 0-100 of `gross`.
+ * Rejects a discount that would take the net below zero (a flat discount bigger than the amount
+ * it discounts, or a percent over 100) rather than silently clamping to zero. */
+function computeDiscount(
+    gross: Prisma.Decimal,
+    discount_type: DiscountType | undefined,
+    discount_value: number | undefined,
+    label: string,
+): Prisma.Decimal {
+    if (discount_type === undefined) return new Prisma.Decimal(0);
+    if (discount_type === "PERCENT") {
+        if (discount_value! > 100) {
+            throw AppError.badRequest(`${label} discount percent cannot exceed 100`);
+        }
+        return gross.times(discount_value!).dividedBy(100);
+    }
+    const flat = new Prisma.Decimal(discount_value!);
+    if (flat.greaterThan(gross)) {
+        throw AppError.badRequest(`${label} discount cannot exceed the amount it discounts`);
+    }
+    return flat;
+}
+
 // Purchase/PurchaseItem are append-only (system-design-arc.md §6) -- no
 // update here, ever. A correction is a new Purchase, not an edit.
 export const PurchaseService = {
@@ -51,14 +76,20 @@ export const PurchaseService = {
      * not native JS numbers -- this is money math, same precision concern
      * that made Employees.salary a Decimal column instead of Float. */
     async create(data: CreatePurchaseInput) {
-        const itemsWithTotals = data.items.map((item) => ({
-            ...item,
-            total_price: new Prisma.Decimal(item.quantity).times(item.unit_price),
-        }));
-        const total_amount = itemsWithTotals.reduce(
+        // Each line's total_price is net of its own discount -- this is the figure that feeds the
+        // purchase subtotal, StockLedger, and stock valuation, so nothing downstream needs to know
+        // discounts exist.
+        const itemsWithTotals = data.items.map((item) => {
+            const gross = new Prisma.Decimal(item.quantity).times(item.unit_price);
+            const discount = computeDiscount(gross, item.discount_type, item.discount_value, "Line");
+            return { ...item, total_price: gross.minus(discount) };
+        });
+        const subtotal = itemsWithTotals.reduce(
             (sum, item) => sum.plus(item.total_price),
             new Prisma.Decimal(0),
         );
+        const globalDiscount = computeDiscount(subtotal, data.discount_type, data.discount_value, "Purchase");
+        const total_amount = subtotal.minus(globalDiscount);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         const due_amount = total_amount.minus(paid_amount);
         if (due_amount.isNegative()) {
@@ -76,6 +107,11 @@ export const PurchaseService = {
                         recorded_by_id: data.recorded_by_id,
                         ...(data.supplier_id !== undefined && { supplier_id: data.supplier_id }),
                         ...(data.invoice_no !== undefined && { invoice_no: data.invoice_no }),
+                        ...(data.discount_type !== undefined &&
+                            data.discount_value !== undefined && {
+                                discount_type: data.discount_type,
+                                discount_value: data.discount_value,
+                            }),
                     },
                 });
 
@@ -96,6 +132,11 @@ export const PurchaseService = {
                             unit_price: item.unit_price,
                             total_price: item.total_price,
                             ...(item.batch_id !== undefined && { batch_id: item.batch_id }),
+                            ...(item.discount_type !== undefined &&
+                                item.discount_value !== undefined && {
+                                    discount_type: item.discount_type,
+                                    discount_value: item.discount_value,
+                                }),
                             ...(item.mfg_date !== undefined && { mfg_date: item.mfg_date }),
                             ...(item.expiration_date !== undefined && {
                                 expiration_date: item.expiration_date,
