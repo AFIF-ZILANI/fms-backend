@@ -11,6 +11,7 @@ import type {
 } from "@validators/item.validator";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { getItemBalances } from "@lib/stock-balance";
+import { GENERIC_ITEM_UNITS } from "@lib/enums";
 
 const include = { suppliers: true, itemUnits: true } as const;
 
@@ -148,9 +149,13 @@ export const ItemUnitService = {
 
         const unitRow = await prisma.unit.findUnique({ where: { code: data.unit } });
         if (!unitRow) throw AppError.badRequest("unit does not reference a known unit code");
+        if (unitRow.is_base) {
+            throw AppError.badRequest(`"${data.unit}" is a base unit and can't be added as a conversion`);
+        }
         // A unit tied to a specific base family (e.g. LITER -> ML) can't be added to an item whose
-        // own base unit is different (e.g. G) -- a null base_unit means "generic", valid everywhere.
-        if (unitRow.base_unit !== null && unitRow.base_unit !== item.unit) {
+        // own base unit is different (e.g. G) -- GENERIC_ITEM_UNITS (e.g. Container) are the only
+        // exception, valid under any family.
+        if (!GENERIC_ITEM_UNITS.has(unitRow.code) && unitRow.base_unit !== item.unit) {
             throw AppError.badRequest(
                 `"${data.unit}" belongs to the ${unitRow.base_unit} family, not this item's base unit "${item.unit}"`,
             );
