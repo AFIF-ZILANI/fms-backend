@@ -1,6 +1,7 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { getLocationStock } from "@lib/stock-balance";
 import type {
     CreateWarehouseInput,
     UpdateWarehouseInput,
@@ -23,6 +24,26 @@ export const WarehouseService = {
         const warehouse = await prisma.warehouses.findUnique({ where: { id } });
         if (!warehouse) throw AppError.notFound("Warehouse");
         return warehouse;
+    },
+
+    async getStock(id: string) {
+        const warehouse = await prisma.warehouses.findUnique({ where: { id } });
+        if (!warehouse) throw AppError.notFound("Warehouse");
+
+        const balances = await getLocationStock("WAREHOUSE", id);
+        const nonZero = balances.filter((b) => !b.balance.isZero());
+        const items = await prisma.item.findMany({
+            where: { id: { in: nonZero.map((b) => b.item_id) } },
+            select: { id: true, name: true, unit: true },
+        });
+        const itemById = new Map(items.map((i) => [i.id, i]));
+
+        return nonZero.map((b) => ({
+            item_id: b.item_id,
+            item_name: itemById.get(b.item_id)?.name ?? "Unknown item",
+            unit: itemById.get(b.item_id)?.unit ?? "",
+            balance: b.balance,
+        }));
     },
 
     async create(data: CreateWarehouseInput) {

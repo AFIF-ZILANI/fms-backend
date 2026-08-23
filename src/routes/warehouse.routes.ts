@@ -15,6 +15,7 @@ warehouseRoutes.get(
     WarehouseController.getAll,
 );
 warehouseRoutes.get("/:id", WarehouseController.getById);
+warehouseRoutes.get("/:id/stock", WarehouseController.getStock);
 warehouseRoutes.post(
     "/",
     zValidatorRfc7807("json", createWarehouseSchema),

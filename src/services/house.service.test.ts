@@ -109,4 +109,36 @@ describe("HouseService", () => {
         expect(unavailable.houses.some((h) => h.id === occupied.id)).toBe(true);
         expect(unavailable.houses.some((h) => h.id === empty.id)).toBe(false);
     });
+
+    test("getStock returns nonzero item balances at this house only", async () => {
+        const house = await HouseService.create({
+            name: "Stock Test House",
+            type: "GROWER",
+            number: Math.floor(Math.random() * 100000),
+        });
+        createdIds.push(house.id);
+        const item = await prisma.item.create({
+            data: {
+                name: `House Stock Item ${crypto.randomUUID()}`,
+                normalized_key: `house stock item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item.id, quantity: 60, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: house.id,
+            },
+        });
+
+        const stock = await HouseService.getStock(house.id);
+        expect(stock).toHaveLength(1);
+        expect(stock[0]!.item_id).toBe(item.id);
+        expect(stock[0]!.balance.toNumber()).toBe(60);
+
+        await prisma.stockLedger.deleteMany({ where: { item_id: item.id } });
+        await prisma.item.delete({ where: { id: item.id } });
+    });
 });

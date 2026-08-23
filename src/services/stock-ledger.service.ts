@@ -15,9 +15,11 @@ type LedgerEntryInput = {
         | "EXPIRED"
         | "ADJUSTMENT"
         | "OPENING_BALANCE";
-    ref_type: "PURCHASE" | "CONSUMPTION" | "ADJUSTMENT";
+    ref_type: "PURCHASE" | "CONSUMPTION" | "ADJUSTMENT" | "TRANSFER";
     ref_id: string;
     unit_cost?: Prisma.Decimal | number;
+    location_type?: "WAREHOUSE" | "HOUSE" | "DISPOSAL";
+    location_id?: string;
     idempotency_key?: string;
 };
 

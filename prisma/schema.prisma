@@ -149,6 +149,7 @@ enum RefType {
   PURCHASE
   CONSUMPTION
   ADJUSTMENT
+  TRANSFER
 }
 
 enum OrganizationRole {
@@ -285,6 +286,7 @@ model Unit {
   saleItems            SaleItem[]
   itemUnitConversions  ItemUnit[]
   consumptions         Consumption[]
+  stockTransfers       StockTransfer[]
 }
 
 model ExpenseCategoryLookup {
@@ -355,6 +357,7 @@ model Profiles {
   environmentRecordsTaken EnvironmentRecords[]
   scoresGiven             PerformanceScoreEntry[]
   inventoryAdjustments    InventoryAdjustment[]
+  stockTransfersRecorded  StockTransfer[]
   medicationsGiven        Medications[]
   vaccinationsGiven       Vaccinations[]
   auditLogs               AuditLog[]
@@ -465,6 +468,7 @@ model Houses {
   stockUnits           StockUnit[]
   inventoryAdjustments InventoryAdjustment[]
   birdSales            BirdSale[]
+  stockTransfers       StockTransfer[]
 
   @@index([type])
 }
@@ -585,6 +589,7 @@ model Item {
   feedingPrograms      BatchFeedingProgram[]
   itemOrganizations    ItemOrganization[]
   inventoryAdjustments InventoryAdjustment[]
+  stockTransfers       StockTransfer[]
 
   @@index([category])
 }
@@ -610,6 +615,8 @@ model Purchase {
   id              String        @id @default(uuid())
   supplier_id     String?
   supplier        Suppliers?    @relation(fields: [supplier_id], references: [id])
+  warehouse_id    String?
+  warehouse       Warehouses?   @relation(fields: [warehouse_id], references: [id])
   invoice_no      String?
   purchase_date   DateTime
   // Global discount, applied to the sum of the (already net-of-their-own-discount) line totals.
@@ -882,12 +889,36 @@ model InventoryAdjustment {
   @@index([item_id])
 }
 
+model StockTransfer {
+  id                String     @id @default(uuid())
+  item_id           String
+  item              Item       @relation(fields: [item_id], references: [id])
+  from_warehouse_id String
+  from_warehouse    Warehouses @relation(fields: [from_warehouse_id], references: [id])
+  to_house_id       String
+  to_house          Houses     @relation(fields: [to_house_id], references: [id])
+  quantity          Decimal    @db.Decimal(10, 3) // as entered, in `unit`
+  unit              String
+  unitRef           Unit       @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  base_quantity     Decimal    @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
+  note              String?
+  recorded_by_id    String
+  recorded_by       Profiles   @relation(fields: [recorded_by_id], references: [id])
+  created_at        DateTime   @default(now())
+  idempotency_key   String     @unique
+
+  @@index([item_id])
+  @@index([to_house_id])
+}
+
 model Warehouses {
   id         String   @id @default(uuid())
   name       String
   created_at DateTime @default(now())
 
   inventoryAdjustments InventoryAdjustment[]
+  purchases            Purchase[]
+  stockTransfers       StockTransfer[]
 }
 
 model Organization {

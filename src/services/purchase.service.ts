@@ -101,6 +101,7 @@ export const PurchaseService = {
                 const purchase = await tx.purchase.create({
                     data: {
                         purchase_date: data.purchase_date,
+                        warehouse_id: data.warehouse_id,
                         total_amount,
                         paid_amount,
                         due_amount,
@@ -155,6 +156,8 @@ export const PurchaseService = {
                         // is in the item's base unit while unit_price is per purchase unit, and
                         // total_price is already net of the line's own discount.
                         unit_cost: item.total_price.dividedBy(base_quantity),
+                        location_type: "WAREHOUSE",
+                        location_id: data.warehouse_id,
                     });
                 }
 

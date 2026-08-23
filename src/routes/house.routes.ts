@@ -11,6 +11,7 @@ export const houseRoutes = new Hono();
 
 houseRoutes.get("/", zValidatorRfc7807("query", listHousesQuerySchema), HouseController.getAll);
 houseRoutes.get("/:id", HouseController.getById);
+houseRoutes.get("/:id/stock", HouseController.getStock);
 houseRoutes.post("/", zValidatorRfc7807("json", createHouseSchema), HouseController.create);
 houseRoutes.patch("/:id", zValidatorRfc7807("json", updateHouseSchema), HouseController.update);
 houseRoutes.post("/:id/deactivate", HouseController.deactivate);

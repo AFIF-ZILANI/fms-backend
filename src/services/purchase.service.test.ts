@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { PurchaseService, PurchaseItemService } from "./purchase.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
+import { createPurchaseSchema } from "@validators/purchase.validator";
 
 const createdPurchaseIds: string[] = [];
 const createdItemIds: string[] = [];
@@ -10,6 +11,7 @@ const createdItemUnitIds: string[] = [];
 let itemId: string;
 let profileId: string;
 let supplierId: string;
+let warehouseId: string;
 
 describe("PurchaseService", () => {
     beforeAll(async () => {
@@ -43,6 +45,11 @@ describe("PurchaseService", () => {
             data: { profile_id: supplierProfile.id, role: "DISTRIBUTOR" },
         });
         supplierId = supplier.id;
+
+        const warehouse = await prisma.warehouses.create({
+            data: { name: `Purchase Test Warehouse ${crypto.randomUUID()}` },
+        });
+        warehouseId = warehouse.id;
     });
 
     afterAll(async () => {
@@ -64,11 +71,13 @@ describe("PurchaseService", () => {
         await prisma.profiles.deleteMany({
             where: { id: { in: [profileId, supplier!.profile_id] } },
         });
+        await prisma.warehouses.delete({ where: { id: warehouseId } });
     });
 
     test("create computes line totals and purchase total with exact decimal math", async () => {
         const purchase = await PurchaseService.create({
             supplier_id: supplierId,
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 100,
             recorded_by_id: profileId,
@@ -90,6 +99,7 @@ describe("PurchaseService", () => {
     test("paid_amount exceeding total throws bad-request", async () => {
         await expect(
             PurchaseService.create({
+                warehouse_id: warehouseId,
                 purchase_date: new Date(),
                 paid_amount: 10000,
                 recorded_by_id: profileId,
@@ -101,6 +111,7 @@ describe("PurchaseService", () => {
     test("create with a nonexistent item_id throws bad-request, not a raw 500", async () => {
         await expect(
             PurchaseService.create({
+                warehouse_id: warehouseId,
                 purchase_date: new Date(),
                 paid_amount: 0,
                 recorded_by_id: profileId,
@@ -124,6 +135,7 @@ describe("PurchaseService", () => {
 
     test("real PurchaseItem lets StockUnit.bind succeed end to end", async () => {
         const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -145,6 +157,7 @@ describe("PurchaseService", () => {
 
     test("PurchaseItemService lists lots filtered by item_id", async () => {
         const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -164,6 +177,7 @@ describe("PurchaseService", () => {
     test("getAll filters by date_from/date_to and item_category", async () => {
         const recentPurchase = await PurchaseService.create({
             supplier_id: supplierId,
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -173,6 +187,7 @@ describe("PurchaseService", () => {
 
         const oldPurchase = await PurchaseService.create({
             supplier_id: supplierId,
+            warehouse_id: warehouseId,
             purchase_date: new Date(Date.now() - 10 * 86_400_000),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -221,6 +236,7 @@ describe("PurchaseService", () => {
         createdItemUnitIds.push(itemUnit.id);
 
         const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -243,6 +259,7 @@ describe("PurchaseService", () => {
 
     test("the user's own example: 1010 gross, 10 flat discount, paid in full nets to 1000 due", async () => {
         const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 1000,
             recorded_by_id: profileId,
@@ -258,6 +275,7 @@ describe("PurchaseService", () => {
 
     test("per-line PERCENT discount nets the line total, and feeds the purchase subtotal", async () => {
         const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -281,6 +299,7 @@ describe("PurchaseService", () => {
 
     test("line and global discounts stack: line discount nets the line, global discount nets the subtotal", async () => {
         const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 0,
             recorded_by_id: profileId,
@@ -307,6 +326,7 @@ describe("PurchaseService", () => {
     test("a flat discount larger than the amount it discounts throws bad-request", async () => {
         await expect(
             PurchaseService.create({
+                warehouse_id: warehouseId,
                 purchase_date: new Date(),
                 paid_amount: 0,
                 recorded_by_id: profileId,
@@ -327,6 +347,7 @@ describe("PurchaseService", () => {
     test("a percent discount over 100 throws bad-request", async () => {
         await expect(
             PurchaseService.create({
+                warehouse_id: warehouseId,
                 purchase_date: new Date(),
                 paid_amount: 0,
                 recorded_by_id: profileId,
@@ -349,6 +370,7 @@ describe("PurchaseService", () => {
 
         await expect(
             PurchaseService.create({
+                warehouse_id: warehouseId,
                 purchase_date: new Date(),
                 paid_amount: 0,
                 recorded_by_id: profileId,
@@ -357,5 +379,48 @@ describe("PurchaseService", () => {
         ).rejects.toMatchObject({ status: 400 });
 
         await prisma.item.delete({ where: { id: kgItem.id } });
+    });
+
+    test("createPurchaseSchema rejects a payload with no warehouse_id", () => {
+        const result = createPurchaseSchema.safeParse({
+            purchase_date: new Date().toISOString(),
+            recorded_by_id: crypto.randomUUID(),
+            items: [{ item_id: crypto.randomUUID(), quantity: 1, unit: "G", unit_price: 1 }],
+        });
+        expect(result.success).toBe(false);
+    });
+
+    test("create tags the StockLedger entry with the purchase's warehouse", async () => {
+        const item = await prisma.item.create({
+            data: {
+                name: `Warehouse Tag Test ${crypto.randomUUID()}`,
+                normalized_key: `warehouse tag test ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        const warehouse = await prisma.warehouses.create({
+            data: { name: `Test Warehouse ${crypto.randomUUID()}` },
+        });
+
+        const purchase = await PurchaseService.create({
+            warehouse_id: warehouse.id,
+            purchase_date: new Date(),
+            recorded_by_id: profileId,
+            paid_amount: 0,
+            items: [{ item_id: item.id, quantity: 10, unit: "G", unit_price: 5 }],
+        });
+
+        const entry = await prisma.stockLedger.findFirst({
+            where: { ref_type: "PURCHASE", ref_id: purchase!.items[0]!.id },
+        });
+        expect(entry?.location_type).toBe("WAREHOUSE");
+        expect(entry?.location_id).toBe(warehouse.id);
+
+        await prisma.stockLedger.deleteMany({ where: { item_id: item.id } });
+        await prisma.purchaseItem.deleteMany({ where: { item_id: item.id } });
+        await prisma.purchase.delete({ where: { id: purchase!.id } });
+        await prisma.warehouses.delete({ where: { id: warehouse.id } });
+        await prisma.item.delete({ where: { id: item.id } });
     });
 });

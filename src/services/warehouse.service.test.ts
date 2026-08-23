@@ -40,4 +40,39 @@ describe("WarehouseService", () => {
             status: 400,
         });
     });
+
+    test("getStock returns nonzero item balances at this warehouse only", async () => {
+        const warehouse = await WarehouseService.create({ name: `Stock Test Warehouse ${crypto.randomUUID()}` });
+        createdIds.push(warehouse.id);
+        const item = await prisma.item.create({
+            data: {
+                name: `Warehouse Stock Item ${crypto.randomUUID()}`,
+                normalized_key: `warehouse stock item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item.id, quantity: 300, direction: "IN", reason: "PURCHASE",
+                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE", location_id: warehouse.id,
+            },
+        });
+
+        const stock = await WarehouseService.getStock(warehouse.id);
+        expect(stock).toHaveLength(1);
+        expect(stock[0]!.item_id).toBe(item.id);
+        expect(stock[0]!.item_name).toBe(item.name);
+        expect(stock[0]!.balance.toNumber()).toBe(300);
+
+        await prisma.stockLedger.deleteMany({ where: { item_id: item.id } });
+        await prisma.item.delete({ where: { id: item.id } });
+    });
+
+    test("getStock throws not-found for an unknown warehouse", async () => {
+        await expect(
+            WarehouseService.getStock("00000000-0000-0000-0000-000000000000"),
+        ).rejects.toBeInstanceOf(AppError);
+    });
 });
