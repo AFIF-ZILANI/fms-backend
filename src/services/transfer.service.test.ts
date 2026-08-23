@@ -97,6 +97,20 @@ describe("TransferService", () => {
         ).rejects.toMatchObject({ status: 409 });
     });
 
+    test("rejects a nonexistent from_warehouse_id with a 404, not a 409", async () => {
+        const { item, house, profile } = await makeFixtures();
+        await expect(
+            TransferService.create({
+                item_id: item.id,
+                from_warehouse_id: crypto.randomUUID(),
+                to_house_id: house.id,
+                quantity: 10,
+                unit: "G",
+                recorded_by_id: profile.id,
+            }),
+        ).rejects.toMatchObject({ status: 404 });
+    });
+
     test("rejects a unit that isn't usable for the item", async () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.itemUnit.create({
