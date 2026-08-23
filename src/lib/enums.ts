@@ -12,3 +12,8 @@ export const resourceCategorySchema = z.string().min(1, "Category is required");
  * a "derived" unit. */
 export const ITEM_BASE_UNITS = ["ML", "G", "UNIT", "DOSE", "PCS", "METER"] as const;
 export const itemBaseUnitSchema = z.enum(ITEM_BASE_UNITS);
+
+/** Units valid as an ItemUnit conversion under ANY base-unit family, not just one (Container can
+ * package a liquid or a solid). An allowlist rather than "base_unit is null" -- a handful of Unit
+ * rows (e.g. BIRD) have no base_unit for unrelated legacy reasons and must NOT be treated as generic. */
+export const GENERIC_ITEM_UNITS = new Set(["CONTAINER"]);

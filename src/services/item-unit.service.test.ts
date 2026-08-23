@@ -108,6 +108,33 @@ describe("ItemUnitService", () => {
         expect(itemUnit!.factor_to_base.toNumber()).toBe(1000);
     });
 
+    test("create with a base unit itself (not this item's own) throws bad-request", async () => {
+        // PCS is one of the 6 canonical bases -- never addable as a conversion for any item.
+        await expect(
+            ItemUnitService.create({
+                item_id: itemId,
+                unit: "PCS",
+                factor_to_base: 1,
+                is_purchasable: true,
+                is_usable: false,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("create with a legacy unit that has no base_unit and isn't a generic allowlist entry throws bad-request", async () => {
+        // BIRD has base_unit=null for unrelated legacy reasons -- must not be treated as generic
+        // the way CONTAINER is.
+        await expect(
+            ItemUnitService.create({
+                item_id: itemId,
+                unit: "BIRD",
+                factor_to_base: 1,
+                is_purchasable: true,
+                is_usable: false,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
     test("create with a generic cross-family unit (no base_unit) succeeds", async () => {
         // CONTAINER has no base_unit -- valid for any item's base family, factor stays variable.
         const itemUnit = await ItemUnitService.create({
