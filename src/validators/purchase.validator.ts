@@ -36,6 +36,7 @@ const purchaseItemInput = z
 export const createPurchaseSchema = z
     .object({
         supplier_id: z.string().uuid().optional(),
+        warehouse_id: z.string().uuid(),
         invoice_no: z.string().optional(),
         purchase_date: z.coerce.date(),
         paid_amount: z.coerce.number().nonnegative().default(0),
