@@ -50,8 +50,11 @@ export async function getLocationStock(
 
 /** Same balance as getLocationStock, for one item at one location, inside an in-flight
  * transaction -- for a write that needs to validate against the current balance before
- * posting (Transfer checking warehouse stock, Consumption checking house stock) without a
- * race between the check and the write. */
+ * posting (Transfer checking warehouse stock, Consumption checking house stock). Reading
+ * inside the same transaction as the write narrows the window vs. a pre-transaction read;
+ * it is not serializable under Postgres READ COMMITTED (Prisma's interactive transaction
+ * default), so a concurrent write can still oversubscribe in principle -- same accepted
+ * risk as the existing coded StockUnit draw path. */
 export async function getItemLocationBalance(
     tx: Prisma.TransactionClient,
     item_id: string,

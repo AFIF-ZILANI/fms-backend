@@ -20,6 +20,11 @@ export const TransferService = {
                     "USABLE",
                 );
 
+                const warehouse = await tx.warehouses.findUnique({
+                    where: { id: data.from_warehouse_id },
+                });
+                if (!warehouse) throw AppError.notFound("Warehouse");
+
                 const available = await getItemLocationBalance(
                     tx,
                     data.item_id,

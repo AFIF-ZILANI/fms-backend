@@ -41,7 +41,7 @@ export const HouseService = {
         if (!house) throw AppError.notFound("House");
 
         const balances = await getLocationStock("HOUSE", id);
-        const nonZero = balances.filter((b) => !b.balance.isZero());
+        const nonZero = balances.filter((b) => b.balance.isPositive());
         const items = await prisma.item.findMany({
             where: { id: { in: nonZero.map((b) => b.item_id) } },
             select: { id: true, name: true, unit: true },
