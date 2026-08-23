@@ -207,6 +207,18 @@ item's total balance is never affected by where the stock physically sits).
   (`location_type = NULL`). Per-warehouse/per-house balances only reflect
   activity recorded from this feature's rollout onward — this is stated
   as a known, accepted limitation, not a bug to fix later.
+- Operational rollout requirement: because of the no-backfill decision above,
+  every house starts at a zero on-hand balance for every item once this
+  ships. `ConsumptionService.create`'s aggregate path enforces balance
+  against `StockLedger`, so the first aggregate Consumption recorded at any
+  house will be rejected with `409 "Only 0 of this item is on hand at this
+  house"` until stock actually reaches that house. Each house therefore
+  needs an initial Transfer recorded into it (sourced from a Warehouse that
+  itself has stock, via a Purchase or an opening-balance entry) before
+  aggregate feeding/dosing can be recorded there. This is expected behavior
+  per this feature's design — Consumption should require real on-hand
+  stock — not a bug, but it is an operational step someone must take for
+  each house; it does not resolve itself.
 
 ## Testing
 
