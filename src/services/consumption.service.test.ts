@@ -100,6 +100,15 @@ describe("ConsumptionService", () => {
     });
 
     test("aggregate draw (no stock_unit_id) writes a StockLedger OUT entry", async () => {
+        // Simulate a prior transfer having landed 25 BAG at this house.
+        await prisma.stockLedger.create({
+            data: {
+                item_id: feedItemId, quantity: 25, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: houseId,
+            },
+        });
+
         const consumption = await ConsumptionService.create({
             house_id: houseId,
             item_id: feedItemId,
@@ -218,6 +227,15 @@ describe("ConsumptionService", () => {
     });
 
     test("getAll includes batch/house/item/stock_unit and filters by date range", async () => {
+        // Simulate a prior transfer having landed 5 BAG at this house.
+        await prisma.stockLedger.create({
+            data: {
+                item_id: feedItemId, quantity: 5, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: houseId,
+            },
+        });
+
         const consumption = await ConsumptionService.create({
             house_id: houseId,
             item_id: feedItemId,
@@ -266,6 +284,15 @@ describe("ConsumptionService", () => {
             data: { item_id: kgItem.id, unit: "BAG", factor_to_base: 50, is_usable: true },
         });
         createdItemUnitIds.push(itemUnit.id);
+
+        // Simulate a prior transfer having landed 100 KG (2 BAG) at this house.
+        await prisma.stockLedger.create({
+            data: {
+                item_id: kgItem.id, quantity: 100, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: houseId,
+            },
+        });
 
         const consumption = await ConsumptionService.create({
             house_id: houseId,
@@ -344,5 +371,99 @@ describe("ConsumptionService", () => {
 
         const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
         expect(updatedUnit.remaining_quantity?.toNumber()).toBe(2500);
+    });
+});
+
+describe("ConsumptionService aggregate house-balance validation", () => {
+    const createdItemIds: string[] = [];
+    const createdHouseIds: string[] = [];
+    const createdConsumptionIds: string[] = [];
+    let profileId: string;
+
+    beforeAll(async () => {
+        const profile = await prisma.profiles.create({
+            data: {
+                name: "House Balance Tester",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
+        });
+        profileId = profile.id;
+    });
+
+    afterAll(async () => {
+        await prisma.consumption.deleteMany({ where: { id: { in: createdConsumptionIds } } });
+        await prisma.stockLedger.deleteMany({ where: { item_id: { in: createdItemIds } } });
+        await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
+        await prisma.houses.deleteMany({ where: { id: { in: createdHouseIds } } });
+        await prisma.profiles.delete({ where: { id: profileId } });
+    });
+
+    test("rejects an aggregate draw that exceeds the item's balance at that house", async () => {
+        const item = await prisma.item.create({
+            data: {
+                name: `House Balance Item ${crypto.randomUUID()}`,
+                normalized_key: `house balance item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        createdItemIds.push(item.id);
+        const house = await prisma.houses.create({
+            data: { name: "House Balance Test House", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+        });
+        createdHouseIds.push(house.id);
+
+        await expect(
+            ConsumptionService.create({
+                house_id: house.id,
+                item_id: item.id,
+                quantity: 10,
+                unit: "G",
+                date: new Date(),
+                recorded_by_id: profileId,
+            }),
+        ).rejects.toMatchObject({ status: 409 });
+    });
+
+    test("allows an aggregate draw within the item's balance at that house, and tags the OUT entry HOUSE", async () => {
+        const item = await prisma.item.create({
+            data: {
+                name: `House Balance Item Ok ${crypto.randomUUID()}`,
+                normalized_key: `house balance item ok ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        createdItemIds.push(item.id);
+        const house = await prisma.houses.create({
+            data: { name: "House Balance Ok Test House", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+        });
+        createdHouseIds.push(house.id);
+
+        // Simulate a prior transfer having landed 50 G at this house.
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item.id, quantity: 50, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: house.id,
+            },
+        });
+
+        const consumption = await ConsumptionService.create({
+            house_id: house.id,
+            item_id: item.id,
+            quantity: 20,
+            unit: "G",
+            date: new Date(),
+            recorded_by_id: profileId,
+        });
+        createdConsumptionIds.push(consumption!.id);
+
+        const ledgerEntry = await prisma.stockLedger.findFirst({
+            where: { ref_type: "CONSUMPTION", ref_id: consumption!.id },
+        });
+        expect(ledgerEntry?.location_type).toBe("HOUSE");
+        expect(ledgerEntry?.location_id).toBe(house.id);
     });
 });

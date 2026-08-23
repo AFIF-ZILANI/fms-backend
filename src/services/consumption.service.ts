@@ -3,6 +3,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { toBaseQuantity } from "@lib/unit-conversion";
+import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     CreateConsumptionInput,
@@ -86,6 +87,15 @@ export const ConsumptionService = {
                             data: { status: "IN_USE" },
                         });
                     }
+                } else {
+                    // Aggregate (non-coded) draw -- must not exceed what's actually been
+                    // transferred to this house and not yet used.
+                    const available = await getItemLocationBalance(tx, data.item_id, "HOUSE", data.house_id);
+                    if (available.lessThan(base_quantity)) {
+                        throw AppError.conflict(
+                            `Only ${available.toString()} of this item is on hand at this house`,
+                        );
+                    }
                 }
 
                 const consumption = await tx.consumption.create({
@@ -113,6 +123,8 @@ export const ConsumptionService = {
                     reason: "CONSUMPTION",
                     ref_type: "CONSUMPTION",
                     ref_id: consumption.id,
+                    location_type: "HOUSE",
+                    location_id: data.house_id,
                 });
 
                 return consumption;

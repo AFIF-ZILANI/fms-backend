@@ -272,6 +272,15 @@ describe("AnalyticsService", () => {
             },
         });
 
+        // Simulate a prior transfer having landed 50 KG (1 BAG) at this house.
+        await prisma.stockLedger.create({
+            data: {
+                item_id: kgItem.id, quantity: 50, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: houseId,
+            },
+        });
+
         // entered as 1 BAG -> base_quantity 50 KG. Valued at base_quantity: 50 * 10 = 500.
         // The pre-fix bug valued raw quantity instead: 1 * 10 = 10.
         const consumption = await ConsumptionService.create({
