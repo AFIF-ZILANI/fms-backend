@@ -59,6 +59,16 @@ export const InventoryAdjustmentService = {
                     reason: "ADJUSTMENT",
                     ref_type: "ADJUSTMENT",
                     ref_id: adjustment.id,
+                    // house_id wins if the caller somehow set both -- the validator only
+                    // requires at least one, not exactly one.
+                    ...(data.warehouse_id !== undefined && {
+                        location_type: "WAREHOUSE" as const,
+                        location_id: data.warehouse_id,
+                    }),
+                    ...(data.house_id !== undefined && {
+                        location_type: "HOUSE" as const,
+                        location_id: data.house_id,
+                    }),
                 });
 
                 return adjustment;

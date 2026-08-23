@@ -93,4 +93,46 @@ describe("InventoryAdjustmentService", () => {
             }),
         ).rejects.toMatchObject({ status: 400 });
     });
+
+    test("create tags the StockLedger entry with whichever location was given", async () => {
+        const item = await prisma.item.create({
+            data: {
+                name: `Adjustment Location Test ${crypto.randomUUID()}`,
+                normalized_key: `adjustment location test ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        const warehouse = await prisma.warehouses.create({
+            data: { name: `Adj Test Warehouse ${crypto.randomUUID()}` },
+        });
+        const profile = await prisma.profiles.create({
+            data: {
+                name: "Adjustment Location Tester",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
+        });
+
+        const adjustment = await InventoryAdjustmentService.create({
+            item_id: item.id,
+            warehouse_id: warehouse.id,
+            quantity_before: 0,
+            quantity_after: 40,
+            reason: "Test",
+            recorded_by_id: profile.id,
+        });
+
+        const entry = await prisma.stockLedger.findFirst({
+            where: { ref_type: "ADJUSTMENT", ref_id: adjustment!.id },
+        });
+        expect(entry?.location_type).toBe("WAREHOUSE");
+        expect(entry?.location_id).toBe(warehouse.id);
+
+        await prisma.stockLedger.deleteMany({ where: { item_id: item.id } });
+        await prisma.inventoryAdjustment.delete({ where: { id: adjustment!.id } });
+        await prisma.warehouses.delete({ where: { id: warehouse.id } });
+        await prisma.profiles.delete({ where: { id: profile.id } });
+        await prisma.item.delete({ where: { id: item.id } });
+    });
 });
