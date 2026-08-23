@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
-import { unitSchema, resourceCategorySchema } from "@lib/enums";
+import { unitSchema, resourceCategorySchema, itemBaseUnitSchema } from "@lib/enums";
 
 export const createItemSchema = z.object({
     name: z.string().min(1, "Name is required"),
     category: resourceCategorySchema,
-    unit: unitSchema,
+    unit: itemBaseUnitSchema,
     reorder_level: z.coerce.number().nonnegative().optional(),
     preferred_reorder_qty: z.coerce.number().nonnegative().optional(),
     lead_time_days: z.coerce.number().int().nonnegative().optional(),

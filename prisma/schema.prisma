@@ -265,6 +265,18 @@ model Unit {
   code       String   @unique
   label      String
   is_active  Boolean  @default(true)
+  // Canonical base-unit hierarchy: exactly 6 units have is_base = true (ML, G, UNIT, DOSE, PCS,
+  // METER) -- Item.unit is restricted to these. Every other unit optionally names which base family
+  // it converts to (base_unit) and, when the ratio is a physical constant (Liter=1000, Kg=1000,
+  // Ft=0.3048, ...), the fixed factor to that base -- a null fixed_factor means the conversion is
+  // package-size-dependent and entered per item (ItemUnit.factor_to_base) instead. base_unit is null
+  // both for the 6 base units themselves and for generic cross-family package units (e.g. Container,
+  // which can hold either a liquid or a solid depending on the item).
+  is_base      Boolean  @default(false)
+  base_unit    String?
+  baseUnitRef  Unit?    @relation("UnitFamily", fields: [base_unit], references: [code], onUpdate: Cascade)
+  derivedUnits Unit[]   @relation("UnitFamily")
+  fixed_factor Decimal? @db.Decimal(14, 4)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -583,7 +595,7 @@ model ItemUnit {
   item           Item     @relation(fields: [item_id], references: [id], onDelete: Cascade)
   unit           String
   unitRef        Unit     @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  factor_to_base Decimal  @db.Decimal(10, 4) // 1 of `unit` = this many of Item.unit
+  factor_to_base Decimal  @db.Decimal(14, 4) // 1 of `unit` = this many of Item.unit
   // Purpose flags -- one conversion factor per unit can serve either or both flows.
   // toBaseQuantity() filters on whichever flag matches the caller (purchase.service
   // vs consumption.service), so a unit valid for buying isn't automatically valid for use.

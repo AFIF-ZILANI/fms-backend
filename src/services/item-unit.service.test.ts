@@ -13,7 +13,7 @@ describe("ItemUnitService", () => {
                 name: `Item Unit Test ${crypto.randomUUID()}`,
                 normalized_key: `item unit test ${crypto.randomUUID()}`,
                 category: "FEED",
-                unit: "KG",
+                unit: "G",
             },
         });
         itemId = item.id;
@@ -40,7 +40,7 @@ describe("ItemUnitService", () => {
     test("create with a duplicate item_id+unit throws conflict", async () => {
         const itemUnit = await ItemUnitService.create({
             item_id: itemId,
-            unit: "LITER",
+            unit: "SACHETS",
             factor_to_base: 20,
             is_purchasable: true,
             is_usable: false,
@@ -50,7 +50,7 @@ describe("ItemUnitService", () => {
         await expect(
             ItemUnitService.create({
                 item_id: itemId,
-                unit: "LITER",
+                unit: "SACHETS",
                 factor_to_base: 25,
                 is_purchasable: true,
                 is_usable: false,
@@ -62,7 +62,7 @@ describe("ItemUnitService", () => {
         await expect(
             ItemUnitService.create({
                 item_id: itemId,
-                unit: "KG",
+                unit: "G",
                 factor_to_base: 1,
                 is_purchasable: true,
                 is_usable: false,
@@ -82,10 +82,49 @@ describe("ItemUnitService", () => {
         ).rejects.toMatchObject({ status: 400 });
     });
 
+    test("create with a unit from a different base-unit family throws bad-request", async () => {
+        // LITER belongs to the ML family -- this item's base unit is G.
+        await expect(
+            ItemUnitService.create({
+                item_id: itemId,
+                unit: "LITER",
+                factor_to_base: 1,
+                is_purchasable: true,
+                is_usable: false,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("create with a fixed-factor unit ignores the client's factor_to_base", async () => {
+        // KG's fixed_factor is 1000 -- the client sending 1 should be overridden, not honored.
+        const itemUnit = await ItemUnitService.create({
+            item_id: itemId,
+            unit: "KG",
+            factor_to_base: 1,
+            is_purchasable: true,
+            is_usable: false,
+        });
+        createdItemUnitIds.push(itemUnit!.id);
+        expect(itemUnit!.factor_to_base.toNumber()).toBe(1000);
+    });
+
+    test("create with a generic cross-family unit (no base_unit) succeeds", async () => {
+        // CONTAINER has no base_unit -- valid for any item's base family, factor stays variable.
+        const itemUnit = await ItemUnitService.create({
+            item_id: itemId,
+            unit: "CONTAINER",
+            factor_to_base: 5000,
+            is_purchasable: true,
+            is_usable: false,
+        });
+        createdItemUnitIds.push(itemUnit!.id);
+        expect(itemUnit!.factor_to_base.toNumber()).toBe(5000);
+    });
+
     test("remove deletes the row; removing an unknown id throws not-found", async () => {
         const itemUnit = await ItemUnitService.create({
             item_id: itemId,
-            unit: "BOX",
+            unit: "MON_40KG",
             factor_to_base: 12,
             is_purchasable: true,
             is_usable: false,

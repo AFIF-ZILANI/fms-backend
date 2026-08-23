@@ -17,7 +17,7 @@ describe("ItemService", () => {
         const item = await ItemService.create({
             name: itemName,
             category: "MEDICINE",
-            unit: "BOTTLE",
+            unit: "ML",
         });
         createdIds.push(item!.id);
 
@@ -29,11 +29,11 @@ describe("ItemService", () => {
 
     test("duplicate normalized name throws a conflict", async () => {
         const base = `Feed ${crypto.randomUUID()}`;
-        const first = await ItemService.create({ name: base, category: "FEED", unit: "BAG" });
+        const first = await ItemService.create({ name: base, category: "FEED", unit: "G" });
         createdIds.push(first!.id);
 
         await expect(
-            ItemService.create({ name: base.toUpperCase(), category: "FEED", unit: "BAG" }),
+            ItemService.create({ name: base.toUpperCase(), category: "FEED", unit: "G" }),
         ).rejects.toMatchObject({ status: 409 });
     });
 
@@ -68,7 +68,7 @@ describe("ItemService", () => {
     });
 
     test("listing filters by category", async () => {
-        const item = await ItemService.create({ name: name(), category: "VACCINE", unit: "VIAL" });
+        const item = await ItemService.create({ name: name(), category: "VACCINE", unit: "DOSE" });
         createdIds.push(item!.id);
 
         const { items } = await ItemService.getAll({ page: 1, limit: 100, category: "VACCINE" });
@@ -77,7 +77,7 @@ describe("ItemService", () => {
     });
 
     test("listing includes each item's itemUnits (purchase-unit picker needs this without an N+1 getById)", async () => {
-        const item = await ItemService.create({ name: name(), category: "FEED", unit: "KG" });
+        const item = await ItemService.create({ name: name(), category: "FEED", unit: "G" });
         createdIds.push(item!.id);
         const itemUnit = await prisma.itemUnit.create({
             data: { item_id: item!.id, unit: "BAG", factor_to_base: 50 },
@@ -94,7 +94,7 @@ describe("ItemService", () => {
         const below = await ItemService.create({
             name: `Below Reorder ${crypto.randomUUID()}`,
             category: "FEED",
-            unit: "BAG",
+            unit: "G",
             reorder_level: 50,
         });
         createdIds.push(below!.id);
@@ -113,7 +113,7 @@ describe("ItemService", () => {
         const above = await ItemService.create({
             name: `Above Reorder ${crypto.randomUUID()}`,
             category: "FEED",
-            unit: "BAG",
+            unit: "G",
             reorder_level: 5,
         });
         createdIds.push(above!.id);
@@ -132,7 +132,7 @@ describe("ItemService", () => {
         const noReorderLevel = await ItemService.create({
             name: `No Reorder Level ${crypto.randomUUID()}`,
             category: "FEED",
-            unit: "BAG",
+            unit: "G",
         });
         createdIds.push(noReorderLevel!.id);
 
@@ -148,7 +148,7 @@ describe("ItemService", () => {
         const item = await ItemService.create({
             name: `Poultry Waste ${crypto.randomUUID()}`,
             category: "WASTE",
-            unit: "BAG",
+            unit: "G",
         });
         createdIds.push(item!.id);
 
