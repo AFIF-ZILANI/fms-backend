@@ -157,6 +157,7 @@ describe("ConsumptionService", () => {
         });
         expect(ledgerEntry?.direction).toBe("OUT");
         expect(ledgerEntry?.quantity.toNumber()).toBe(30);
+        expect(ledgerEntry?.location_type).toBeNull();
     });
 
     test("coded draw that exactly empties the unit flips to CONSUMED", async () => {

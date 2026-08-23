@@ -123,8 +123,13 @@ export const ConsumptionService = {
                     reason: "CONSUMPTION",
                     ref_type: "CONSUMPTION",
                     ref_id: consumption.id,
-                    location_type: "HOUSE",
-                    location_id: data.house_id,
+                    // Aggregate draws only -- the coded StockUnit path is a separate mechanism whose IN
+                    // side is never HOUSE-tagged (Purchase tags coded units WAREHOUSE; "Relocate" writes
+                    // no ledger row at all), so tagging its OUT here would drive house balances negative.
+                    ...(data.stock_unit_id === undefined && {
+                        location_type: "HOUSE" as const,
+                        location_id: data.house_id,
+                    }),
                 });
 
                 return consumption;
