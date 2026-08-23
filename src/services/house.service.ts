@@ -1,6 +1,7 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { getLocationStock } from "@lib/stock-balance";
 import type {
     CreateHouseInput,
     UpdateHouseInput,
@@ -33,6 +34,26 @@ export const HouseService = {
         const house = await prisma.houses.findUnique({ where: { id } });
         if (!house) throw AppError.notFound("House");
         return house;
+    },
+
+    async getStock(id: string) {
+        const house = await prisma.houses.findUnique({ where: { id } });
+        if (!house) throw AppError.notFound("House");
+
+        const balances = await getLocationStock("HOUSE", id);
+        const nonZero = balances.filter((b) => !b.balance.isZero());
+        const items = await prisma.item.findMany({
+            where: { id: { in: nonZero.map((b) => b.item_id) } },
+            select: { id: true, name: true, unit: true },
+        });
+        const itemById = new Map(items.map((i) => [i.id, i]));
+
+        return nonZero.map((b) => ({
+            item_id: b.item_id,
+            item_name: itemById.get(b.item_id)?.name ?? "Unknown item",
+            unit: itemById.get(b.item_id)?.unit ?? "",
+            balance: b.balance,
+        }));
     },
 
     // No uniqueness constraint on Houses (no @@unique in schema) -- create

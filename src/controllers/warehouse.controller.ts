@@ -25,6 +25,13 @@ export const WarehouseController = {
         });
     },
 
+    async getStock(c: Context) {
+        return withHandler(c, async () => {
+            const stock = await WarehouseService.getStock(c.req.param("id") ?? "");
+            return sendSuccess(c, stock, "Warehouse stock fetched successfully");
+        });
+    },
+
     async create(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreateWarehouseInput>(c, "json");

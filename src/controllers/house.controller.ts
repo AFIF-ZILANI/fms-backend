@@ -25,6 +25,13 @@ export const HouseController = {
         });
     },
 
+    async getStock(c: Context) {
+        return withHandler(c, async () => {
+            const stock = await HouseService.getStock(c.req.param("id") ?? "");
+            return sendSuccess(c, stock, "House stock fetched successfully");
+        });
+    },
+
     async create(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreateHouseInput>(c, "json");
