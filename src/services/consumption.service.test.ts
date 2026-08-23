@@ -298,7 +298,7 @@ describe("ConsumptionService", () => {
         });
         createdItemIds.push(mlItem.id);
         const itemUnit = await prisma.itemUnit.create({
-            data: { item_id: mlItem.id, unit: "L", factor_to_base: 1000, is_usable: true },
+            data: { item_id: mlItem.id, unit: "LITER", factor_to_base: 1000, is_usable: true },
         });
         createdItemUnitIds.push(itemUnit.id);
         const mlPurchase = await prisma.purchase.create({
@@ -316,7 +316,7 @@ describe("ConsumptionService", () => {
                 purchase_id: mlPurchase.id,
                 item_id: mlItem.id,
                 quantity: 1,
-                unit: "L",
+                unit: "LITER",
                 base_quantity: 1000,
                 unit_price: 300,
                 total_price: 300,
@@ -336,7 +336,7 @@ describe("ConsumptionService", () => {
             item_id: mlItem.id,
             stock_unit_id: unit!.id,
             quantity: 0.5,
-            unit: "L",
+            unit: "LITER",
             date: new Date(),
             recorded_by_id: profileId,
         });

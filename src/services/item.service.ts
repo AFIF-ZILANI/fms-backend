@@ -139,14 +139,28 @@ export const ItemUnitService = {
             where: { id: data.item_id },
             select: { unit: true },
         });
-        if (item && item.unit === data.unit) {
+        if (!item) throw AppError.badRequest("item_id does not reference an existing record");
+        if (item.unit === data.unit) {
             throw AppError.badRequest(
                 "unit already is this item's base unit -- no conversion factor needed",
             );
         }
 
+        const unitRow = await prisma.unit.findUnique({ where: { code: data.unit } });
+        if (!unitRow) throw AppError.badRequest("unit does not reference a known unit code");
+        // A unit tied to a specific base family (e.g. LITER -> ML) can't be added to an item whose
+        // own base unit is different (e.g. G) -- a null base_unit means "generic", valid everywhere.
+        if (unitRow.base_unit !== null && unitRow.base_unit !== item.unit) {
+            throw AppError.badRequest(
+                `"${data.unit}" belongs to the ${unitRow.base_unit} family, not this item's base unit "${item.unit}"`,
+            );
+        }
+        // A fixed_factor is a physical constant (Liter=1000, Ft=0.3048, ...) -- always use it over
+        // whatever the client sent, so a typo can't desync an item's conversion from reality.
+        const factor_to_base = unitRow.fixed_factor ?? data.factor_to_base;
+
         try {
-            return await prisma.itemUnit.create({ data });
+            return await prisma.itemUnit.create({ data: { ...data, factor_to_base } });
         } catch (err) {
             return handlePrismaWriteError(err);
         }
