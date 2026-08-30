@@ -5,6 +5,7 @@ import {
     provisionStockUnitsSchema,
     bindStockUnitSchema,
     relocateStockUnitSchema,
+    setStockUnitStatusSchema,
     listStockUnitsQuerySchema,
 } from "@validators/stock-unit.validator";
 
@@ -32,3 +33,9 @@ stockUnitRoutes.post(
     StockUnitController.relocate,
 );
 stockUnitRoutes.post("/:id/dispose", StockUnitController.dispose);
+stockUnitRoutes.patch(
+    "/:id/status",
+    zValidatorRfc7807("json", setStockUnitStatusSchema),
+    StockUnitController.setStatus,
+);
+stockUnitRoutes.delete("/:id", StockUnitController.remove);

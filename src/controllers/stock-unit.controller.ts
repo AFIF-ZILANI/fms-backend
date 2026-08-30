@@ -7,6 +7,7 @@ import type {
     ProvisionStockUnitsInput,
     BindStockUnitInput,
     RelocateStockUnitInput,
+    SetStockUnitStatusInput,
     ListStockUnitsQuery,
 } from "@validators/stock-unit.validator";
 
@@ -58,6 +59,21 @@ export const StockUnitController = {
         return withHandler(c, async () => {
             const unit = await StockUnitService.dispose(c.req.param("id") ?? "");
             return sendSuccess(c, unit, "Stock unit disposed");
+        });
+    },
+
+    async setStatus(c: Context) {
+        return withHandler(c, async () => {
+            const body = getValid<SetStockUnitStatusInput>(c, "json");
+            const unit = await StockUnitService.setStatus(c.req.param("id") ?? "", body.status);
+            return sendSuccess(c, unit, "Stock unit status updated");
+        });
+    },
+
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await StockUnitService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "Stock unit deleted");
         });
     },
 };

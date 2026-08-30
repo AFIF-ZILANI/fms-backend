@@ -2,7 +2,11 @@ import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
-import type { BindStockUnitInput, ListStockUnitsQuery } from "@validators/stock-unit.validator";
+import type {
+    BindStockUnitInput,
+    ListStockUnitsQuery,
+    SetStockUnitStatusInput,
+} from "@validators/stock-unit.validator";
 
 // Latest allocation = current location. Included on reads so callers still get "where is it".
 const withRelations = {
@@ -23,6 +27,8 @@ export const StockUnitService = {
             ...(query.category !== undefined && {
                 purchase_item: { item: { category: query.category } },
             }),
+            // Search by unit id (the QR payload) -- full scanned id or a fragment.
+            ...(query.q !== undefined && { id: { contains: query.q, mode: "insensitive" as const } }),
         };
         const [stockUnits, total] = await Promise.all([
             prisma.stockUnit.findMany({
@@ -84,5 +90,33 @@ export const StockUnitService = {
         if (!unit) throw AppError.notFound("StockUnit");
         if (unit.status === "DISPOSED") throw AppError.conflict("StockUnit is already disposed");
         return prisma.stockUnit.update({ where: { id }, data: { status: "DISPOSED" } });
+    },
+
+    /** Free status set for the manual "change status" action -- no transition guards (unlike
+     *  bind/dispose), the operator picks the target status directly. */
+    async setStatus(id: string, status: SetStockUnitStatusInput["status"]) {
+        const unit = await prisma.stockUnit.findUnique({ where: { id } });
+        if (!unit) throw AppError.notFound("StockUnit");
+        return prisma.stockUnit.update({ where: { id }, data: { status } });
+    },
+
+    /** Hard delete -- for mistakenly-provisioned/bound codes. Its house-allocation event log is
+     *  purged with it (safe: just move history). A unit that's been consumed from or turned into an
+     *  asset is real data, not a mistake, so those are refused rather than silently orphaned. */
+    async remove(id: string) {
+        const unit = await prisma.stockUnit.findUnique({
+            where: { id },
+            include: { _count: { select: { consumptions: true } }, asset: true },
+        });
+        if (!unit) throw AppError.notFound("StockUnit");
+        if (unit._count.consumptions > 0 || unit.asset) {
+            throw AppError.conflict(
+                "Cannot delete a unit with consumption history or a linked asset",
+            );
+        }
+        await prisma.$transaction([
+            prisma.stockHouseAllocation.deleteMany({ where: { stock_unit_id: id } }),
+            prisma.stockUnit.delete({ where: { id } }),
+        ]);
     },
 };
