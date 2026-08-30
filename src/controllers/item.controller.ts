@@ -33,6 +33,13 @@ export const ItemController = {
         });
     },
 
+    async getStockByLocation(c: Context) {
+        return withHandler(c, async () => {
+            const rows = await ItemService.getStockByLocation();
+            return sendSuccess(c, rows, "Stock by location fetched successfully");
+        });
+    },
+
     async create(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreateItemInput>(c, "json");

@@ -10,7 +10,7 @@ import type {
     CreateItemUnitInput,
 } from "@validators/item.validator";
 import { Prisma } from "../../prisma/generated/prisma/client";
-import { getItemBalances } from "@lib/stock-balance";
+import { getItemBalances, getStockByLocation } from "@lib/stock-balance";
 import { GENERIC_ITEM_UNITS } from "@lib/enums";
 
 const include = { suppliers: true, itemUnits: true } as const;
@@ -131,6 +131,12 @@ export const ItemService = {
                 current_balance: balances.get(item.id) ?? new Prisma.Decimal(0),
             }))
             .filter((item) => item.current_balance.lessThan(item.reorder_level!));
+    },
+
+    /** Per-(item, location) on-hand stock for every item, feeding the catalog's warehouse/house
+     * columns and their breakdown sheets in one call. See getStockByLocation for what's excluded. */
+    async getStockByLocation() {
+        return getStockByLocation();
     },
 };
 
