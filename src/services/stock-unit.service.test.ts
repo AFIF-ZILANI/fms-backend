@@ -69,6 +69,9 @@ describe("StockUnitService", () => {
     });
 
     afterAll(async () => {
+        await prisma.stockHouseAllocation.deleteMany({
+            where: { stock_unit_id: { in: createdUnitIds } },
+        });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
         await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });
@@ -80,36 +83,24 @@ describe("StockUnitService", () => {
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 
-    test("provision creates N unassigned units with unique codes", async () => {
+    test("provision creates N unassigned units with unique ids", async () => {
         const units = await StockUnitService.provision(3);
         createdUnitIds.push(...units.map((u) => u.id));
 
         expect(units.length).toBe(3);
         expect(units.every((u) => u.status === "UNASSIGNED")).toBe(true);
-        expect(new Set(units.map((u) => u.code)).size).toBe(3);
+        expect(new Set(units.map((u) => u.id)).size).toBe(3);
     });
 
-    test("getByCode finds a provisioned unit", async () => {
-        const [unit] = await StockUnitService.provision(1);
-        createdUnitIds.push(unit!.id);
-
-        const found = await StockUnitService.getByCode(unit!.code);
-        expect(found.id).toBe(unit!.id);
-    });
-
-    test("bind transitions UNASSIGNED -> IN_STOCK and sets quantities", async () => {
+    test("bind transitions UNASSIGNED -> IN_STOCK", async () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);
 
         const bound = await StockUnitService.bind(unit!.id, {
             purchase_item_id: purchaseItemId,
-            initial_quantity: 500,
-            bound_by_id: profileId,
         });
         expect(bound.status).toBe("IN_STOCK");
         expect(bound.purchase_item_id).toBe(purchaseItemId);
-        expect(bound.initial_quantity?.toNumber()).toBe(500);
-        expect(bound.remaining_quantity?.toNumber()).toBe(500);
         expect(bound.bound_at).not.toBeNull();
     });
 
@@ -134,12 +125,13 @@ describe("StockUnitService", () => {
         ).rejects.toMatchObject({ status: 409 });
     });
 
-    test("relocate sets house_id", async () => {
+    test("relocate logs a house allocation", async () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);
 
-        const relocated = await StockUnitService.relocate(unit!.id, houseId);
+        const relocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
         expect(relocated.house_id).toBe(houseId);
+        expect(relocated.stock_unit_id).toBe(unit!.id);
     });
 
     test("dispose sets status DISPOSED and rejects double-dispose", async () => {
@@ -194,7 +186,7 @@ describe("StockUnitService", () => {
         });
         equipmentPurchaseItemId = equipmentPurchaseItem.id;
         await StockUnitService.bind(equipmentUnit!.id, { purchase_item_id: equipmentPurchaseItem.id });
-        await StockUnitService.relocate(equipmentUnit!.id, houseId);
+        await StockUnitService.relocate(equipmentUnit!.id, houseId, crypto.randomUUID());
 
         const { stockUnits } = await StockUnitService.getAll({
             page: 1,
@@ -204,7 +196,7 @@ describe("StockUnitService", () => {
         const found = stockUnits.find((u) => u.id === equipmentUnit!.id);
         expect(found).toBeDefined();
         expect(found!.purchase_item?.item.name).toBe(equipmentItem.name);
-        expect(found!.house?.id).toBe(houseId);
+        expect(found!.houseAllocations[0]?.house.id).toBe(houseId);
 
         const [medicineUnit] = await StockUnitService.provision(1);
         createdUnitIds.push(medicineUnit!.id);

@@ -26,13 +26,6 @@ export const StockUnitController = {
         });
     },
 
-    async getByCode(c: Context) {
-        return withHandler(c, async () => {
-            const unit = await StockUnitService.getByCode(c.req.param("code") ?? "");
-            return sendSuccess(c, unit, "Stock unit fetched successfully");
-        });
-    },
-
     async provision(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<ProvisionStockUnitsInput>(c, "json");
@@ -52,7 +45,11 @@ export const StockUnitController = {
     async relocate(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<RelocateStockUnitInput>(c, "json");
-            const unit = await StockUnitService.relocate(c.req.param("id") ?? "", body.house_id);
+            const unit = await StockUnitService.relocate(
+                c.req.param("id") ?? "",
+                body.house_id,
+                body.idempotency_key ?? crypto.randomUUID(),
+            );
             return sendSuccess(c, unit, "Stock unit relocated");
         });
     },

@@ -16,7 +16,6 @@ stockUnitRoutes.get(
     StockUnitController.getAll,
 );
 stockUnitRoutes.get("/:id", StockUnitController.getById);
-stockUnitRoutes.get("/code/:code", StockUnitController.getByCode);
 stockUnitRoutes.post(
     "/",
     zValidatorRfc7807("json", provisionStockUnitsSchema),
