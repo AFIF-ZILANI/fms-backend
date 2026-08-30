@@ -209,4 +209,47 @@ describe("StockUnitService", () => {
         });
         expect(equipmentOnly.some((u) => u.id === medicineUnit!.id)).toBe(false);
     });
+
+    test("setStatus sets an arbitrary status with no transition guard", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        const updated = await StockUnitService.setStatus(unit!.id, "CONSUMED");
+        expect(updated.status).toBe("CONSUMED");
+    });
+
+    test("remove hard-deletes an unbound unit and purges its house allocations", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+
+        await StockUnitService.remove(unit!.id);
+
+        await expect(StockUnitService.getById(unit!.id)).rejects.toBeInstanceOf(AppError);
+        const orphans = await prisma.stockHouseAllocation.count({
+            where: { stock_unit_id: unit!.id },
+        });
+        expect(orphans).toBe(0);
+    });
+
+    test("remove refuses a unit that has consumption history", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        const consumption = await prisma.consumption.create({
+            data: {
+                house_id: houseId,
+                item_id: itemId,
+                quantity: 1,
+                unit: "BOTTLE",
+                base_quantity: 1,
+                date: new Date(),
+                recorded_by_id: profileId,
+                idempotency_key: crypto.randomUUID(),
+                stock_unit_id: unit!.id,
+            },
+        });
+
+        await expect(StockUnitService.remove(unit!.id)).rejects.toMatchObject({ status: 409 });
+
+        await prisma.consumption.delete({ where: { id: consumption.id } });
+    });
 });
