@@ -9,8 +9,9 @@ export const resourceCategorySchema = z.string().min(1, "Category is required");
 
 /** Item.unit is restricted to the 6 canonical base units -- every other unit code converts to
  * one of these via Unit.base_unit/fixed_factor, so an item's own base unit can never itself be
- * a "derived" unit. */
-export const ITEM_BASE_UNITS = ["ML", "G", "UNIT", "DOSE", "PCS", "METER"] as const;
+ * a "derived" unit. Mass/volume anchor at KG/LITER (not G/ML) so bulk feed stays small and never
+ * overflows Decimal quantity columns; G and ML are now derived and used as fine dosing (usable) units. */
+export const ITEM_BASE_UNITS = ["LITER", "KG", "UNIT", "DOSE", "PCS", "METER"] as const;
 export const itemBaseUnitSchema = z.enum(ITEM_BASE_UNITS);
 
 /** Units valid as an ItemUnit conversion under ANY base-unit family, not just one (Container can

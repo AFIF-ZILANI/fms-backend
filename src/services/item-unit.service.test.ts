@@ -13,7 +13,7 @@ describe("ItemUnitService", () => {
                 name: `Item Unit Test ${crypto.randomUUID()}`,
                 normalized_key: `item unit test ${crypto.randomUUID()}`,
                 category: "FEED",
-                unit: "G",
+                unit: "KG",
             },
         });
         itemId = item.id;
@@ -62,7 +62,7 @@ describe("ItemUnitService", () => {
         await expect(
             ItemUnitService.create({
                 item_id: itemId,
-                unit: "G",
+                unit: "KG",
                 factor_to_base: 1,
                 is_purchasable: true,
                 is_usable: false,
@@ -83,11 +83,11 @@ describe("ItemUnitService", () => {
     });
 
     test("create with a unit from a different base-unit family throws bad-request", async () => {
-        // LITER belongs to the ML family -- this item's base unit is G.
+        // ML belongs to the LITER family -- this item's base unit is KG.
         await expect(
             ItemUnitService.create({
                 item_id: itemId,
-                unit: "LITER",
+                unit: "ML",
                 factor_to_base: 1,
                 is_purchasable: true,
                 is_usable: false,
@@ -96,16 +96,16 @@ describe("ItemUnitService", () => {
     });
 
     test("create with a fixed-factor unit ignores the client's factor_to_base", async () => {
-        // KG's fixed_factor is 1000 -- the client sending 1 should be overridden, not honored.
+        // G's fixed_factor is 0.001 -- the client sending 1 should be overridden, not honored.
         const itemUnit = await ItemUnitService.create({
             item_id: itemId,
-            unit: "KG",
+            unit: "G",
             factor_to_base: 1,
             is_purchasable: true,
             is_usable: false,
         });
         createdItemUnitIds.push(itemUnit!.id);
-        expect(itemUnit!.factor_to_base.toNumber()).toBe(1000);
+        expect(itemUnit!.factor_to_base.toNumber()).toBe(0.001);
     });
 
     test("create with a base unit itself (not this item's own) throws bad-request", async () => {

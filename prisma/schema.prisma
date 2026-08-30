@@ -266,13 +266,15 @@ model Unit {
   code       String   @unique
   label      String
   is_active  Boolean  @default(true)
-  // Canonical base-unit hierarchy: exactly 6 units have is_base = true (ML, G, UNIT, DOSE, PCS,
-  // METER) -- Item.unit is restricted to these. Every other unit optionally names which base family
-  // it converts to (base_unit) and, when the ratio is a physical constant (Liter=1000, Kg=1000,
-  // Ft=0.3048, ...), the fixed factor to that base -- a null fixed_factor means the conversion is
-  // package-size-dependent and entered per item (ItemUnit.factor_to_base) instead. base_unit is null
-  // both for the 6 base units themselves and for generic cross-family package units (e.g. Container,
-  // which can hold either a liquid or a solid depending on the item).
+  // Canonical base-unit hierarchy: exactly 6 units have is_base = true (LITER, KG, UNIT, DOSE, PCS,
+  // METER) -- Item.unit is restricted to these. Mass/volume anchor at KG/LITER so bulk feed (e.g. 30
+  // metric ton = 30,000 KG) stays a small, non-overflowing number. Every other unit optionally names
+  // which base family it converts to (base_unit) and, when the ratio is a physical constant
+  // (MetricTon=1000, G=0.001, ML=0.001, Ft=0.3048, ...), the fixed factor to that base -- a null
+  // fixed_factor means the conversion is package-size-dependent and entered per item
+  // (ItemUnit.factor_to_base) instead. G and ML are derived units (base_unit KG/LITER) used for fine
+  // dosing. base_unit is null both for the 6 base units themselves and for generic cross-family
+  // package units (e.g. Container, which can hold either a liquid or a solid depending on the item).
   is_base      Boolean  @default(false)
   base_unit    String?
   baseUnitRef  Unit?    @relation("UnitFamily", fields: [base_unit], references: [code], onUpdate: Cascade)
@@ -573,8 +575,8 @@ model Item {
   unit                  String
   unitRef               Unit         @relation(fields: [unit], references: [code], onUpdate: Cascade)
   meta_data             Json?
-  reorder_level         Decimal?     @db.Decimal(10, 3)
-  preferred_reorder_qty Decimal?     @db.Decimal(10, 3)
+  reorder_level         Decimal?     @db.Decimal(13, 4)
+  preferred_reorder_qty Decimal?     @db.Decimal(13, 4)
   lead_time_days        Int?
   is_active             Boolean      @default(true)
   created_at            DateTime     @default(now())
@@ -647,7 +649,7 @@ model PurchaseItem {
   quantity        Decimal       @db.Decimal(10, 3)
   unit            String
   unitRef         Unit          @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  base_quantity   Decimal       @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
+  base_quantity   Decimal       @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
   unit_price      Decimal       @db.Decimal(10, 2)
   // Per-line discount, e.g. a supplier knocking a few taka off one line. Null discount_value = none.
   discount_type   DiscountType?
@@ -675,8 +677,8 @@ model StockUnit {
   purchase_item_id   String? // null = blank, pre-printed, not yet bound to a lot
   purchase_item      PurchaseItem?   @relation(fields: [purchase_item_id], references: [id])
   status             StockUnitStatus @default(UNASSIGNED)
-  initial_quantity   Decimal?        @db.Decimal(10, 3) // e.g. 1000 (mL); null for equipment
-  remaining_quantity Decimal?        @db.Decimal(10, 3)
+  initial_quantity   Decimal?        @db.Decimal(13, 4) // e.g. 1 (LITER); null for equipment
+  remaining_quantity Decimal?        @db.Decimal(13, 4)
   house_id           String? // current physical location, updated manually — not auto-synced to BatchHouseAllocation
   house              Houses?         @relation(fields: [house_id], references: [id])
   bound_by_id        String?
@@ -734,7 +736,7 @@ model Consumption {
   quantity        Decimal    @db.Decimal(10, 3) // feed: allocation amount; medicine: dose drawn; equipment: 1 (non-depleting)
   unit            String
   unitRef         Unit       @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  base_quantity   Decimal    @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
+  base_quantity   Decimal    @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
   date            DateTime
   note            String?
   recorded_by_id  String
@@ -853,7 +855,7 @@ model StockLedger {
   id              String         @id @default(uuid())
   item_id         String
   item            Item           @relation(fields: [item_id], references: [id])
-  quantity        Decimal        @db.Decimal(10, 3)
+  quantity        Decimal        @db.Decimal(13, 4)
   direction       StockDirection
   reason          StockReason
   unit_cost       Decimal?       @db.Decimal(10, 2)
@@ -876,9 +878,9 @@ model InventoryAdjustment {
   warehouse           Warehouses? @relation(fields: [warehouse_id], references: [id], onDelete: Cascade)
   house_id            String?
   house               Houses?     @relation(fields: [house_id], references: [id], onDelete: Cascade)
-  quantity_before     Decimal     @db.Decimal(10, 3)
-  quantity_after      Decimal     @db.Decimal(10, 3)
-  adjustment_quantity Decimal     @db.Decimal(10, 3)
+  quantity_before     Decimal     @db.Decimal(13, 4)
+  quantity_after      Decimal     @db.Decimal(13, 4)
+  adjustment_quantity Decimal     @db.Decimal(13, 4)
   reason              String
   note                String?
   recorded_by_id      String
@@ -900,7 +902,7 @@ model StockTransfer {
   quantity          Decimal    @db.Decimal(10, 3) // as entered, in `unit`
   unit              String
   unitRef           Unit       @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  base_quantity     Decimal    @db.Decimal(10, 3) // quantity converted to Item.unit, snapshotted at write time
+  base_quantity     Decimal    @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
   note              String?
   recorded_by_id    String
   recorded_by       Profiles   @relation(fields: [recorded_by_id], references: [id])
