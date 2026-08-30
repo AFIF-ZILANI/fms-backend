@@ -10,12 +10,11 @@ export const provisionStockUnitsSchema = z.object({
 
 export const bindStockUnitSchema = z.object({
     purchase_item_id: z.string().uuid(),
-    initial_quantity: z.coerce.number().positive().optional(),
-    bound_by_id: z.string().uuid().optional(),
 });
 
 export const relocateStockUnitSchema = z.object({
     house_id: z.string().uuid(),
+    idempotency_key: z.string().min(1).optional(),
 });
 
 export const listStockUnitsQuerySchema = paginationQuerySchema.extend({

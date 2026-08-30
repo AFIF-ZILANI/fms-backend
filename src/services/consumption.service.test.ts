@@ -126,13 +126,10 @@ describe("ConsumptionService", () => {
         expect(ledgerEntry?.quantity.toNumber()).toBe(25);
     });
 
-    test("coded draw decrements StockUnit.remaining_quantity and flips to IN_USE", async () => {
+    test("coded draw flips the unit IN_STOCK -> IN_USE and posts a StockLedger OUT", async () => {
         const [unit] = await StockUnitService.provision(1);
         createdStockUnitIds.push(unit!.id);
-        await StockUnitService.bind(unit!.id, {
-            purchase_item_id: purchaseItemId,
-            initial_quantity: 100,
-        });
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
 
         const consumption = await ConsumptionService.create({
             house_id: houseId,
@@ -146,7 +143,6 @@ describe("ConsumptionService", () => {
         createdConsumptionIds.push(consumption!.id);
 
         const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
-        expect(updatedUnit.remaining_quantity?.toNumber()).toBe(70);
         expect(updatedUnit.status).toBe("IN_USE");
 
         // coded draws now also post a StockLedger OUT entry, symmetric with
@@ -160,53 +156,28 @@ describe("ConsumptionService", () => {
         expect(ledgerEntry?.location_type).toBeNull();
     });
 
-    test("coded draw that exactly empties the unit flips to CONSUMED", async () => {
+    test("coded draws no longer track per-unit quantity: repeated draws stay IN_USE", async () => {
+        // ponytail: qty columns were dropped, so there is no per-unit remaining/overdraw
+        // guard and no auto-CONSUMED. A unit just stays IN_USE until manually consumed/disposed.
         const [unit] = await StockUnitService.provision(1);
         createdStockUnitIds.push(unit!.id);
-        await StockUnitService.bind(unit!.id, {
-            purchase_item_id: purchaseItemId,
-            initial_quantity: 10,
-        });
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
 
-        const consumption = await ConsumptionService.create({
-            house_id: houseId,
-            item_id: medicineItemId,
-            stock_unit_id: unit!.id,
-            quantity: 10,
-            unit: "BOTTLE",
-            date: new Date(),
-            recorded_by_id: profileId,
-        });
-        createdConsumptionIds.push(consumption!.id);
-
-        const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
-        expect(updatedUnit.status).toBe("CONSUMED");
-        expect(updatedUnit.remaining_quantity?.toNumber()).toBe(0);
-    });
-
-    test("coded draw exceeding remaining_quantity throws a conflict and rolls back", async () => {
-        const [unit] = await StockUnitService.provision(1);
-        createdStockUnitIds.push(unit!.id);
-        await StockUnitService.bind(unit!.id, {
-            purchase_item_id: purchaseItemId,
-            initial_quantity: 5,
-        });
-
-        await expect(
-            ConsumptionService.create({
+        for (const qty of [40, 40]) {
+            const consumption = await ConsumptionService.create({
                 house_id: houseId,
                 item_id: medicineItemId,
                 stock_unit_id: unit!.id,
-                quantity: 50,
+                quantity: qty,
                 unit: "BOTTLE",
                 date: new Date(),
                 recorded_by_id: profileId,
-            }),
-        ).rejects.toMatchObject({ status: 409 });
+            });
+            createdConsumptionIds.push(consumption!.id);
+        }
 
-        const untouchedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
-        expect(untouchedUnit.remaining_quantity?.toNumber()).toBe(5);
-        expect(untouchedUnit.status).toBe("IN_STOCK");
+        const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
+        expect(updatedUnit.status).toBe("IN_USE");
     });
 
     test("drawing from a DISPOSED unit throws a conflict", async () => {
@@ -315,7 +286,7 @@ describe("ConsumptionService", () => {
         expect(ledgerEntry?.quantity.toNumber()).toBe(100);
     });
 
-    test("coded draw entered in a non-base unit converts before depleting StockUnit.remaining_quantity", async () => {
+    test("coded draw entered in a non-base unit converts before posting the StockLedger OUT", async () => {
         const mlItem = await prisma.item.create({
             data: {
                 name: `Consumption Coded Conversion Item ${crypto.randomUUID()}`,
@@ -356,7 +327,6 @@ describe("ConsumptionService", () => {
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, {
             purchase_item_id: mlPurchaseItem.id,
-            initial_quantity: 3000, // a 3L bottle, in mL (base unit)
         });
 
         const consumption = await ConsumptionService.create({
@@ -370,8 +340,14 @@ describe("ConsumptionService", () => {
         });
         createdConsumptionIds.push(consumption!.id);
 
+        // 0.5 L -> 500 mL (base) is what lands on the ledger; the unit itself no longer tracks qty.
+        const ledgerEntry = await prisma.stockLedger.findFirst({
+            where: { ref_type: "CONSUMPTION", ref_id: consumption!.id },
+        });
+        expect(ledgerEntry?.quantity.toNumber()).toBe(500);
+
         const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
-        expect(updatedUnit.remaining_quantity?.toNumber()).toBe(2500);
+        expect(updatedUnit.status).toBe("IN_USE");
     });
 });
 

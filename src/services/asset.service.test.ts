@@ -11,6 +11,9 @@ const createdHouseIds: string[] = [];
 describe("AssetService", () => {
     afterAll(async () => {
         await prisma.asset.deleteMany({ where: { id: { in: createdAssetIds } } });
+        await prisma.stockHouseAllocation.deleteMany({
+            where: { stock_unit_id: { in: createdUnitIds } },
+        });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: createdHouseIds } } });
     });
@@ -34,7 +37,7 @@ describe("AssetService", () => {
         expect(found.stock_unit.id).toBe(unit!.id);
     });
 
-    test("getById includes stock_unit.house when stock unit relocated", async () => {
+    test("stock unit relocation is recorded as a house allocation", async () => {
         const house = await prisma.houses.create({
             data: { name: "Test House", type: "BROODER", number: 1 },
         });
@@ -43,7 +46,7 @@ describe("AssetService", () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);
 
-        await StockUnitService.relocate(unit!.id, house.id);
+        await StockUnitService.relocate(unit!.id, house.id, crypto.randomUUID());
 
         const asset = await AssetService.create({
             stock_unit_id: unit!.id,
@@ -55,8 +58,12 @@ describe("AssetService", () => {
         createdAssetIds.push(asset!.id);
 
         const found = await AssetService.getById(asset!.id);
-        expect(found.stock_unit.house?.id).toBe(house.id);
-        expect(found.stock_unit.house?.name).toBe("Test House");
+        expect(found.stock_unit.id).toBe(unit!.id);
+
+        const alloc = await prisma.stockHouseAllocation.findFirst({
+            where: { stock_unit_id: unit!.id },
+        });
+        expect(alloc?.house_id).toBe(house.id);
     });
 
     test("duplicate stock_unit_id throws a conflict", async () => {

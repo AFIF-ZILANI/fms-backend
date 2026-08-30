@@ -147,7 +147,6 @@ describe("PurchaseService", () => {
         const [unit] = await StockUnitService.provision(1);
         const bound = await StockUnitService.bind(unit!.id, {
             purchase_item_id: purchaseItemId,
-            initial_quantity: 1000,
         });
         expect(bound.status).toBe("IN_STOCK");
         expect(bound.purchase_item_id).toBe(purchaseItemId);

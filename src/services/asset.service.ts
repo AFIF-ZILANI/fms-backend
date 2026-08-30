@@ -23,7 +23,7 @@ export const AssetService = {
         const asset = await prisma.asset.findUnique({
             where: { id },
             include: {
-                stock_unit: { include: { house: true } },
+                stock_unit: true,
                 depreciations: { include: { batch: true } },
             },
         });

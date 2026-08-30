@@ -36,16 +36,16 @@ export const ConsumptionService = {
     },
 
     /** Two draw paths, branching on stock_unit_id:
-     *  - coded (medicine/vaccine/equipment): decrements StockUnit.remaining_quantity,
-     *    flips status IN_STOCK -> IN_USE, or -> CONSUMED once it hits zero.
-     *    Equipment (remaining_quantity null) just flips to IN_USE once, non-depleting.
-     *  - aggregate (feed etc.): no StockUnit to decrement.
+     *  - coded (medicine/vaccine/equipment): flips StockUnit status IN_STOCK -> IN_USE on first
+     *    use. StockUnit no longer tracks quantity, so there is no per-unit remaining/overdraw
+     *    check and no auto-CONSUMED (dropped with the qty columns); CONSUMED/DISPOSED is manual.
+     *  - aggregate (feed etc.): no StockUnit to flip.
      *  Both paths post a StockLedger OUT entry, symmetric with purchase.service.ts's
      *  unconditional StockLedger IN -- otherwise coded draws never leave the ledger,
      *  which breaks low-stock checks for medicine/vaccine/equipment.
      *  Both paths use base_quantity (data.quantity converted to Item.unit via
-     *  toBaseQuantity), never the raw entered quantity -- StockUnit.remaining_quantity
-     *  and StockLedger are always in the item's base unit. */
+     *  toBaseQuantity), never the raw entered quantity -- StockLedger is always
+     *  in the item's base unit. */
     async create(data: CreateConsumptionInput) {
         try {
             return await prisma.$transaction(async (tx) => {
@@ -67,21 +67,10 @@ export const ConsumptionService = {
                         );
                     }
 
-                    if (unit.remaining_quantity !== null) {
-                        if (unit.remaining_quantity.lessThan(base_quantity)) {
-                            throw AppError.conflict(
-                                "Consumption quantity exceeds remaining stock in this unit",
-                            );
-                        }
-                        const remaining = unit.remaining_quantity.minus(base_quantity);
-                        await tx.stockUnit.update({
-                            where: { id: unitId },
-                            data: {
-                                remaining_quantity: remaining,
-                                status: remaining.isZero() ? "CONSUMED" : "IN_USE",
-                            },
-                        });
-                    } else if (unit.status === "IN_STOCK") {
+                    // ponytail: StockUnit no longer stores quantity, so a coded draw just flips
+                    // IN_STOCK -> IN_USE on first use. No per-unit remaining/overdraw check and no
+                    // auto-CONSUMED -- both went with the qty columns; mark CONSUMED/DISPOSED via the API.
+                    if (unit.status === "IN_STOCK") {
                         await tx.stockUnit.update({
                             where: { id: unitId },
                             data: { status: "IN_USE" },
