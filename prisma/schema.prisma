@@ -352,7 +352,6 @@ model Profiles {
   allocationsRecorded     BatchHouseAllocation[]
   consumptionsRecorded    Consumption[]
   purchasesRecorded       Purchase[]
-  stockUnitsBound         StockUnit[]
   expensesRecorded        Expense[]
   salesRecorded           Sale[]
   birdSalesRecorded       BirdSale[]
@@ -467,7 +466,7 @@ model Houses {
   mortalityLogs        MortalityLog[]
   consumptions         Consumption[]
   environmentRecords   EnvironmentRecords[]
-  stockUnits           StockUnit[]
+  stockHouseAllocations StockHouseAllocation[]
   inventoryAdjustments InventoryAdjustment[]
   birdSales            BirdSale[]
   stockTransfers       StockTransfer[]
@@ -672,25 +671,41 @@ model PurchaseItem {
 // ════════════════════════════════════════════════════════════════════
 
 model StockUnit {
-  id                 String          @id @default(uuid())
-  code               String          @unique // printed as QR + human-readable text
-  purchase_item_id   String? // null = blank, pre-printed, not yet bound to a lot
-  purchase_item      PurchaseItem?   @relation(fields: [purchase_item_id], references: [id])
-  status             StockUnitStatus @default(UNASSIGNED)
-  initial_quantity   Decimal?        @db.Decimal(13, 4) // e.g. 1 (LITER); null for equipment
-  remaining_quantity Decimal?        @db.Decimal(13, 4)
-  house_id           String? // current physical location, updated manually — not auto-synced to BatchHouseAllocation
-  house              Houses?         @relation(fields: [house_id], references: [id])
-  bound_by_id        String?
-  bound_by           Profiles?       @relation(fields: [bound_by_id], references: [id])
-  bound_at           DateTime?
-  created_at         DateTime        @default(now())
+  // id is the QR payload itself — printed directly, no separate human-readable code.
+  // A physical unit = one row: which PurchaseItem (lot) it came from, and its lifecycle status.
+  // No quantity stored — a unit's remaining amount is derived (lot base_quantity ÷ unit count on
+  // that PurchaseItem, minus its Consumption draws). Current location lives in StockHouseAllocation.
+  id               String          @id @default(uuid())
+  purchase_item_id String? // null = blank, pre-printed, not yet bound to a lot
+  purchase_item    PurchaseItem?   @relation(fields: [purchase_item_id], references: [id])
+  status           StockUnitStatus @default(UNASSIGNED)
+  bound_at         DateTime? // when this unit was scan-bound to its lot
+  created_at       DateTime        @default(now())
 
-  consumptions Consumption[]
-  asset        Asset?
+  consumptions     Consumption[]
+  houseAllocations StockHouseAllocation[]
+  asset            Asset?
 
   @@index([purchase_item_id])
   @@index([status])
+}
+
+model StockHouseAllocation {
+  // Event log of where a coded unit physically is. First row = left the warehouse (origin warehouse
+  // derivable via purchase_item → purchase); later rows = house→house moves (A→B→C). Current location
+  // = latest row by occurred_at. Batch is NOT stored — inferred from whichever batch occupied this
+  // house at occurred_at (see BatchHouseAllocation / BatchHouseBalance).
+  id              String    @id @default(uuid())
+  stock_unit_id   String
+  stock_unit      StockUnit @relation(fields: [stock_unit_id], references: [id])
+  house_id        String
+  house           Houses    @relation(fields: [house_id], references: [id])
+  occurred_at     DateTime  @default(now())
+  created_at      DateTime  @default(now())
+  idempotency_key String    @unique // client-generated; prevents double-insert on offline sync retry
+
+  @@index([stock_unit_id])
+  @@index([house_id, occurred_at])
 }
 
 model Asset {
