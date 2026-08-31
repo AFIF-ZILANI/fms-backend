@@ -134,6 +134,44 @@ describe("StockUnitService", () => {
         expect(relocated.stock_unit_id).toBe(unit!.id);
     });
 
+    test("relocate infers ALLOCATION on first move, REALLOCATION on a house->house move, RETURN to warehouse", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        const houseTwo = await prisma.houses.create({
+            data: { name: "Seed House Two", type: "BROODER", number: 98 },
+        });
+
+        const allocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+        expect(allocated.type).toBe("ALLOCATION");
+
+        const reallocated = await StockUnitService.relocate(unit!.id, houseTwo.id, crypto.randomUUID());
+        expect(reallocated.type).toBe("REALLOCATION");
+        expect(reallocated.house_id).toBe(houseTwo.id);
+
+        const returned = await StockUnitService.relocate(unit!.id, null, crypto.randomUUID());
+        expect(returned.type).toBe("RETURN");
+        expect(returned.house_id).toBeNull();
+
+        const reAllocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+        expect(reAllocated.type).toBe("ALLOCATION");
+
+        await prisma.houses.delete({ where: { id: houseTwo.id } });
+    });
+
+    test("relocate rejects a no-op move (same house, or already at the warehouse)", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        await expect(StockUnitService.relocate(unit!.id, null, crypto.randomUUID())).rejects.toMatchObject({
+            status: 409,
+        });
+
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+        await expect(
+            StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID()),
+        ).rejects.toMatchObject({ status: 409 });
+    });
+
     test("dispose sets status DISPOSED and rejects double-dispose", async () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);
@@ -196,7 +234,7 @@ describe("StockUnitService", () => {
         const found = stockUnits.find((u) => u.id === equipmentUnit!.id);
         expect(found).toBeDefined();
         expect(found!.purchase_item?.item.name).toBe(equipmentItem.name);
-        expect(found!.houseAllocations[0]?.house.id).toBe(houseId);
+        expect(found!.houseAllocations[0]?.house?.id).toBe(houseId);
 
         const [medicineUnit] = await StockUnitService.provision(1);
         createdUnitIds.push(medicineUnit!.id);

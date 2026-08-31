@@ -79,13 +79,32 @@ export const StockUnitService = {
         }
     },
 
-    /** Records a physical move as a StockHouseAllocation event (WH->House, or A->B->C). */
-    async relocate(id: string, house_id: string, idempotency_key: string) {
+    /** Records a physical move as a StockHouseAllocation event -- warehouse->house (ALLOCATION),
+     *  house->house (REALLOCATION), or house->warehouse (RETURN, house_id null). Type is derived
+     *  from the unit's latest event so it can never be recorded out of step with reality. */
+    async relocate(id: string, house_id: string | null, idempotency_key: string) {
         const unit = await prisma.stockUnit.findUnique({ where: { id } });
         if (!unit) throw AppError.notFound("StockUnit");
+
+        const latest = await prisma.stockHouseAllocation.findFirst({
+            where: { stock_unit_id: id },
+            orderBy: { occurred_at: "desc" },
+        });
+        const currentHouseId = latest?.house_id ?? null;
+
+        if (house_id === currentHouseId) {
+            throw AppError.conflict(
+                house_id === null
+                    ? "Unit is already at the warehouse"
+                    : "Unit is already at that house",
+            );
+        }
+        const type: "ALLOCATION" | "REALLOCATION" | "RETURN" =
+            house_id === null ? "RETURN" : currentHouseId === null ? "ALLOCATION" : "REALLOCATION";
+
         try {
             return await prisma.stockHouseAllocation.create({
-                data: { stock_unit_id: id, house_id, idempotency_key },
+                data: { stock_unit_id: id, house_id, type, idempotency_key },
             });
         } catch (err) {
             return handlePrismaWriteError(err);

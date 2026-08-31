@@ -13,7 +13,8 @@ export const bindStockUnitSchema = z.object({
 });
 
 export const relocateStockUnitSchema = z.object({
-    house_id: z.string().uuid(),
+    // null/omitted = return to the warehouse
+    house_id: z.string().uuid().nullable().optional(),
     idempotency_key: z.string().min(1).optional(),
 });
 
