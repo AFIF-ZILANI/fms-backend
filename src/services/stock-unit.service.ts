@@ -42,6 +42,13 @@ export const StockUnitService = {
         return { stockUnits, meta: buildMeta(total, query) };
     },
 
+    /** Per-status totals for the KPI cards -- one aggregate query so counts stay accurate no
+     *  matter how many units exist (the list endpoint's page cap would otherwise undercount). */
+    async counts() {
+        const rows = await prisma.stockUnit.groupBy({ by: ["status"], _count: true });
+        return Object.fromEntries(rows.map((r) => [r.status, r._count]));
+    },
+
     async getById(id: string) {
         const unit = await prisma.stockUnit.findUnique({ where: { id }, include: withRelations });
         if (!unit) throw AppError.notFound("StockUnit");

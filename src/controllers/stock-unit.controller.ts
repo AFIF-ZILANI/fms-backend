@@ -27,6 +27,13 @@ export const StockUnitController = {
         });
     },
 
+    async counts(c: Context) {
+        return withHandler(c, async () => {
+            const counts = await StockUnitService.counts();
+            return sendSuccess(c, counts, "Stock unit counts fetched");
+        });
+    },
+
     async provision(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<ProvisionStockUnitsInput>(c, "json");

@@ -16,6 +16,7 @@ stockUnitRoutes.get(
     zValidatorRfc7807("query", listStockUnitsQuerySchema),
     StockUnitController.getAll,
 );
+stockUnitRoutes.get("/counts", StockUnitController.counts);
 stockUnitRoutes.get("/:id", StockUnitController.getById);
 stockUnitRoutes.post(
     "/",
