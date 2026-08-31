@@ -55,7 +55,7 @@ export const StockUnitController = {
             const body = getValid<RelocateStockUnitInput>(c, "json");
             const unit = await StockUnitService.relocate(
                 c.req.param("id") ?? "",
-                body.house_id,
+                body.house_id ?? null,
                 body.idempotency_key ?? crypto.randomUUID(),
             );
             return sendSuccess(c, unit, "Stock unit relocated");

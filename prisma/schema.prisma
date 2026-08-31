@@ -118,6 +118,12 @@ enum StockUnitStatus {
   DISPOSED // written off — expired, damaged, discarded
 }
 
+enum AllocationType {
+  ALLOCATION // warehouse -> house (unit had no prior house, or its last event was a RETURN)
+  REALLOCATION // house -> house (unit was already at a house)
+  RETURN // house -> warehouse (house_id null on this row)
+}
+
 enum AssetStatus {
   ACTIVE
   RETIRED
@@ -695,14 +701,15 @@ model StockHouseAllocation {
   // derivable via purchase_item → purchase); later rows = house→house moves (A→B→C). Current location
   // = latest row by occurred_at. Batch is NOT stored — inferred from whichever batch occupied this
   // house at occurred_at (see BatchHouseAllocation / BatchHouseBalance).
-  id              String    @id @default(uuid())
+  id              String          @id @default(uuid())
   stock_unit_id   String
-  stock_unit      StockUnit @relation(fields: [stock_unit_id], references: [id])
-  house_id        String
-  house           Houses    @relation(fields: [house_id], references: [id])
-  occurred_at     DateTime  @default(now())
-  created_at      DateTime  @default(now())
-  idempotency_key String    @unique // client-generated; prevents double-insert on offline sync retry
+  stock_unit      StockUnit       @relation(fields: [stock_unit_id], references: [id])
+  house_id        String? // null = returned to the warehouse
+  house           Houses?         @relation(fields: [house_id], references: [id])
+  type            AllocationType
+  occurred_at     DateTime        @default(now())
+  created_at      DateTime        @default(now())
+  idempotency_key String          @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([stock_unit_id])
   @@index([house_id, occurred_at])
