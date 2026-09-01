@@ -475,7 +475,6 @@ model Houses {
   stockHouseAllocations StockHouseAllocation[]
   inventoryAdjustments InventoryAdjustment[]
   birdSales            BirdSale[]
-  stockTransfers       StockTransfer[]
 
   @@index([type])
 }
@@ -914,25 +913,28 @@ model InventoryAdjustment {
 }
 
 model StockTransfer {
-  id                String     @id @default(uuid())
+  // Endpoints are WAREHOUSE/HOUSE + id, matching StockLedger's own location_type/location_id
+  // convention (no FK -- same tradeoff StockLedger already makes) so a move can start or end at
+  // either kind of place: warehouse->house, house->house, or house->warehouse.
+  id                String       @id @default(uuid())
   item_id           String
-  item              Item       @relation(fields: [item_id], references: [id])
-  from_warehouse_id String
-  from_warehouse    Warehouses @relation(fields: [from_warehouse_id], references: [id])
-  to_house_id       String
-  to_house          Houses     @relation(fields: [to_house_id], references: [id])
-  quantity          Decimal    @db.Decimal(10, 3) // as entered, in `unit`
+  item              Item         @relation(fields: [item_id], references: [id])
+  from_location_type LocationType
+  from_location_id  String
+  to_location_type  LocationType
+  to_location_id    String
+  quantity          Decimal      @db.Decimal(10, 3) // as entered, in `unit`
   unit              String
-  unitRef           Unit       @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  base_quantity     Decimal    @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
+  unitRef           Unit         @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  base_quantity     Decimal      @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
   note              String?
   recorded_by_id    String
-  recorded_by       Profiles   @relation(fields: [recorded_by_id], references: [id])
-  created_at        DateTime   @default(now())
-  idempotency_key   String     @unique
+  recorded_by       Profiles     @relation(fields: [recorded_by_id], references: [id])
+  created_at        DateTime     @default(now())
+  idempotency_key   String       @unique
 
   @@index([item_id])
-  @@index([to_house_id])
+  @@index([to_location_type, to_location_id])
 }
 
 model Warehouses {
@@ -942,7 +944,6 @@ model Warehouses {
 
   inventoryAdjustments InventoryAdjustment[]
   purchases            Purchase[]
-  stockTransfers       StockTransfer[]
 }
 
 model Organization {
