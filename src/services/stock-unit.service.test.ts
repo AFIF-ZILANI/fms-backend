@@ -4,6 +4,7 @@ import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
 
 const createdUnitIds: string[] = [];
+const createdTransferIds: string[] = [];
 let purchaseItemId: string;
 let houseId: string;
 let profileId: string;
@@ -73,6 +74,7 @@ describe("StockUnitService", () => {
             where: { stock_unit_id: { in: createdUnitIds } },
         });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
+        await prisma.stockTransfer.deleteMany({ where: { id: { in: createdTransferIds } } });
         await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });
         await prisma.item.delete({ where: { id: itemId } });
@@ -170,6 +172,89 @@ describe("StockUnitService", () => {
         await expect(
             StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID()),
         ).rejects.toMatchObject({ status: 409 });
+    });
+
+    test("relocate with a stock_transfer_id for the unit's own item stores it on the allocation row", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+
+        const transfer = await prisma.stockTransfer.create({
+            data: {
+                item_id: itemId,
+                from_location_type: "WAREHOUSE",
+                from_location_id: crypto.randomUUID(),
+                to_location_type: "HOUSE",
+                to_location_id: houseId,
+                quantity: 10,
+                unit: "BOTTLE",
+                base_quantity: 10,
+                recorded_by_id: profileId,
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+        createdTransferIds.push(transfer.id);
+
+        const relocated = await StockUnitService.relocate(
+            unit!.id,
+            houseId,
+            crypto.randomUUID(),
+            transfer.id,
+        );
+        expect(relocated.stock_transfer_id).toBe(transfer.id);
+    });
+
+    test("relocate rejects a stock_transfer_id for a nonexistent transfer with a 404", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+
+        await expect(
+            StockUnitService.relocate(
+                unit!.id,
+                houseId,
+                crypto.randomUUID(),
+                "00000000-0000-0000-0000-000000000000",
+            ),
+        ).rejects.toMatchObject({ status: 404 });
+    });
+
+    test("relocate rejects a stock_transfer_id for a different item with a 400", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+
+        const otherItem = await prisma.item.create({
+            data: {
+                name: `Other Item ${crypto.randomUUID()}`,
+                normalized_key: `other item ${crypto.randomUUID()}`,
+                category: "MEDICINE",
+                unit: "BOTTLE",
+            },
+        });
+        const transfer = await prisma.stockTransfer.create({
+            data: {
+                item_id: otherItem.id,
+                from_location_type: "WAREHOUSE",
+                from_location_id: crypto.randomUUID(),
+                to_location_type: "HOUSE",
+                to_location_id: houseId,
+                quantity: 1,
+                unit: "BOTTLE",
+                base_quantity: 1,
+                recorded_by_id: profileId,
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+        createdTransferIds.push(transfer.id);
+
+        await expect(
+            StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID(), transfer.id),
+        ).rejects.toMatchObject({ status: 400 });
+
+        await prisma.stockTransfer.delete({ where: { id: transfer.id } });
+        createdTransferIds.splice(createdTransferIds.indexOf(transfer.id), 1);
+        await prisma.item.delete({ where: { id: otherItem.id } });
     });
 
     test("dispose sets status DISPOSED and rejects double-dispose", async () => {

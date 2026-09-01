@@ -16,6 +16,8 @@ export const relocateStockUnitSchema = z.object({
     // null/omitted = return to the warehouse
     house_id: z.string().uuid().nullable().optional(),
     idempotency_key: z.string().min(1).optional(),
+    // Links this event to the aggregate StockTransfer (and its StockLedger rows) it was part of.
+    stock_transfer_id: z.string().uuid().optional(),
 });
 
 export const setStockUnitStatusSchema = z.object({
