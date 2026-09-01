@@ -57,6 +57,7 @@ export const StockUnitController = {
                 c.req.param("id") ?? "",
                 body.house_id ?? null,
                 body.idempotency_key ?? crypto.randomUUID(),
+                body.stock_transfer_id,
             );
             return sendSuccess(c, unit, "Stock unit relocated");
         });

@@ -81,10 +81,31 @@ export const StockUnitService = {
 
     /** Records a physical move as a StockHouseAllocation event -- warehouse->house (ALLOCATION),
      *  house->house (REALLOCATION), or house->warehouse (RETURN, house_id null). Type is derived
-     *  from the unit's latest event so it can never be recorded out of step with reality. */
-    async relocate(id: string, house_id: string | null, idempotency_key: string) {
-        const unit = await prisma.stockUnit.findUnique({ where: { id } });
+     *  from the unit's latest event so it can never be recorded out of step with reality.
+     *
+     *  `stock_transfer_id` is an optional caller-supplied link to the aggregate-quantity
+     *  StockTransfer (and its 2 StockLedger rows) this move was part of -- e.g. 10 units scanned
+     *  into one "allocate 10L to House Y" batch all pass the same transfer id, so the ledger
+     *  stays one movement instead of fragmenting into one pair per unit. relocate() trusts the
+     *  id rather than deriving it (that lives in the batch orchestration, not here), and only
+     *  checks it actually exists and is for the same item -- not that its quantity/locations
+     *  match this exact move. */
+    async relocate(
+        id: string,
+        house_id: string | null,
+        idempotency_key: string,
+        stock_transfer_id?: string,
+    ) {
+        const unit = await prisma.stockUnit.findUnique({ where: { id }, include: { purchase_item: true } });
         if (!unit) throw AppError.notFound("StockUnit");
+
+        if (stock_transfer_id !== undefined) {
+            const transfer = await prisma.stockTransfer.findUnique({ where: { id: stock_transfer_id } });
+            if (!transfer) throw AppError.notFound("StockTransfer");
+            if (!unit.purchase_item || transfer.item_id !== unit.purchase_item.item_id) {
+                throw AppError.badRequest("stock_transfer_id is for a different item than this unit");
+            }
+        }
 
         const latest = await prisma.stockHouseAllocation.findFirst({
             where: { stock_unit_id: id },
@@ -104,7 +125,13 @@ export const StockUnitService = {
 
         try {
             return await prisma.stockHouseAllocation.create({
-                data: { stock_unit_id: id, house_id, type, idempotency_key },
+                data: {
+                    stock_unit_id: id,
+                    house_id,
+                    type,
+                    idempotency_key,
+                    ...(stock_transfer_id !== undefined && { stock_transfer_id }),
+                },
             });
         } catch (err) {
             return handlePrismaWriteError(err);

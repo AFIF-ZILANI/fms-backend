@@ -706,12 +706,20 @@ model StockHouseAllocation {
   house_id        String? // null = returned to the warehouse
   house           Houses?         @relation(fields: [house_id], references: [id])
   type            AllocationType
+  // Optional link to the aggregate-quantity move this physical unit was part of -- e.g. 10 units
+  // scanned into one "allocate 10L to House Y" batch share one StockTransfer (and its 2 StockLedger
+  // rows), so the ledger stays one movement instead of fragmenting into one pair per unit, while
+  // this field still lets you trace that movement back to the exact units. Set by the caller
+  // (relocate() trusts it, doesn't derive it), so it's optional and unrelated moves just omit it.
+  stock_transfer_id String?
+  stock_transfer    StockTransfer? @relation(fields: [stock_transfer_id], references: [id], onDelete: SetNull)
   occurred_at     DateTime        @default(now())
   created_at      DateTime        @default(now())
   idempotency_key String          @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([stock_unit_id])
   @@index([house_id, occurred_at])
+  @@index([stock_transfer_id])
 }
 
 model Asset {
@@ -932,6 +940,8 @@ model StockTransfer {
   recorded_by       Profiles     @relation(fields: [recorded_by_id], references: [id])
   created_at        DateTime     @default(now())
   idempotency_key   String       @unique
+
+  stockHouseAllocations StockHouseAllocation[]
 
   @@index([item_id])
   @@index([to_location_type, to_location_id])
