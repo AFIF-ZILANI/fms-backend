@@ -110,6 +110,50 @@ describe("HouseService", () => {
         expect(unavailable.houses.some((h) => h.id === empty.id)).toBe(false);
     });
 
+    test("remove deletes an untouched house but refuses one with history", async () => {
+        const clean = await HouseService.create({ name: "Shed Del", type: "GROWER", number: 90 });
+        await HouseService.remove(clean.id);
+        await expect(HouseService.getById(clean.id)).rejects.toMatchObject({ status: 404 });
+
+        // Attached via a real relation (FK would allow the delete on some of these).
+        const profile = await prisma.profiles.create({
+            data: { name: "House Delete Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+        });
+        createdProfileIds.push(profile.id);
+        const weighed = await HouseService.create({ name: "Shed Weighed", type: "GROWER", number: 91 });
+        createdIds.push(weighed.id);
+        await prisma.weightRecords.create({
+            data: {
+                house_id: weighed.id, average_wt_grams: 800, sample_size: 10,
+                date: new Date(), measured_by_id: profile.id, idempotency_key: crypto.randomUUID(),
+            },
+        });
+        await expect(HouseService.remove(weighed.id)).rejects.toMatchObject({ status: 409 });
+        await prisma.weightRecords.deleteMany({ where: { house_id: weighed.id } });
+
+        // Attached only through the polymorphic stock ledger -- no FK at all.
+        const stocked = await HouseService.create({ name: "Shed Stocked", type: "GROWER", number: 92 });
+        createdIds.push(stocked.id);
+        const item = await prisma.item.create({
+            data: {
+                name: `House Delete Item ${crypto.randomUUID()}`,
+                normalized_key: `house delete item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "G",
+            },
+        });
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item.id, quantity: 5, direction: "IN", reason: "TRANSFER",
+                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE", location_id: stocked.id,
+            },
+        });
+        await expect(HouseService.remove(stocked.id)).rejects.toMatchObject({ status: 409 });
+        await prisma.stockLedger.deleteMany({ where: { item_id: item.id } });
+        await prisma.item.delete({ where: { id: item.id } });
+    });
+
     test("getStock returns nonzero item balances at this house only", async () => {
         const house = await HouseService.create({
             name: "Stock Test House",

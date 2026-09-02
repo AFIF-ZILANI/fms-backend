@@ -16,3 +16,4 @@ houseRoutes.post("/", zValidatorRfc7807("json", createHouseSchema), HouseControl
 houseRoutes.patch("/:id", zValidatorRfc7807("json", updateHouseSchema), HouseController.update);
 houseRoutes.post("/:id/deactivate", HouseController.deactivate);
 houseRoutes.post("/:id/reactivate", HouseController.reactivate);
+houseRoutes.delete("/:id", HouseController.remove);
