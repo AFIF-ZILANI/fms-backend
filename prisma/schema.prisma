@@ -583,6 +583,11 @@ model Item {
   preferred_reorder_qty Decimal?     @db.Decimal(13, 4)
   lead_time_days        Int?
   is_active             Boolean      @default(true)
+  // Which of the two stock-tracking mechanisms this item uses: true = individually QR-coded
+  // (StockUnit/StockHouseAllocation -- medicine, vaccine, equipment), false = aggregate quantity
+  // only (StockLedger/StockTransfer -- feed, husk, etc). Gates bind() and TransferService.create()
+  // so the two mechanisms can't be mixed for one item.
+  is_unit_tracked       Boolean      @default(false)
   created_at            DateTime     @default(now())
   updated_at            DateTime     @updatedAt
 
