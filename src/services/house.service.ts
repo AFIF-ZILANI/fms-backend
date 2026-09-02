@@ -94,4 +94,47 @@ export const HouseService = {
         if (!house) throw AppError.notFound("House");
         return prisma.houses.update({ where: { id }, data: { is_active } });
     },
+
+    /**
+     * Hard delete -- only for houses registered by mistake. The schema says a
+     * house is never hard-deleted once history attaches, and the FKs alone
+     * won't stop us (BatchHouseAllocation is SetNull, InventoryAdjustment is
+     * Cascade), so count every attachment ourselves and refuse if any exist.
+     * StockLedger is polymorphic (location_type/location_id, no FK) -- counted
+     * separately for the same reason.
+     */
+    async remove(id: string) {
+        const house = await prisma.houses.findUnique({
+            where: { id },
+            select: {
+                _count: {
+                    select: {
+                        weightRecords: true,
+                        allocationsTo: true,
+                        allocationsFrom: true,
+                        batchHouseBalances: true,
+                        mortalityLogs: true,
+                        consumptions: true,
+                        environmentRecords: true,
+                        stockHouseAllocations: true,
+                        inventoryAdjustments: true,
+                        birdSales: true,
+                    },
+                },
+            },
+        });
+        if (!house) throw AppError.notFound("House");
+
+        const ledgerRows = await prisma.stockLedger.count({
+            where: { location_type: "HOUSE", location_id: id },
+        });
+        const attached = ledgerRows + Object.values(house._count).reduce((sum, n) => sum + n, 0);
+        if (attached > 0) {
+            throw AppError.conflict(
+                "House has recorded history and cannot be deleted. Deactivate it instead.",
+            );
+        }
+
+        return prisma.houses.delete({ where: { id } });
+    },
 };

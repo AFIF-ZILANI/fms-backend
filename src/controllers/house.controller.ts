@@ -61,4 +61,11 @@ export const HouseController = {
             return sendSuccess(c, house, "House reactivated");
         });
     },
+
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await HouseService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "House deleted");
+        });
+    },
 };
