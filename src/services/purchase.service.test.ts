@@ -21,6 +21,7 @@ describe("PurchaseService", () => {
                 normalized_key: `purchase test item ${crypto.randomUUID()}`,
                 category: "MEDICINE",
                 unit: "BOTTLE",
+                is_unit_tracked: true,
             },
         });
         itemId = item.id;

@@ -35,6 +35,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
                 normalized_key: `equipment ${crypto.randomUUID()}`,
                 category: "EQUIPMENT",
                 unit: "UNIT",
+                is_unit_tracked: true,
             },
         });
         itemId = item.id;

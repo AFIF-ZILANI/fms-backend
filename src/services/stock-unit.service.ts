@@ -62,13 +62,27 @@ export const StockUnitService = {
         });
     },
 
-    /** Binds a blank unit to a purchase lot -- UNASSIGNED -> IN_STOCK. */
+    /** Binds a blank unit to a purchase lot -- UNASSIGNED -> IN_STOCK. Refused for a lot whose
+     *  item isn't flagged is_unit_tracked, so a bulk item (feed, husk) can't end up QR-coded
+     *  alongside its own aggregate StockLedger tracking. */
     async bind(id: string, input: BindStockUnitInput) {
         const unit = await prisma.stockUnit.findUnique({ where: { id } });
         if (!unit) throw AppError.notFound("StockUnit");
         if (unit.status !== "UNASSIGNED") {
             throw AppError.conflict(`StockUnit is already ${unit.status.toLowerCase()}`);
         }
+
+        const purchaseItem = await prisma.purchaseItem.findUnique({
+            where: { id: input.purchase_item_id },
+            include: { item: true },
+        });
+        if (!purchaseItem) throw AppError.badRequest("purchase_item_id does not reference an existing record");
+        if (!purchaseItem.item.is_unit_tracked) {
+            throw AppError.badRequest(
+                `"${purchaseItem.item.name}" isn't tracked by QR code -- use Move Stock instead`,
+            );
+        }
+
         try {
             return await prisma.stockUnit.update({
                 where: { id },

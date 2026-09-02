@@ -35,6 +35,7 @@ describe("StockUnitService", () => {
                 normalized_key: `seed medicine ${crypto.randomUUID()}`,
                 category: "MEDICINE",
                 unit: "BOTTLE",
+                is_unit_tracked: true,
             },
         });
         itemId = item.id;
@@ -125,6 +126,48 @@ describe("StockUnitService", () => {
         await expect(
             StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId }),
         ).rejects.toMatchObject({ status: 409 });
+    });
+
+    test("binding a lot whose item isn't unit-tracked is rejected", async () => {
+        const untrackedItem = await prisma.item.create({
+            data: {
+                name: `Untracked Feed ${crypto.randomUUID()}`,
+                normalized_key: `untracked feed ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "KG",
+                // is_unit_tracked defaults false
+            },
+        });
+        const untrackedPurchase = await prisma.purchase.create({
+            data: {
+                purchase_date: new Date(),
+                total_amount: 10,
+                paid_amount: 10,
+                due_amount: 0,
+                recorded_by_id: profileId,
+            },
+        });
+        const untrackedPurchaseItem = await prisma.purchaseItem.create({
+            data: {
+                purchase_id: untrackedPurchase.id,
+                item_id: untrackedItem.id,
+                quantity: 10,
+                unit: "KG",
+                base_quantity: 10,
+                unit_price: 1,
+                total_price: 10,
+            },
+        });
+
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        await expect(
+            StockUnitService.bind(unit!.id, { purchase_item_id: untrackedPurchaseItem.id }),
+        ).rejects.toMatchObject({ status: 400 });
+
+        await prisma.purchaseItem.delete({ where: { id: untrackedPurchaseItem.id } });
+        await prisma.purchase.delete({ where: { id: untrackedPurchase.id } });
+        await prisma.item.delete({ where: { id: untrackedItem.id } });
     });
 
     test("relocate logs a house allocation", async () => {
@@ -283,6 +326,7 @@ describe("StockUnitService", () => {
                 normalized_key: `test incubator item ${crypto.randomUUID()}`,
                 category: "EQUIPMENT",
                 unit: "UNIT",
+                is_unit_tracked: true,
             },
         });
         equipmentItemId = equipmentItem.id;

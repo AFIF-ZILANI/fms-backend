@@ -11,6 +11,9 @@ export const createItemSchema = z.object({
     lead_time_days: z.coerce.number().int().nonnegative().optional(),
     supplier_ids: z.array(z.string().uuid()).optional(),
     meta_data: z.record(z.string(), z.string()).optional(),
+    // true = individually QR-coded (StockUnit), false = aggregate quantity only (StockLedger).
+    // Gates bind() and TransferService.create() so the two mechanisms can't mix for one item.
+    is_unit_tracked: z.coerce.boolean().optional(),
 });
 
 // unit is intentionally excluded -- ItemUnit conversion factors and every

@@ -48,6 +48,7 @@ describe("ConsumptionService", () => {
                 normalized_key: `antibiotic ${crypto.randomUUID()}`,
                 category: "MEDICINE",
                 unit: "BOTTLE",
+                is_unit_tracked: true,
             },
         });
         medicineItemId = medicineItem.id;
@@ -293,6 +294,7 @@ describe("ConsumptionService", () => {
                 normalized_key: `consumption coded conversion item ${crypto.randomUUID()}`,
                 category: "MEDICINE",
                 unit: "ML",
+                is_unit_tracked: true,
             },
         });
         createdItemIds.push(mlItem.id);
