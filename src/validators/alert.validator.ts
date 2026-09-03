@@ -12,6 +12,7 @@ export const createAlertSchema = z.object({
     level: alertLevel,
     related_id: z.string().uuid().optional(),
     action_type: alertActionType.optional(),
+    idempotency_key: z.string().min(1).optional(),
 });
 
 export const listAlertsQuerySchema = paginationQuerySchema.extend({

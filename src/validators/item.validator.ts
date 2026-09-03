@@ -24,6 +24,11 @@ export const updateItemSchema = createItemSchema.omit({ unit: true }).partial();
 export const listItemsQuerySchema = paginationQuerySchema.extend({
     category: resourceCategorySchema.optional(),
     is_active: z.enum(["true", "false"]).optional(),
+    // The field app's consumption form draws only aggregate items (no QR scan in
+    // v1) and its stock-receiving picker only unit-tracked ones. Filtering server
+    // -side rather than client-side because a paginated list filtered after the
+    // fact silently drops matches past page one.
+    is_unit_tracked: z.enum(["true", "false"]).optional(),
 });
 
 export const createItemUnitSchema = z

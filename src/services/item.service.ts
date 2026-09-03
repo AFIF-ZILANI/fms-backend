@@ -20,6 +20,9 @@ export const ItemService = {
         const where = {
             ...(query.category !== undefined && { category: query.category }),
             ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
+            ...(query.is_unit_tracked !== undefined && {
+                is_unit_tracked: query.is_unit_tracked === "true",
+            }),
         };
         const [items, total] = await Promise.all([
             prisma.item.findMany({
@@ -58,7 +61,9 @@ export const ItemService = {
                         suppliers: { connect: data.supplier_ids.map((id) => ({ id })) },
                     }),
                     ...(data.meta_data !== undefined && { meta_data: data.meta_data }),
-                    ...(data.is_unit_tracked !== undefined && { is_unit_tracked: data.is_unit_tracked }),
+                    ...(data.is_unit_tracked !== undefined && {
+                        is_unit_tracked: data.is_unit_tracked,
+                    }),
                 },
                 include,
             });
@@ -160,7 +165,9 @@ export const ItemUnitService = {
         const unitRow = await prisma.unit.findUnique({ where: { code: data.unit } });
         if (!unitRow) throw AppError.badRequest("unit does not reference a known unit code");
         if (unitRow.is_base) {
-            throw AppError.badRequest(`"${data.unit}" is a base unit and can't be added as a conversion`);
+            throw AppError.badRequest(
+                `"${data.unit}" is a base unit and can't be added as a conversion`,
+            );
         }
         // A unit tied to a specific base family (e.g. LITER -> ML) can't be added to an item whose
         // own base unit is different (e.g. G) -- GENERIC_ITEM_UNITS (e.g. Container) are the only

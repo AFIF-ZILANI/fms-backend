@@ -9,6 +9,7 @@ export const createFeedingProgramSchema = z.object({
     item_id: z.string().uuid(),
     start_day: z.coerce.number().int().nonnegative(),
     end_day: z.coerce.number().int().nonnegative().optional(),
+    idempotency_key: z.string().min(1).optional(),
 });
 
 export const updateFeedingProgramSchema = z.object({

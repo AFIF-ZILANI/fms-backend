@@ -1,6 +1,7 @@
 import prisma from "@lib/db";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type { CreateAlertInput, ListAlertsQuery } from "@validators/alert.validator";
 import { getItemBalances } from "@lib/stock-balance";
@@ -34,6 +35,9 @@ async function upsertActiveAlert(draft: AlertDraft) {
             type: draft.type,
             level: draft.level,
             issued_at: new Date(),
+            // Server-side scan, not a client retry -- the dedupe above is what
+            // keeps repeat scans from spamming, so this just satisfies the column.
+            idempotency_key: crypto.randomUUID(),
             ...(draft.description !== undefined && { description: draft.description }),
             ...(draft.related_id !== undefined && { related_id: draft.related_id }),
         },
@@ -176,18 +180,27 @@ export const AlertService = {
         return alert;
     },
 
+    /** Wrapped since idempotency_key gained a unique constraint: a replayed
+     *  offline write must surface as a 409 naming the field, which is how the
+     *  field app's outbox tells "already landed" from a real failure. Leaking
+     *  the raw P2002 as a 500 would read as transient and retry forever. */
     async create(data: CreateAlertInput) {
-        return prisma.alerts.create({
-            data: {
-                title: data.title,
-                type: data.type,
-                level: data.level,
-                issued_at: new Date(),
-                ...(data.description !== undefined && { description: data.description }),
-                ...(data.related_id !== undefined && { related_id: data.related_id }),
-                ...(data.action_type !== undefined && { action_type: data.action_type }),
-            },
-        });
+        try {
+            return await prisma.alerts.create({
+                data: {
+                    title: data.title,
+                    type: data.type,
+                    level: data.level,
+                    issued_at: new Date(),
+                    idempotency_key: data.idempotency_key ?? crypto.randomUUID(),
+                    ...(data.description !== undefined && { description: data.description }),
+                    ...(data.related_id !== undefined && { related_id: data.related_id }),
+                    ...(data.action_type !== undefined && { action_type: data.action_type }),
+                },
+            });
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
     },
 
     async resolve(id: string) {
