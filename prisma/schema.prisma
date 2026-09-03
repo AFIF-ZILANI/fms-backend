@@ -251,6 +251,15 @@ enum AlertActionTypes {
   MARK_RESOLVED
 }
 
+// Stays a hard enum, unlike TaskType/Tasks below: it's the state machine the
+// complete/cancel endpoints enforce, not admin-facing data. Softening it would
+// mean the server can't reason about its own transitions.
+enum TaskStatus {
+  PENDING
+  DONE
+  CANCELLED
+}
+
 // ════════════════════════════════════════════════════════════════════
 // SOFT-CODED LOOKUPS (categories, units) -- see
 // docs/superpowers/specs/2026-08-18-soft-coded-categories-and-units-design.md
@@ -268,10 +277,10 @@ model ItemCategory {
 }
 
 model Unit {
-  id         String   @id @default(uuid())
-  code       String   @unique
-  label      String
-  is_active  Boolean  @default(true)
+  id           String   @id @default(uuid())
+  code         String   @unique
+  label        String
+  is_active    Boolean  @default(true)
   // Canonical base-unit hierarchy: exactly 6 units have is_base = true (LITER, KG, UNIT, DOSE, PCS,
   // METER) -- Item.unit is restricted to these. Mass/volume anchor at KG/LITER so bulk feed (e.g. 30
   // metric ton = 30,000 KG) stays a small, non-overflowing number. Every other unit optionally names
@@ -286,15 +295,15 @@ model Unit {
   baseUnitRef  Unit?    @relation("UnitFamily", fields: [base_unit], references: [code], onUpdate: Cascade)
   derivedUnits Unit[]   @relation("UnitFamily")
   fixed_factor Decimal? @db.Decimal(14, 4)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
 
-  items                Item[]
-  purchaseItems        PurchaseItem[]
-  saleItems            SaleItem[]
-  itemUnitConversions  ItemUnit[]
-  consumptions         Consumption[]
-  stockTransfers       StockTransfer[]
+  items               Item[]
+  purchaseItems       PurchaseItem[]
+  saleItems           SaleItem[]
+  itemUnitConversions ItemUnit[]
+  consumptions        Consumption[]
+  stockTransfers      StockTransfer[]
 }
 
 model ExpenseCategoryLookup {
@@ -326,6 +335,44 @@ model SupplierSupplyLink {
   category    SupplierSupplyCategory @relation(fields: [category_id], references: [id])
 
   @@id([supplier_id, category_id])
+}
+
+// Soft-coded replacement for what would otherwise be an enum of "which screen
+// does this task open". Admin adds/renames/deactivates rows -- no migration,
+// and the mobile app can gain a screen in a release without the server moving.
+// The app maps code -> screen and falls back to a plain mark-done task for any
+// code it doesn't recognise, which is what makes a DB-stored list safe here.
+model TaskType {
+  id         String   @id @default(uuid())
+  // Unlike every other lookup, code is generated ONCE at create and never
+  // recomputed on rename -- it is the mobile app's routing key, so a rename
+  // regenerating it (what lookup-factory does by default) would silently break
+  // routing with no error anywhere. See createLookupService's stableCode option.
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tasks Tasks[]
+}
+
+// The catalogue a Manager assigns from. Several tasks can share one TaskType --
+// "Morning environment reading" and "Night environment reading" are two
+// assignable tasks that open the same screen, which is why the two levels exist.
+model Tasks {
+  id           String    @id @default(uuid())
+  code         String    @unique // immutable, same rule as TaskType.code
+  label        String
+  task_type_id String? // null = plain mark-done task, e.g. "Fix water line"
+  task_type    TaskType? @relation(fields: [task_type_id], references: [id])
+  is_active    Boolean   @default(true)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  assignments EmployeeTaskAssignment[]
+
+  @@index([task_type_id])
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -368,6 +415,8 @@ model Profiles {
   medicationsGiven        Medications[]
   vaccinationsGiven       Vaccinations[]
   auditLogs               AuditLog[]
+  tasksAssigned           EmployeeTaskAssignment[]
+  stockUnitsBound         StockUnit[]
 
   @@index([role])
 }
@@ -385,6 +434,7 @@ model Employees {
 
   performanceScores PerformanceScoreEntry[]
   payrollRecords    PayrollRecord[]
+  taskAssignments   EmployeeTaskAssignment[]
 
   @@index([role])
 }
@@ -465,16 +515,17 @@ model Houses {
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 
-  weightRecords        WeightRecords[]
-  allocationsTo        BatchHouseAllocation[] @relation("ToHouse")
-  allocationsFrom      BatchHouseAllocation[] @relation("FromHouse")
-  batchHouseBalances   BatchHouseBalance[]
-  mortalityLogs        MortalityLog[]
-  consumptions         Consumption[]
-  environmentRecords   EnvironmentRecords[]
+  weightRecords         WeightRecords[]
+  allocationsTo         BatchHouseAllocation[]   @relation("ToHouse")
+  allocationsFrom       BatchHouseAllocation[]   @relation("FromHouse")
+  batchHouseBalances    BatchHouseBalance[]
+  mortalityLogs         MortalityLog[]
+  consumptions          Consumption[]
+  environmentRecords    EnvironmentRecords[]
   stockHouseAllocations StockHouseAllocation[]
-  inventoryAdjustments InventoryAdjustment[]
-  birdSales            BirdSale[]
+  inventoryAdjustments  InventoryAdjustment[]
+  birdSales             BirdSale[]
+  taskAssignments       EmployeeTaskAssignment[]
 
   @@index([type])
 }
@@ -623,24 +674,24 @@ model ItemUnit {
 }
 
 model Purchase {
-  id              String        @id @default(uuid())
-  supplier_id     String?
-  supplier        Suppliers?    @relation(fields: [supplier_id], references: [id])
-  warehouse_id    String?
-  warehouse       Warehouses?   @relation(fields: [warehouse_id], references: [id])
-  invoice_no      String?
-  purchase_date   DateTime
+  id             String        @id @default(uuid())
+  supplier_id    String?
+  supplier       Suppliers?    @relation(fields: [supplier_id], references: [id])
+  warehouse_id   String?
+  warehouse      Warehouses?   @relation(fields: [warehouse_id], references: [id])
+  invoice_no     String?
+  purchase_date  DateTime
   // Global discount, applied to the sum of the (already net-of-their-own-discount) line totals.
   // Null discount_value = no global discount. total_amount is always the net figure -- everything
   // that reads it (due_amount, Payment reconciliation, Analytics) needs no discount-awareness of its own.
-  discount_type   DiscountType?
-  discount_value  Decimal?      @db.Decimal(10, 2)
-  total_amount    Decimal       @db.Decimal(10, 2)
-  paid_amount     Decimal       @db.Decimal(10, 2)
-  due_amount      Decimal       @db.Decimal(10, 2)
-  recorded_by_id  String
-  recorded_by     Profiles      @relation(fields: [recorded_by_id], references: [id])
-  created_at      DateTime      @default(now())
+  discount_type  DiscountType?
+  discount_value Decimal?      @db.Decimal(10, 2)
+  total_amount   Decimal       @db.Decimal(10, 2)
+  paid_amount    Decimal       @db.Decimal(10, 2)
+  due_amount     Decimal       @db.Decimal(10, 2)
+  recorded_by_id String
+  recorded_by    Profiles      @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime      @default(now())
 
   items PurchaseItem[]
 
@@ -690,6 +741,10 @@ model StockUnit {
   purchase_item    PurchaseItem?   @relation(fields: [purchase_item_id], references: [id])
   status           StockUnitStatus @default(UNASSIGNED)
   bound_at         DateTime? // when this unit was scan-bound to its lot
+  // Who bound it. Deliveries land at the farm gate, not an office desk, so this
+  // is a field action -- FEATURES.md §3.3/§4 both name this accountability field.
+  bound_by_id      String?
+  bound_by         Profiles?       @relation(fields: [bound_by_id], references: [id])
   created_at       DateTime        @default(now())
 
   consumptions     Consumption[]
@@ -705,12 +760,12 @@ model StockHouseAllocation {
   // derivable via purchase_item → purchase); later rows = house→house moves (A→B→C). Current location
   // = latest row by occurred_at. Batch is NOT stored — inferred from whichever batch occupied this
   // house at occurred_at (see BatchHouseAllocation / BatchHouseBalance).
-  id              String          @id @default(uuid())
-  stock_unit_id   String
-  stock_unit      StockUnit       @relation(fields: [stock_unit_id], references: [id])
-  house_id        String? // null = returned to the warehouse
-  house           Houses?         @relation(fields: [house_id], references: [id])
-  type            AllocationType
+  id                String         @id @default(uuid())
+  stock_unit_id     String
+  stock_unit        StockUnit      @relation(fields: [stock_unit_id], references: [id])
+  house_id          String? // null = returned to the warehouse
+  house             Houses?        @relation(fields: [house_id], references: [id])
+  type              AllocationType
   // Optional link to the aggregate-quantity move this physical unit was part of -- e.g. 10 units
   // scanned into one "allocate 10L to House Y" batch share one StockTransfer (and its 2 StockLedger
   // rows), so the ledger stays one movement instead of fragmenting into one pair per unit, while
@@ -718,9 +773,9 @@ model StockHouseAllocation {
   // (relocate() trusts it, doesn't derive it), so it's optional and unrelated moves just omit it.
   stock_transfer_id String?
   stock_transfer    StockTransfer? @relation(fields: [stock_transfer_id], references: [id], onDelete: SetNull)
-  occurred_at     DateTime        @default(now())
-  created_at      DateTime        @default(now())
-  idempotency_key String          @unique // client-generated; prevents double-insert on offline sync retry
+  occurred_at       DateTime       @default(now())
+  created_at        DateTime       @default(now())
+  idempotency_key   String         @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([stock_unit_id])
   @@index([house_id, occurred_at])
@@ -869,14 +924,15 @@ model WeightRecords {
 }
 
 model BatchFeedingProgram {
-  id        String   @id @default(uuid())
-  batch_id  String
-  batch     Batches  @relation(fields: [batch_id], references: [id])
-  feed_type FeedType
-  item_id   String
-  item      Item     @relation(fields: [item_id], references: [id])
-  start_day Int
-  end_day   Int?
+  id              String   @id @default(uuid())
+  batch_id        String
+  batch           Batches  @relation(fields: [batch_id], references: [id])
+  feed_type       FeedType
+  item_id         String
+  item            Item     @relation(fields: [item_id], references: [id])
+  start_day       Int
+  end_day         Int?
+  idempotency_key String   @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id, start_day, end_day])
 }
@@ -929,22 +985,22 @@ model StockTransfer {
   // Endpoints are WAREHOUSE/HOUSE + id, matching StockLedger's own location_type/location_id
   // convention (no FK -- same tradeoff StockLedger already makes) so a move can start or end at
   // either kind of place: warehouse->house, house->house, or house->warehouse.
-  id                String       @id @default(uuid())
-  item_id           String
-  item              Item         @relation(fields: [item_id], references: [id])
+  id                 String       @id @default(uuid())
+  item_id            String
+  item               Item         @relation(fields: [item_id], references: [id])
   from_location_type LocationType
-  from_location_id  String
-  to_location_type  LocationType
-  to_location_id    String
-  quantity          Decimal      @db.Decimal(10, 3) // as entered, in `unit`
-  unit              String
-  unitRef           Unit         @relation(fields: [unit], references: [code], onUpdate: Cascade)
-  base_quantity     Decimal      @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
-  note              String?
-  recorded_by_id    String
-  recorded_by       Profiles     @relation(fields: [recorded_by_id], references: [id])
-  created_at        DateTime     @default(now())
-  idempotency_key   String       @unique
+  from_location_id   String
+  to_location_type   LocationType
+  to_location_id     String
+  quantity           Decimal      @db.Decimal(10, 3) // as entered, in `unit`
+  unit               String
+  unitRef            Unit         @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  base_quantity      Decimal      @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
+  note               String?
+  recorded_by_id     String
+  recorded_by        Profiles     @relation(fields: [recorded_by_id], references: [id])
+  created_at         DateTime     @default(now())
+  idempotency_key    String       @unique
 
   stockHouseAllocations StockHouseAllocation[]
 
@@ -1140,6 +1196,45 @@ model PayrollRecord {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// TASK ASSIGNMENT (mobile field app -- see mobile/docs/PRD.md)
+// ════════════════════════════════════════════════════════════════════
+
+model EmployeeTaskAssignment {
+  id             String    @id @default(uuid())
+  employee_id    String // who does it
+  employee       Employees @relation(fields: [employee_id], references: [id])
+  assigned_by_id String // who assigned it -- any Profile, same as PerformanceScoreEntry.given_by
+  assigned_by    Profiles  @relation(fields: [assigned_by_id], references: [id])
+  task_id        String
+  task           Tasks     @relation(fields: [task_id], references: [id])
+
+  title       String
+  description String?
+
+  // Location is either a house or somewhere else described in free text --
+  // never both. Enforced in the service, and expressed in the app as a
+  // segmented toggle so the invalid combination can't be entered.
+  house_id      String? // null = not house-specific
+  house         Houses? @relation(fields: [house_id], references: [id])
+  location_note String? // "front gate", "water line" -- used when house_id is null
+
+  due_at          DateTime
+  status          TaskStatus @default(PENDING)
+  completed_at    DateTime?
+  completion_note String?
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  // Completing a task is an idempotent UPDATE and needs no key, but CREATING
+  // one is an INSERT a Manager may well make offline -- same reason as the
+  // other 12 tables carrying this.
+  idempotency_key String   @unique
+
+  @@index([employee_id, status, due_at])
+  @@index([house_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
 // AUDIT
 // ════════════════════════════════════════════════════════════════════
 
@@ -1164,15 +1259,19 @@ model AuditLog {
 // ════════════════════════════════════════════════════════════════════
 
 model Alerts {
-  id          String            @id @default(uuid())
-  title       String
-  description String?
-  type        AlertTypes
-  level       AlertLevels
-  status      AlertStatus       @default(ACTIVE)
-  related_id  String?
-  action_type AlertActionTypes?
-  issued_at   DateTime?         @db.Date
-  resolved_at DateTime?         @db.Date
-  created_at  DateTime          @default(now())
+  id              String            @id @default(uuid())
+  title           String
+  description     String?
+  type            AlertTypes
+  level           AlertLevels
+  status          AlertStatus       @default(ACTIVE)
+  related_id      String?
+  action_type     AlertActionTypes?
+  issued_at       DateTime?         @db.Date
+  resolved_at     DateTime?         @db.Date
+  created_at      DateTime          @default(now())
+  // A Manager flagging low stock from the field is an offline-capable write.
+  // No actor column here yet -- until one exists the app prefixes description
+  // with the raiser's name (mobile/docs/PRD.md §6.20).
+  idempotency_key String            @unique
 }

@@ -47,6 +47,10 @@ export const createScoreEntrySchema = z
 
 export const listScoreEntriesQuerySchema = paginationQuerySchema.extend({
     employee_id: z.string().uuid().optional(),
+    // The field app's performance screen reads one month at a time; without
+    // these it would fetch an employee's entire score history to total a month.
+    date_from: z.coerce.date().optional(),
+    date_to: z.coerce.date().optional(),
 });
 
 export type CreateScoreEntryInput = z.infer<typeof createScoreEntrySchema>;

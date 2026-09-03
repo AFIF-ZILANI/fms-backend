@@ -10,6 +10,11 @@ export const provisionStockUnitsSchema = z.object({
 
 export const bindStockUnitSchema = z.object({
     purchase_item_id: z.string().uuid(),
+    // Optional, not required: the column is nullable (137 units predate it) and
+    // the web dashboard's bind dialog posts only purchase_item_id. The field app
+    // always sends it -- deliveries land at the farm gate, and FEATURES.md
+    // §3.3/§4 name this as the accountability field for that.
+    bound_by_id: z.string().uuid().optional(),
 });
 
 export const relocateStockUnitSchema = z.object({

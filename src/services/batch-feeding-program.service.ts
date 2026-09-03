@@ -30,6 +30,7 @@ export const BatchFeedingProgramService = {
                     feed_type: data.feed_type,
                     item_id: data.item_id,
                     start_day: data.start_day,
+                    idempotency_key: data.idempotency_key ?? crypto.randomUUID(),
                     ...(data.end_day !== undefined && { end_day: data.end_day }),
                 },
                 include: { item: true },

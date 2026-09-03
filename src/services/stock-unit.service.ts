@@ -11,7 +11,11 @@ import type {
 // Latest allocation = current location. Included on reads so callers still get "where is it".
 const withRelations = {
     purchase_item: { include: { item: true } },
-    houseAllocations: { orderBy: { occurred_at: "desc" as const }, take: 1, include: { house: true } },
+    houseAllocations: {
+        orderBy: { occurred_at: "desc" as const },
+        take: 1,
+        include: { house: true },
+    },
     asset: true,
 };
 
@@ -28,7 +32,9 @@ export const StockUnitService = {
                 purchase_item: { item: { category: query.category } },
             }),
             // Search by unit id (the QR payload) -- full scanned id or a fragment.
-            ...(query.q !== undefined && { id: { contains: query.q, mode: "insensitive" as const } }),
+            ...(query.q !== undefined && {
+                id: { contains: query.q, mode: "insensitive" as const },
+            }),
         };
         const [stockUnits, total] = await Promise.all([
             prisma.stockUnit.findMany({
@@ -76,7 +82,8 @@ export const StockUnitService = {
             where: { id: input.purchase_item_id },
             include: { item: true },
         });
-        if (!purchaseItem) throw AppError.badRequest("purchase_item_id does not reference an existing record");
+        if (!purchaseItem)
+            throw AppError.badRequest("purchase_item_id does not reference an existing record");
         if (!purchaseItem.item.is_unit_tracked) {
             throw AppError.badRequest(
                 `"${purchaseItem.item.name}" isn't tracked by QR code -- use Move Stock instead`,
@@ -86,7 +93,12 @@ export const StockUnitService = {
         try {
             return await prisma.stockUnit.update({
                 where: { id },
-                data: { purchase_item_id: input.purchase_item_id, status: "IN_STOCK", bound_at: new Date() },
+                data: {
+                    purchase_item_id: input.purchase_item_id,
+                    status: "IN_STOCK",
+                    bound_at: new Date(),
+                    ...(input.bound_by_id !== undefined && { bound_by_id: input.bound_by_id }),
+                },
             });
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -110,14 +122,21 @@ export const StockUnitService = {
         idempotency_key: string,
         stock_transfer_id?: string,
     ) {
-        const unit = await prisma.stockUnit.findUnique({ where: { id }, include: { purchase_item: true } });
+        const unit = await prisma.stockUnit.findUnique({
+            where: { id },
+            include: { purchase_item: true },
+        });
         if (!unit) throw AppError.notFound("StockUnit");
 
         if (stock_transfer_id !== undefined) {
-            const transfer = await prisma.stockTransfer.findUnique({ where: { id: stock_transfer_id } });
+            const transfer = await prisma.stockTransfer.findUnique({
+                where: { id: stock_transfer_id },
+            });
             if (!transfer) throw AppError.notFound("StockTransfer");
             if (!unit.purchase_item || transfer.item_id !== unit.purchase_item.item_id) {
-                throw AppError.badRequest("stock_transfer_id is for a different item than this unit");
+                throw AppError.badRequest(
+                    "stock_transfer_id is for a different item than this unit",
+                );
             }
         }
 

@@ -9,8 +9,13 @@ import type {
 
 export const PerformanceScoreEntryService = {
     async getAll(query: ListScoreEntriesQuery) {
+        const dateRange = {
+            ...(query.date_from !== undefined && { gte: query.date_from }),
+            ...(query.date_to !== undefined && { lte: query.date_to }),
+        };
         const where = {
             ...(query.employee_id !== undefined && { employee_id: query.employee_id }),
+            ...(Object.keys(dateRange).length > 0 && { date: dateRange }),
         };
         const [entries, total] = await Promise.all([
             prisma.performanceScoreEntry.findMany({

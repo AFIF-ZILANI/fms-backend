@@ -53,6 +53,15 @@ describe("createLookupService (against ItemCategory)", () => {
         expect(rows.find((r) => r.id === row.id)).toBeUndefined();
     });
 
+    test("update recomputes code by default — the four original lookups are unchanged by stableCode", async () => {
+        const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
+        const row = await service.create(`Default Regen Test ${suffix}`);
+        createdIds.push(row.id);
+        const updated = await service.update(row.id, `Default Regen Renamed ${suffix}`);
+        expect(updated.code).toBe(`DEFAULT_REGEN_RENAMED_${suffix}`);
+        expect(updated.code).not.toBe(row.code);
+    });
+
     test("renaming a lookup row cascades its new code onto a referencing Item.category via onUpdate: Cascade", async () => {
         const category = await service.create("Cascade Rename Test");
         createdIds.push(category.id);
@@ -76,5 +85,37 @@ describe("createLookupService (against ItemCategory)", () => {
         } finally {
             await prisma.item.delete({ where: { id: item.id } });
         }
+    });
+});
+
+/**
+ * TaskType.code is the mobile app's routing key -- it maps code -> screen. If a
+ * rename moved the code, routing would break with no error anywhere, which is
+ * the exact failure stableCode exists to prevent. Tested directly rather than
+ * trusted to a comment.
+ */
+describe("createLookupService with stableCode (against TaskType)", () => {
+    const stable = createLookupService(prisma.taskType, "TaskType", { stableCode: true });
+    const stableIds: string[] = [];
+
+    afterAll(async () => {
+        await prisma.taskType.deleteMany({ where: { id: { in: stableIds } } });
+    });
+
+    test("update changes the label but leaves code untouched", async () => {
+        const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
+        const row = await stable.create(`Environment Reading Test ${suffix}`);
+        stableIds.push(row.id);
+        expect(row.code).toBe(`ENVIRONMENT_READING_TEST_${suffix}`);
+
+        const updated = await stable.update(row.id, `Env Reading Test ${suffix}`);
+        expect(updated.label).toBe(`Env Reading Test ${suffix}`);
+        expect(updated.code).toBe(`ENVIRONMENT_READING_TEST_${suffix}`);
+    });
+
+    test("update still rejects a label with no letters or digits", async () => {
+        const row = await stable.create(`Validation Test ${crypto.randomUUID().slice(0, 8)}`);
+        stableIds.push(row.id);
+        await expect(stable.update(row.id, "!!!")).rejects.toBeInstanceOf(AppError);
     });
 });

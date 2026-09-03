@@ -40,6 +40,9 @@ import { itemCategoryRoutes } from "@routes/item-category.routes";
 import { unitRoutes } from "@routes/unit.routes";
 import { expenseCategoryRoutes } from "@routes/expense-category.routes";
 import { supplierSupplyCategoryRoutes } from "@routes/supplier-supply-category.routes";
+import { taskTypeRoutes } from "@routes/task-type.routes";
+import { taskRoutes } from "@routes/task.routes";
+import { taskAssignmentRoutes } from "@routes/task-assignment.routes";
 
 export const appRoutes = new Hono();
 
@@ -87,3 +90,6 @@ appRoutes.route("/item-categories", itemCategoryRoutes);
 appRoutes.route("/units", unitRoutes);
 appRoutes.route("/expense-categories", expenseCategoryRoutes);
 appRoutes.route("/supplier-supply-categories", supplierSupplyCategoryRoutes);
+appRoutes.route("/task-types", taskTypeRoutes);
+appRoutes.route("/tasks", taskRoutes);
+appRoutes.route("/task-assignments", taskAssignmentRoutes);

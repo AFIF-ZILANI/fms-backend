@@ -7,7 +7,11 @@ import { generateCode } from "@lib/code-gen";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
-import type { CreateLookupInput, UpdateLookupInput, ListLookupQuery } from "@validators/lookup.validator";
+import type {
+    CreateLookupInput,
+    UpdateLookupInput,
+    ListLookupQuery,
+} from "@validators/lookup.validator";
 
 type LookupRow = {
     id: string;
@@ -44,7 +48,26 @@ type LookupDelegate = {
     delete(args: { where: { id: string } }): Promise<LookupRow>;
 };
 
-export function createLookupService(delegate: LookupDelegate, resourceName: string) {
+export type LookupOptions = {
+    /**
+     * Keep `code` fixed for the life of the row -- generated once at create,
+     * never recomputed on rename. Default false, so the four original lookups
+     * (ItemCategory, Unit, ExpenseCategoryLookup, SupplierSupplyCategory) keep
+     * regenerating as they always have.
+     *
+     * Set for lookups whose `code` is a key something else routes on, rather
+     * than a display artifact -- TaskType and Tasks, where the mobile app maps
+     * `TaskType.code` to a screen. There, letting a rename change the code
+     * would silently break routing with no error anywhere.
+     */
+    stableCode?: boolean;
+};
+
+export function createLookupService(
+    delegate: LookupDelegate,
+    resourceName: string,
+    options: LookupOptions = {},
+) {
     return {
         async getAll(query: ListLookupQuery) {
             const where = query.active !== undefined ? { is_active: query.active === "true" } : {};
@@ -57,7 +80,8 @@ export function createLookupService(delegate: LookupDelegate, resourceName: stri
 
         async create(label: string) {
             const code = generateCode(label);
-            if (!code) throw AppError.badRequest("Label must contain at least one letter or number");
+            if (!code)
+                throw AppError.badRequest("Label must contain at least one letter or number");
             try {
                 return await delegate.create({ data: { code, label } });
             } catch (err) {
@@ -69,9 +93,14 @@ export function createLookupService(delegate: LookupDelegate, resourceName: stri
             const existing = await delegate.findUnique({ where: { id } });
             if (!existing) throw AppError.notFound(resourceName);
             const code = generateCode(label);
-            if (!code) throw AppError.badRequest("Label must contain at least one letter or number");
+            if (!code)
+                throw AppError.badRequest("Label must contain at least one letter or number");
             try {
-                return await delegate.update({ where: { id }, data: { code, label } });
+                // Under stableCode the label still has to produce a valid code
+                // (checked above, so an all-punctuation rename is still rejected)
+                // -- it just isn't written back.
+                const data = options.stableCode ? { label } : { code, label };
+                return await delegate.update({ where: { id }, data });
             } catch (err) {
                 return handlePrismaWriteError(err);
             }
