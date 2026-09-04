@@ -20,6 +20,10 @@ export const PerformanceScoreEntryService = {
         const [entries, total] = await Promise.all([
             prisma.performanceScoreEntry.findMany({
                 where,
+                // The field app's score history names who gave each entry. Joining
+                // client-side isn't an option: given_by_id is any Profile, so an
+                // Admin scoring a Manager would resolve to no name at all.
+                include: { given_by: { select: { id: true, name: true, role: true } } },
                 orderBy: { date: "desc" },
                 ...toSkipTake(query),
             }),
