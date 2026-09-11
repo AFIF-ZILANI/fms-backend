@@ -3,7 +3,11 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { BirdSaleService } from "@services/bird-sale.service";
-import type { CreateBirdSaleInput, ListBirdSalesQuery } from "@validators/bird-sale.validator";
+import type {
+    BirdSalesSummaryQuery,
+    CreateBirdSaleInput,
+    ListBirdSalesQuery,
+} from "@validators/bird-sale.validator";
 
 export const BirdSaleController = {
     async getAll(c: Context) {
@@ -11,6 +15,14 @@ export const BirdSaleController = {
             const query = getValid<ListBirdSalesQuery>(c, "query");
             const { birdSales, meta } = await BirdSaleService.getAll(query);
             return sendList(c, birdSales, meta, "Bird sales fetched successfully");
+        });
+    },
+
+    async summary(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<BirdSalesSummaryQuery>(c, "query");
+            const summary = await BirdSaleService.summary(query);
+            return sendSuccess(c, summary, "Bird sales summary computed");
         });
     },
 

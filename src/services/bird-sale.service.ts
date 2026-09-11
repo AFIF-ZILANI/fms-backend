@@ -3,21 +3,29 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
-import type { CreateBirdSaleInput, ListBirdSalesQuery } from "@validators/bird-sale.validator";
+import type {
+    BirdSalesSummaryQuery,
+    CreateBirdSaleInput,
+    ListBirdSalesQuery,
+} from "@validators/bird-sale.validator";
+
+function buildWhere(query: BirdSalesSummaryQuery) {
+    return {
+        ...(query.batch_id !== undefined && { batch_id: query.batch_id }),
+        ...(query.customer_id !== undefined && { customer_id: query.customer_id }),
+        ...(query.grade !== undefined && { grade: query.grade }),
+        ...((query.date_from !== undefined || query.date_to !== undefined) && {
+            sale_date: {
+                ...(query.date_from !== undefined && { gte: query.date_from }),
+                ...(query.date_to !== undefined && { lte: query.date_to }),
+            },
+        }),
+    };
+}
 
 export const BirdSaleService = {
     async getAll(query: ListBirdSalesQuery) {
-        const where = {
-            ...(query.batch_id !== undefined && { batch_id: query.batch_id }),
-            ...(query.customer_id !== undefined && { customer_id: query.customer_id }),
-            ...(query.grade !== undefined && { grade: query.grade }),
-            ...((query.date_from !== undefined || query.date_to !== undefined) && {
-                sale_date: {
-                    ...(query.date_from !== undefined && { gte: query.date_from }),
-                    ...(query.date_to !== undefined && { lte: query.date_to }),
-                },
-            }),
-        };
+        const where = buildWhere(query);
         const [birdSales, total] = await Promise.all([
             prisma.birdSale.findMany({
                 where,
@@ -27,6 +35,34 @@ export const BirdSaleService = {
             prisma.birdSale.count({ where }),
         ]);
         return { birdSales, meta: buildMeta(total, query) };
+    },
+
+    /** Whole-set totals for the Bird Sales KPI row -- same rationale as
+     * SaleService.summary. total_birds lives here because "Birds sold" is a
+     * KPI tile, and summing it over a capped list fetch was the bug. */
+    async summary(query: BirdSalesSummaryQuery) {
+        const where = buildWhere(query);
+        const [aggregate, ids] = await Promise.all([
+            prisma.birdSale.aggregate({
+                where,
+                _count: { _all: true },
+                _sum: { due_amount: true, total_amount: true, birds_count: true },
+            }),
+            prisma.birdSale.findMany({ where, select: { id: true } }),
+        ]);
+        const paid = await prisma.payment.aggregate({
+            where: { ref_type: "BIRD_SALE", ref_id: { in: ids.map((row) => row.id) } },
+            _sum: { amount: true },
+        });
+        const due = (aggregate._sum.due_amount ?? new Prisma.Decimal(0)).minus(
+            paid._sum.amount ?? new Prisma.Decimal(0),
+        );
+        return {
+            count: aggregate._count._all,
+            total_revenue: (aggregate._sum.total_amount ?? new Prisma.Decimal(0)).toString(),
+            total_due: due.toString(),
+            total_birds: aggregate._sum.birds_count ?? 0,
+        };
     },
 
     async getById(id: string) {

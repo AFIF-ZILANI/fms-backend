@@ -17,12 +17,16 @@ export const createSaleSchema = z.object({
     items: z.array(saleItemInput).min(1, "At least one item is required"),
 });
 
-export const listSalesQuerySchema = paginationQuerySchema.extend({
+export const salesSummaryQuerySchema = z.object({
     customer_id: z.string().uuid().optional(),
     date_from: z.coerce.date().optional(),
     date_to: z.coerce.date().optional(),
     item_category: resourceCategorySchema.optional(),
 });
 
+// Extended from the summary shape so the two filter sets can never drift.
+export const listSalesQuerySchema = paginationQuerySchema.extend(salesSummaryQuerySchema.shape);
+
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 export type ListSalesQuery = z.infer<typeof listSalesQuerySchema>;
+export type SalesSummaryQuery = z.infer<typeof salesSummaryQuerySchema>;

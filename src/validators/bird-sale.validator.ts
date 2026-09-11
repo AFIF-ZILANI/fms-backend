@@ -32,7 +32,7 @@ export const createBirdSaleSchema = z
         { message: "male_count + female_count must equal birds_count when both are given" },
     );
 
-export const listBirdSalesQuerySchema = paginationQuerySchema.extend({
+export const birdSalesSummaryQuerySchema = z.object({
     batch_id: z.string().uuid().optional(),
     customer_id: z.string().uuid().optional(),
     date_from: z.coerce.date().optional(),
@@ -40,5 +40,11 @@ export const listBirdSalesQuerySchema = paginationQuerySchema.extend({
     grade: z.enum(["HIGH", "LOW", "CULL"]).optional(),
 });
 
+// Extended from the summary shape so the two filter sets can never drift.
+export const listBirdSalesQuerySchema = paginationQuerySchema.extend(
+    birdSalesSummaryQuerySchema.shape,
+);
+
 export type CreateBirdSaleInput = z.infer<typeof createBirdSaleSchema>;
 export type ListBirdSalesQuery = z.infer<typeof listBirdSalesQuerySchema>;
+export type BirdSalesSummaryQuery = z.infer<typeof birdSalesSummaryQuerySchema>;
