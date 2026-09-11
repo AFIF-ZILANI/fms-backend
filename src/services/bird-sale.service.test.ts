@@ -195,4 +195,30 @@ describe("BirdSaleService", () => {
         expect(dateFiltered.some((s) => s.id === cullSale!.id)).toBe(true);
         expect(dateFiltered.some((s) => s.id === oldHighSale!.id)).toBe(false);
     });
+    test("summary totals move by exactly the bird sale just created", async () => {
+        const batch = await newRunningBatch(500);
+        const before = await BirdSaleService.summary({});
+
+        const sale = await BirdSaleService.create({
+            batch_id: batch.id,
+            house_id: houseId,
+            sale_date: new Date(),
+            grade: "HIGH",
+            birds_count: 10,
+            dholta_in_g: 0,
+            total_katha: 1,
+            total_weight: 20,
+            net_weight: 20,
+            price_per_kg: 5,
+            paid_amount: 40,
+            recorded_by_id: profileId,
+        });
+        createdSaleIds.push(sale!.id);
+
+        const after = await BirdSaleService.summary({});
+        expect(after.count - before.count).toBe(1);
+        expect(after.total_birds - before.total_birds).toBe(10);
+        expect(parseFloat(after.total_revenue) - parseFloat(before.total_revenue)).toBeCloseTo(100, 2);
+        expect(parseFloat(after.total_due) - parseFloat(before.total_due)).toBeCloseTo(60, 2);
+    });
 });

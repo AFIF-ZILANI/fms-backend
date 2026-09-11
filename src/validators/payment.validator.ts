@@ -29,6 +29,11 @@ export const totalPaidQuerySchema = z.object({
     ref_id: z.string().uuid(),
 });
 
+export const outstandingQuerySchema = z.object({
+    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE", "PAYROLL"]),
+});
+
+export type OutstandingQuery = z.infer<typeof outstandingQuerySchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type ListPaymentsQuery = z.infer<typeof listPaymentsQuerySchema>;
 export type TotalPaidQuery = z.infer<typeof totalPaidQuerySchema>;

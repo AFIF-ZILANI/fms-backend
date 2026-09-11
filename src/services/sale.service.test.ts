@@ -114,4 +114,20 @@ describe("SaleService", () => {
         expect(categoryFiltered.some((s) => s.id === recentSale!.id)).toBe(true);
         expect(categoryFiltered.some((s) => s.id === oldSale!.id)).toBe(false);
     });
+    test("summary totals move by exactly the sale just created", async () => {
+        const before = await SaleService.summary({});
+
+        const sale = await SaleService.create({
+            sale_date: new Date(),
+            paid_amount: 20,
+            recorded_by_id: profileId,
+            items: [{ item_id: itemId, quantity: 2, unit: "BAG", unit_price: 50 }],
+        });
+        createdSaleIds.push(sale!.id);
+
+        const after = await SaleService.summary({});
+        expect(after.count - before.count).toBe(1);
+        expect(parseFloat(after.total_revenue) - parseFloat(before.total_revenue)).toBeCloseTo(100, 2);
+        expect(parseFloat(after.total_due) - parseFloat(before.total_due)).toBeCloseTo(80, 2);
+    });
 });

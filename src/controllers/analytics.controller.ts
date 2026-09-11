@@ -8,6 +8,7 @@ import type {
     ExpenseBreakdownQuery,
     FinancialDashboardQuery,
     RevenueVsExpensesQuery,
+    TopOutstandingQuery,
     TrendsQuery,
 } from "@validators/analytics.validator";
 
@@ -86,6 +87,14 @@ export const AnalyticsController = {
             const query = getValid<TrendsQuery>(c, "query");
             const rows = await AnalyticsService.birdGradeDistribution(query.days);
             return sendSuccess(c, rows, "Bird grade distribution computed");
+        });
+    },
+
+    async topOutstandingCustomers(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<TopOutstandingQuery>(c, "query");
+            const rows = await AnalyticsService.topOutstandingCustomers(query.limit);
+            return sendSuccess(c, rows, "Top outstanding customers computed");
         });
     },
 

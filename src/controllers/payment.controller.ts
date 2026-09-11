@@ -6,6 +6,7 @@ import { PaymentService } from "@services/payment.service";
 import type {
     CreatePaymentInput,
     ListPaymentsQuery,
+    OutstandingQuery,
     TotalPaidQuery,
 } from "@validators/payment.validator";
 
@@ -30,6 +31,14 @@ export const PaymentController = {
             const body = getValid<CreatePaymentInput>(c, "json");
             const payment = await PaymentService.create(body);
             return sendSuccess(c, payment, "Payment recorded", 201);
+        });
+    },
+
+    async getPaidByRef(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<OutstandingQuery>(c, "query");
+            const rows = await PaymentService.paidByRef(query.ref_type);
+            return sendSuccess(c, rows, "Paid totals computed");
         });
     },
 

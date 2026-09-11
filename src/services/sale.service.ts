@@ -3,25 +3,33 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
-import type { CreateSaleInput, ListSalesQuery } from "@validators/sale.validator";
+import type {
+    CreateSaleInput,
+    ListSalesQuery,
+    SalesSummaryQuery,
+} from "@validators/sale.validator";
 
 const include = { items: { include: { item: true } }, customer: true } as const;
+
+function buildWhere(query: SalesSummaryQuery) {
+    return {
+        ...(query.customer_id !== undefined && { customer_id: query.customer_id }),
+        ...((query.date_from !== undefined || query.date_to !== undefined) && {
+            sale_date: {
+                ...(query.date_from !== undefined && { gte: query.date_from }),
+                ...(query.date_to !== undefined && { lte: query.date_to }),
+            },
+        }),
+        ...(query.item_category !== undefined && {
+            items: { some: { item: { category: query.item_category } } },
+        }),
+    };
+}
 
 // Sale/SaleItem are append-only, same as Purchase/PurchaseItem -- no update.
 export const SaleService = {
     async getAll(query: ListSalesQuery) {
-        const where = {
-            ...(query.customer_id !== undefined && { customer_id: query.customer_id }),
-            ...((query.date_from !== undefined || query.date_to !== undefined) && {
-                sale_date: {
-                    ...(query.date_from !== undefined && { gte: query.date_from }),
-                    ...(query.date_to !== undefined && { lte: query.date_to }),
-                },
-            }),
-            ...(query.item_category !== undefined && {
-                items: { some: { item: { category: query.item_category } } },
-            }),
-        };
+        const where = buildWhere(query);
         const [sales, total] = await Promise.all([
             prisma.sale.findMany({
                 where,
@@ -32,6 +40,38 @@ export const SaleService = {
             prisma.sale.count({ where }),
         ]);
         return { sales, meta: buildMeta(total, query) };
+    },
+
+    /** Whole-set totals for the Sales KPI row. The list endpoint's `limit` is
+     * capped at 100, so these can never be summed client-side from a page of
+     * results. total_due nets every SALE payment off the due snapshots --
+     * exact only because PaymentService.create refuses to overpay a row, so
+     * no row's outstanding can be negative and skew the sum. */
+    async summary(query: SalesSummaryQuery) {
+        const where = buildWhere(query);
+        const [aggregate, ids] = await Promise.all([
+            prisma.sale.aggregate({
+                where,
+                _count: { _all: true },
+                _sum: { due_amount: true, total: true },
+            }),
+            // ponytail: id list feeds the payment aggregate so a filtered
+            // summary nets off only its own sales. Swap for a raw JOIN if the
+            // sale count ever makes this list expensive to ship around.
+            prisma.sale.findMany({ where, select: { id: true } }),
+        ]);
+        const paid = await prisma.payment.aggregate({
+            where: { ref_type: "SALE", ref_id: { in: ids.map((row) => row.id) } },
+            _sum: { amount: true },
+        });
+        const due = (aggregate._sum.due_amount ?? new Prisma.Decimal(0)).minus(
+            paid._sum.amount ?? new Prisma.Decimal(0),
+        );
+        return {
+            count: aggregate._count._all,
+            total_revenue: (aggregate._sum.total ?? new Prisma.Decimal(0)).toString(),
+            total_due: due.toString(),
+        };
     },
 
     async getById(id: string) {

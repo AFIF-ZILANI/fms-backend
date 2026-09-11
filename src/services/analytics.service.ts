@@ -376,16 +376,81 @@ export const AnalyticsService = {
         const grouped = await prisma.birdSale.groupBy({
             by: ["grade"],
             where: { sale_date: { gte: since, lte: new Date() } },
-            _sum: { birds_count: true, total_amount: true },
+            _sum: { birds_count: true, total_amount: true, net_weight: true },
         });
 
+        // net_weight rides along so avg price/kg is revenue/weight over this
+        // exact window -- computing it client-side used a different window
+        // boundary and only the latest page of bird sales.
         return grouped
             .map((row) => ({
                 grade: row.grade,
                 birds_count: row._sum.birds_count ?? 0,
                 revenue: (row._sum.total_amount ?? new Prisma.Decimal(0)).toString(),
+                net_weight: (row._sum.net_weight ?? new Prisma.Decimal(0)).toString(),
             }))
             .sort((a, b) => b.birds_count - a.birds_count);
+    },
+
+    /** Customers ranked by total outstanding receivable across Sale and
+     * BirdSale. Payments carry no customer_id, so the ref_id -> customer
+     * mapping is joined in memory here (same shape as salesByProductLine).
+     * Rows with no customer are excluded -- an unattributed due can't be
+     * chased. All-time, not period-scoped: receivables don't reset with a
+     * date range. */
+    async topOutstandingCustomers(limit: number) {
+        const [sales, birdSales, salePayments, birdSalePayments] = await Promise.all([
+            prisma.sale.findMany({
+                where: { customer_id: { not: null }, due_amount: { gt: 0 } },
+                select: { id: true, customer_id: true, due_amount: true },
+            }),
+            prisma.birdSale.findMany({
+                where: { customer_id: { not: null }, due_amount: { gt: 0 } },
+                select: { id: true, customer_id: true, due_amount: true },
+            }),
+            prisma.payment.groupBy({
+                by: ["ref_id"],
+                where: { ref_type: "SALE" },
+                _sum: { amount: true },
+            }),
+            prisma.payment.groupBy({
+                by: ["ref_id"],
+                where: { ref_type: "BIRD_SALE" },
+                _sum: { amount: true },
+            }),
+        ]);
+
+        const paid = new Map<string, Prisma.Decimal>();
+        for (const row of [...salePayments, ...birdSalePayments]) {
+            paid.set(row.ref_id, row._sum.amount ?? new Prisma.Decimal(0));
+        }
+
+        const dueByCustomer = new Map<string, Prisma.Decimal>();
+        for (const row of [...sales, ...birdSales]) {
+            const outstanding = row.due_amount.minus(paid.get(row.id) ?? new Prisma.Decimal(0));
+            if (outstanding.lessThanOrEqualTo(0)) continue;
+            const key = row.customer_id!;
+            dueByCustomer.set(
+                key,
+                (dueByCustomer.get(key) ?? new Prisma.Decimal(0)).plus(outstanding),
+            );
+        }
+
+        const ranked = Array.from(dueByCustomer.entries())
+            .sort((a, b) => b[1].comparedTo(a[1]))
+            .slice(0, limit);
+
+        const customers = await prisma.customers.findMany({
+            where: { id: { in: ranked.map(([id]) => id) } },
+            select: { id: true, profile: { select: { name: true } } },
+        });
+
+        return ranked.map(([customer_id, due]) => ({
+            customer_id,
+            customer_name:
+                customers.find((c) => c.id === customer_id)?.profile.name ?? "Unknown customer",
+            due: due.toString(),
+        }));
     },
 
     /** Spend per category over `days` days -- PurchaseItem cost grouped by
