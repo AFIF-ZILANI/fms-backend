@@ -392,6 +392,18 @@ describe("AnalyticsService", () => {
         expect(parseFloat(highRow!.revenue) / parseFloat(highRow!.net_weight)).toBeGreaterThan(0);
     });
 
+    test("top outstanding customers ranks by summed due across both sale types", async () => {
+        const rows = await AnalyticsService.topOutstandingCustomers(5);
+        expect(Array.isArray(rows)).toBe(true);
+        expect(rows.length).toBeLessThanOrEqual(5);
+        for (const row of rows) {
+            expect(parseFloat(row.due)).toBeGreaterThan(0);
+            expect(typeof row.customer_name).toBe("string");
+        }
+        const dues = rows.map((r) => parseFloat(r.due));
+        expect([...dues].sort((a, b) => b - a)).toEqual(dues);
+    });
+
     test("purchasesByCategory buckets PurchaseItem cost by Item.category", async () => {
         const item = await prisma.item.create({
             data: {

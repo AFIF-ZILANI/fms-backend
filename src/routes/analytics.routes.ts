@@ -7,6 +7,7 @@ import {
     financialDashboardQuerySchema,
     revenueVsExpensesQuerySchema,
     trendsQuerySchema,
+    topOutstandingQuerySchema,
 } from "@validators/analytics.validator";
 
 export const analyticsRoutes = new Hono();
@@ -48,6 +49,11 @@ analyticsRoutes.get(
     "/sales/grade-distribution",
     zValidatorRfc7807("query", trendsQuerySchema),
     AnalyticsController.birdGradeDistribution,
+);
+analyticsRoutes.get(
+    "/sales/top-outstanding-customers",
+    zValidatorRfc7807("query", topOutstandingQuerySchema),
+    AnalyticsController.topOutstandingCustomers,
 );
 analyticsRoutes.get(
     "/purchases/by-category",
