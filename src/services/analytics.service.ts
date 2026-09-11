@@ -376,14 +376,18 @@ export const AnalyticsService = {
         const grouped = await prisma.birdSale.groupBy({
             by: ["grade"],
             where: { sale_date: { gte: since, lte: new Date() } },
-            _sum: { birds_count: true, total_amount: true },
+            _sum: { birds_count: true, total_amount: true, net_weight: true },
         });
 
+        // net_weight rides along so avg price/kg is revenue/weight over this
+        // exact window -- computing it client-side used a different window
+        // boundary and only the latest page of bird sales.
         return grouped
             .map((row) => ({
                 grade: row.grade,
                 birds_count: row._sum.birds_count ?? 0,
                 revenue: (row._sum.total_amount ?? new Prisma.Decimal(0)).toString(),
+                net_weight: (row._sum.net_weight ?? new Prisma.Decimal(0)).toString(),
             }))
             .sort((a, b) => b.birds_count - a.birds_count);
     },

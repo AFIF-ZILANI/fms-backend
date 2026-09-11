@@ -384,6 +384,14 @@ describe("AnalyticsService", () => {
         expect(parseFloat(highRow!.revenue)).toBeGreaterThanOrEqual(118000);
     });
 
+    test("grade distribution carries net weight so avg price/kg is derivable", async () => {
+        const rows = await AnalyticsService.birdGradeDistribution(30);
+        const highRow = rows.find((r) => r.grade === "HIGH");
+        expect(highRow).toBeDefined();
+        expect(parseFloat(highRow!.net_weight)).toBeGreaterThan(0);
+        expect(parseFloat(highRow!.revenue) / parseFloat(highRow!.net_weight)).toBeGreaterThan(0);
+    });
+
     test("purchasesByCategory buckets PurchaseItem cost by Item.category", async () => {
         const item = await prisma.item.create({
             data: {
