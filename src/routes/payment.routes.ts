@@ -4,6 +4,7 @@ import { PaymentController } from "@controllers/payment.controller";
 import {
     createPaymentSchema,
     listPaymentsQuerySchema,
+    outstandingQuerySchema,
     totalPaidQuerySchema,
 } from "@validators/payment.validator";
 
@@ -18,6 +19,11 @@ paymentRoutes.get(
     "/total-paid",
     zValidatorRfc7807("query", totalPaidQuerySchema),
     PaymentController.getTotalPaidForRef,
+);
+paymentRoutes.get(
+    "/outstanding",
+    zValidatorRfc7807("query", outstandingQuerySchema),
+    PaymentController.getPaidByRef,
 );
 paymentRoutes.get("/:id", PaymentController.getById);
 paymentRoutes.post("/", zValidatorRfc7807("json", createPaymentSchema), PaymentController.create);

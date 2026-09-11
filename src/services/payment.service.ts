@@ -151,6 +151,22 @@ export const PaymentService = {
         }
     },
 
+    /** Total paid per ref_id for one ref type, across every Payment row.
+     * Deliberately unpaginated: the Sales tables' Due column needs all of
+     * them, and list `limit` is capped at 100, so a list fetch can never be
+     * the source without silently dropping older payments. */
+    async paidByRef(ref_type: RefType) {
+        const grouped = await prisma.payment.groupBy({
+            by: ["ref_id"],
+            where: { ref_type },
+            _sum: { amount: true },
+        });
+        return grouped.map((row) => ({
+            ref_id: row.ref_id,
+            total_paid: (row._sum.amount ?? new Prisma.Decimal(0)).toString(),
+        }));
+    },
+
     /** Live outstanding balance for one polymorphic ref -- the owed figure
      * minus every Payment recorded against it. */
     async outstandingForRef(ref_type: RefType, ref_id: string) {

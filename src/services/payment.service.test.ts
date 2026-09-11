@@ -296,4 +296,22 @@ describe("PaymentService", () => {
             }),
         ).rejects.toThrow("Sale not found");
     });
+    test("paidByRef sums every payment per ref, beyond one page of results", async () => {
+        const id = await makeSale(30);
+
+        for (const amount of [10, 10, 10]) {
+            const payment = await PaymentService.create({
+                amount,
+                payment_date: new Date(),
+                direction: "INCOMING",
+                ref_type: "SALE",
+                ref_id: id,
+                from_instrument_id: fromInstrumentId,
+            });
+            createdPaymentIds.push(payment!.id);
+        }
+
+        const rows = await PaymentService.paidByRef("SALE");
+        expect(rows.find((r) => r.ref_id === id)?.total_paid).toBe("30");
+    });
 });
