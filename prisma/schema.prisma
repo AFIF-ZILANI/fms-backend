@@ -419,6 +419,8 @@ model Profiles {
   stockUnitsBound         StockUnit[]
   devices                 Device[]
   pairingCodes            PairingCode[]
+  ingestedSales           IngestedSale[]
+  ingestedSalesReviewed   IngestedSale[]         @relation("IngestedSaleReviewer")
 
   @@index([role])
 }
@@ -1096,10 +1098,17 @@ model BirdSale {
   price_per_kg        Decimal    @db.Decimal(10, 2)
   total_amount        Decimal    @db.Decimal(10, 2)
   paid_amount         Decimal    @db.Decimal(10, 2)
+  // Money knocked off at the point of sale. PoultryScale's gap between its
+  // final and received amounts is a discount that can never be paid down --
+  // recording it as due would make every discounted sale a permanent
+  // uncollectable receivable.
+  discount_amount     Decimal    @default(0) @db.Decimal(10, 2)
   due_amount          Decimal    @db.Decimal(10, 2)
   recorded_by_id      String
   recorded_by         Profiles   @relation(fields: [recorded_by_id], references: [id])
   created_at          DateTime   @default(now())
+
+  ingestedSale IngestedSale?
 
   @@index([batch_id, sale_date])
 }
@@ -1293,6 +1302,8 @@ model Device {
   revoked_at   DateTime?
   created_at   DateTime  @default(now())
 
+  ingestedSales IngestedSale[]
+
   @@index([profile_id])
 }
 
@@ -1308,4 +1319,32 @@ model PairingCode {
   created_at DateTime  @default(now())
 
   @@index([profile_id])
+}
+
+// A weighing session received from a phone, held until a human confirms it.
+// `payload` keeps exactly what was sent: when a mapping question comes up later
+// the answer is in the row rather than in a reconstruction.
+model IngestedSale {
+  id              String   @id @default(uuid())
+  source          String   @default("poultryscale")
+  idempotency_key String   @unique // "<device sale id>:main" | "<device sale id>:cull"
+  device_id       String
+  device          Device   @relation(fields: [device_id], references: [id])
+  recorded_by_id  String
+  recorded_by     Profiles @relation(fields: [recorded_by_id], references: [id])
+
+  payload          Json
+  portion          String // "main" | "cull"
+  device_sale_date DateTime
+  received_at      DateTime @default(now())
+
+  status           String    @default("PENDING") // PENDING | CONFIRMED | DISMISSED
+  bird_sale_id     String?   @unique
+  birdSale         BirdSale? @relation(fields: [bird_sale_id], references: [id])
+  dismissed_reason String?
+  reviewed_by_id   String?
+  reviewed_by      Profiles? @relation("IngestedSaleReviewer", fields: [reviewed_by_id], references: [id])
+  reviewed_at      DateTime?
+
+  @@index([status, received_at])
 }
