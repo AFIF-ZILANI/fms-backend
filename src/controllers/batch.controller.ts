@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -28,7 +29,10 @@ export const BatchController = {
 
     async create(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<CreateBatchInput>(c, "json");
+            const body = {
+                ...getValid<CreateBatchInput>(c, "json"),
+                recorded_by_id: await getActorId(c),
+            };
             const batch = await BatchService.create(body);
             return sendSuccess(c, batch, "Batch created", 201);
         });

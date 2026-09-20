@@ -25,7 +25,6 @@ export const createBirdSaleSchema = z
         // optional, not .default(0): a default makes the parsed output type
         // required, which would force every in-process caller to pass it.
         discount_amount: z.coerce.number().nonnegative().optional(),
-        recorded_by_id: z.string().uuid(),
     })
     .refine(
         (data) =>
@@ -48,6 +47,6 @@ export const listBirdSalesQuerySchema = paginationQuerySchema.extend(
     birdSalesSummaryQuerySchema.shape,
 );
 
-export type CreateBirdSaleInput = z.infer<typeof createBirdSaleSchema>;
+export type CreateBirdSaleInput = z.infer<typeof createBirdSaleSchema> & { recorded_by_id: string };
 export type ListBirdSalesQuery = z.infer<typeof listBirdSalesQuerySchema>;
 export type BirdSalesSummaryQuery = z.infer<typeof birdSalesSummaryQuerySchema>;

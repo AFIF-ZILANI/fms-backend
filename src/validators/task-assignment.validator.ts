@@ -6,7 +6,6 @@ const taskStatus = z.enum(["PENDING", "DONE", "CANCELLED"]);
 export const createTaskAssignmentSchema = z
     .object({
         employee_id: z.string().uuid(),
-        assigned_by_id: z.string().uuid(),
         task_id: z.string().uuid(),
         title: z.string().trim().min(1, "Title is required"),
         description: z.string().optional(),
@@ -46,7 +45,7 @@ export const listTaskAssignmentsQuerySchema = paginationQuerySchema.extend({
     due_to: z.coerce.date().optional(),
 });
 
-export type CreateTaskAssignmentInput = z.infer<typeof createTaskAssignmentSchema>;
+export type CreateTaskAssignmentInput = z.infer<typeof createTaskAssignmentSchema> & { assigned_by_id: string };
 export type UpdateTaskAssignmentInput = z.infer<typeof updateTaskAssignmentSchema>;
 export type CompleteTaskAssignmentInput = z.infer<typeof completeTaskAssignmentSchema>;
 export type ListTaskAssignmentsQuery = z.infer<typeof listTaskAssignmentsQuerySchema>;

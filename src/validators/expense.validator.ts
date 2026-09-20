@@ -12,7 +12,6 @@ export const createExpenseSchema = z.object({
     amount: z.coerce.number().positive("Amount must be positive"),
     date: z.coerce.date(),
     remarks: z.string().optional(),
-    recorded_by_id: z.string().uuid(),
 });
 
 export const listExpensesQuerySchema = paginationQuerySchema.extend({
@@ -23,5 +22,5 @@ export const listExpensesQuerySchema = paginationQuerySchema.extend({
     date_to: z.coerce.date().optional(),
 });
 
-export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+export type CreateExpenseInput = z.infer<typeof createExpenseSchema> & { recorded_by_id: string };
 export type ListExpensesQuery = z.infer<typeof listExpensesQuerySchema>;

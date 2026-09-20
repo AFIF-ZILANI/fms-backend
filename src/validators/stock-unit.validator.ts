@@ -14,7 +14,6 @@ export const bindStockUnitSchema = z.object({
     // the web dashboard's bind dialog posts only purchase_item_id. The field app
     // always sends it -- deliveries land at the farm gate, and FEATURES.md
     // §3.3/§4 name this as the accountability field for that.
-    bound_by_id: z.string().uuid().optional(),
 });
 
 export const relocateStockUnitSchema = z.object({
@@ -39,7 +38,7 @@ export const listStockUnitsQuerySchema = paginationQuerySchema.extend({
 });
 
 export type ProvisionStockUnitsInput = z.infer<typeof provisionStockUnitsSchema>;
-export type BindStockUnitInput = z.infer<typeof bindStockUnitSchema>;
+export type BindStockUnitInput = z.infer<typeof bindStockUnitSchema> & { bound_by_id?: string };
 export type RelocateStockUnitInput = z.infer<typeof relocateStockUnitSchema>;
 export type SetStockUnitStatusInput = z.infer<typeof setStockUnitStatusSchema>;
 export type ListStockUnitsQuery = z.infer<typeof listStockUnitsQuerySchema>;

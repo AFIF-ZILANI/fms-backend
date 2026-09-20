@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -31,7 +32,10 @@ export const IngestController = {
 
     async confirm(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<ConfirmIngestedInput>(c, "json");
+            const body = {
+                ...getValid<ConfirmIngestedInput>(c, "json"),
+                reviewed_by_id: await getActorId(c),
+            };
             const birdSale = await IngestService.confirm(c.req.param("id") ?? "", body);
             return sendSuccess(c, birdSale, "Sale confirmed", 201);
         });
@@ -39,7 +43,10 @@ export const IngestController = {
 
     async dismiss(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<DismissIngestedInput>(c, "json");
+            const body = {
+                ...getValid<DismissIngestedInput>(c, "json"),
+                reviewed_by_id: await getActorId(c),
+            };
             const row = await IngestService.dismiss(
                 c.req.param("id") ?? "",
                 body.reason,

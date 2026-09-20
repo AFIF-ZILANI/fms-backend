@@ -8,7 +8,6 @@ export const createMedicationSchema = z.object({
     dosage: z.string().min(1, "Dosage is required"),
     cause: z.string().optional(),
     period: z.string().optional(),
-    administered_by_id: z.string().uuid(),
     doctor_id: z.string().uuid().optional(),
     remarks: z.string().optional(),
     date: z.coerce.date().optional(),
@@ -19,5 +18,5 @@ export const listMedicationsQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
 });
 
-export type CreateMedicationInput = z.infer<typeof createMedicationSchema>;
+export type CreateMedicationInput = z.infer<typeof createMedicationSchema> & { administered_by_id: string };
 export type ListMedicationsQuery = z.infer<typeof listMedicationsQuerySchema>;

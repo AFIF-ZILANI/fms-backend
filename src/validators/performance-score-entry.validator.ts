@@ -28,7 +28,6 @@ const criterion = z.enum([
 export const createScoreEntrySchema = z
     .object({
         employee_id: z.string().uuid(),
-        given_by_id: z.string().uuid(),
         criterion,
         // Only used (and required) when criterion === "OTHER" -- every
         // fixed criterion's points come from FIXED_CRITERION_POINTS, never
@@ -53,5 +52,5 @@ export const listScoreEntriesQuerySchema = paginationQuerySchema.extend({
     date_to: z.coerce.date().optional(),
 });
 
-export type CreateScoreEntryInput = z.infer<typeof createScoreEntrySchema>;
+export type CreateScoreEntryInput = z.infer<typeof createScoreEntrySchema> & { given_by_id: string };
 export type ListScoreEntriesQuery = z.infer<typeof listScoreEntriesQuerySchema>;

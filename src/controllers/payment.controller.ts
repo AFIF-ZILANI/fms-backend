@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -28,7 +29,10 @@ export const PaymentController = {
 
     async create(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<CreatePaymentInput>(c, "json");
+            const body = {
+                ...getValid<CreatePaymentInput>(c, "json"),
+                handled_by_id: await getActorId(c),
+            };
             const payment = await PaymentService.create(body);
             return sendSuccess(c, payment, "Payment recorded", 201);
         });

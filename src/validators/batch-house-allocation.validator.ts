@@ -10,7 +10,6 @@ export const createAllocationSchema = z
         // INITIAL is set internally by BatchService.create only -- not a
         // client-choosable reason here.
         reason: z.enum(["TRANSFER", "ADJUSTMENT"]),
-        recorded_by_id: z.string().uuid(),
         idempotency_key: z.string().min(1).optional(),
     })
     .refine((data) => data.from_house_id !== undefined || data.to_house_id !== undefined, {
@@ -21,5 +20,5 @@ export const listAllocationsQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
 });
 
-export type CreateAllocationInput = z.infer<typeof createAllocationSchema>;
+export type CreateAllocationInput = z.infer<typeof createAllocationSchema> & { recorded_by_id: string };
 export type ListAllocationsQuery = z.infer<typeof listAllocationsQuerySchema>;

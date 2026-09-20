@@ -10,7 +10,6 @@ export const createInventoryAdjustmentSchema = z
         quantity_after: z.coerce.number().nonnegative(),
         reason: z.string().min(1, "Reason is required"),
         note: z.string().optional(),
-        recorded_by_id: z.string().uuid(),
         idempotency_key: z.string().min(1).optional(),
     })
     .refine((data) => data.warehouse_id !== undefined || data.house_id !== undefined, {
@@ -21,5 +20,5 @@ export const listInventoryAdjustmentsQuerySchema = paginationQuerySchema.extend(
     item_id: z.string().uuid().optional(),
 });
 
-export type CreateInventoryAdjustmentInput = z.infer<typeof createInventoryAdjustmentSchema>;
+export type CreateInventoryAdjustmentInput = z.infer<typeof createInventoryAdjustmentSchema> & { recorded_by_id: string };
 export type ListInventoryAdjustmentsQuery = z.infer<typeof listInventoryAdjustmentsQuerySchema>;

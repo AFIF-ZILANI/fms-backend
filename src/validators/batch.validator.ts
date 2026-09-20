@@ -16,8 +16,6 @@ export const createBatchSchema = z.object({
     // matching INITIAL BatchHouseAllocation + BatchHouseBalance in one
     // transaction (system-design-arc.md's "chicks arrive" flow).
     house_id: z.string().uuid("A valid house id is required for initial placement"),
-    // No auth yet (Phase 15 blocked) -- caller must name who's recording this.
-    recorded_by_id: z.string().uuid(),
 });
 
 export const updateBatchSchema = z.object({
@@ -38,7 +36,7 @@ export const listBatchesQuerySchema = paginationQuerySchema.extend({
     phase: phase.optional(),
 });
 
-export type CreateBatchInput = z.infer<typeof createBatchSchema>;
+export type CreateBatchInput = z.infer<typeof createBatchSchema> & { recorded_by_id: string };
 export type UpdateBatchInput = z.infer<typeof updateBatchSchema>;
 export type CloseBatchInput = z.infer<typeof closeBatchSchema>;
 export type ListBatchesQuery = z.infer<typeof listBatchesQuerySchema>;
