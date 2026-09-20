@@ -4,7 +4,12 @@ import { requireDevice } from "../middlewares/require-device";
 import { DeviceController } from "@controllers/device.controller";
 import { IngestController } from "@controllers/ingest.controller";
 import { redeemPairingSchema } from "@validators/device.validator";
-import { ingestSaleSchema, listIngestedQuerySchema } from "@validators/ingest.validator";
+import {
+    confirmIngestedSchema,
+    dismissIngestedSchema,
+    ingestSaleSchema,
+    listIngestedQuerySchema,
+} from "@validators/ingest.validator";
 
 // Versioned in the path from day one: PoultryScale has no OTA update channel,
 // so builds already in the field will post here indefinitely. v1 never breaks.
@@ -31,4 +36,15 @@ ingestRoutes.get(
     "/v1/sales",
     zValidatorRfc7807("query", listIngestedQuerySchema),
     IngestController.getAll,
+);
+
+ingestRoutes.post(
+    "/v1/sales/:id/confirm",
+    zValidatorRfc7807("json", confirmIngestedSchema),
+    IngestController.confirm,
+);
+ingestRoutes.post(
+    "/v1/sales/:id/dismiss",
+    zValidatorRfc7807("json", dismissIngestedSchema),
+    IngestController.dismiss,
 );

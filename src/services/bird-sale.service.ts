@@ -79,9 +79,16 @@ export const BirdSaleService = {
     async create(data: CreateBirdSaleInput) {
         const total_amount = new Prisma.Decimal(data.net_weight).times(data.price_per_kg);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
-        const due_amount = total_amount.minus(paid_amount);
+        // Discount is money knocked off at the point of sale, not money owed --
+        // it reduces what is due rather than sitting there as a receivable
+        // nobody will ever collect. Defaults to 0, so every existing caller
+        // behaves exactly as before.
+        const discount_amount = new Prisma.Decimal(data.discount_amount ?? 0);
+        const due_amount = total_amount.minus(discount_amount).minus(paid_amount);
         if (due_amount.isNegative()) {
-            throw AppError.badRequest("paid_amount cannot exceed the computed total_amount");
+            throw AppError.badRequest(
+                "paid_amount and discount cannot exceed the computed total_amount",
+            );
         }
 
         try {
@@ -109,6 +116,7 @@ export const BirdSaleService = {
                         price_per_kg: data.price_per_kg,
                         total_amount,
                         paid_amount,
+                        discount_amount,
                         due_amount,
                         recorded_by_id: data.recorded_by_id,
                         ...(data.customer_id !== undefined && { customer_id: data.customer_id }),

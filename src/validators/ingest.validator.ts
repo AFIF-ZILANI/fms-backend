@@ -47,3 +47,35 @@ export const listIngestedQuerySchema = z.object({
 
 export type IngestSaleInput = z.infer<typeof ingestSaleSchema>;
 export type ListIngestedQuery = z.infer<typeof listIngestedQuerySchema>;
+
+/** Everything the phone could not know, supplied by the reviewer. The weight and
+ * katha figures are pre-filled from the payload in the UI but stay editable:
+ * the crate->katha and deduction->dholta mappings are assumptions, and a human
+ * has to be able to correct them. */
+export const confirmIngestedSchema = z.object({
+    batch_id: z.string().uuid(),
+    house_id: z.string().uuid(),
+    customer_id: z.string().uuid().optional(),
+    grade: z.enum(["HIGH", "LOW", "CULL"]),
+    birds_count: z.coerce.number().int().positive(),
+    male_count: z.coerce.number().int().nonnegative().optional(),
+    female_count: z.coerce.number().int().nonnegative().optional(),
+    dholta_in_g: z.coerce.number().nonnegative(),
+    total_katha: z.coerce.number().int().nonnegative(),
+    avg_wt_per_katha_kg: z.coerce.number().positive().optional(),
+    total_weight: z.coerce.number().positive(),
+    net_weight: z.coerce.number().positive(),
+    avg_weight_g: z.coerce.number().positive().optional(),
+    price_per_kg: z.coerce.number().positive(),
+    paid_amount: z.coerce.number().nonnegative().default(0),
+    discount_amount: z.coerce.number().nonnegative().default(0),
+    reviewed_by_id: z.string().uuid(),
+});
+
+export const dismissIngestedSchema = z.object({
+    reason: z.string().min(1).max(500),
+    reviewed_by_id: z.string().uuid(),
+});
+
+export type ConfirmIngestedInput = z.infer<typeof confirmIngestedSchema>;
+export type DismissIngestedInput = z.infer<typeof dismissIngestedSchema>;

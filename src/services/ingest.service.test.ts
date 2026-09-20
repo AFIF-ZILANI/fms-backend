@@ -131,4 +131,79 @@ describe("IngestService", () => {
             ),
         ).rejects.toThrow("future");
     });
+    test("confirming creates a BirdSale with the discount applied", async () => {
+        const house = await prisma.houses.create({
+            data: { name: "Ingest House", type: "GROWER", number: 9401 },
+        });
+        const batch = await prisma.batches.create({
+            data: {
+                batch_code: `INGEST-${crypto.randomUUID()}`,
+                breed: "CLASSIC",
+                expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
+                initial_chick_count: 500,
+                init_chicks_avg_wt: 40,
+            },
+        });
+        await prisma.batchHouseBalance.create({
+            data: { batch_id: batch.id, house_id: house.id, quantity: 500 },
+        });
+
+        const saleId = crypto.randomUUID();
+        const ingested = await IngestService.ingest(
+            payload(saleId, { final_amount: 15600, received_amount: 15000 }),
+            { device_id: deviceId, profile_id: profileId },
+        );
+
+        const confirmInput = {
+            batch_id: batch.id,
+            house_id: house.id,
+            grade: "HIGH" as const,
+            birds_count: 40,
+            dholta_in_g: 500,
+            total_katha: 4,
+            price_per_kg: 195,
+            net_weight: 80,
+            total_weight: 82,
+            paid_amount: 15000,
+            discount_amount: 600,
+            reviewed_by_id: profileId,
+        };
+
+        const birdSale = await IngestService.confirm(ingested.rows[0]!.id, confirmInput);
+
+        expect(birdSale.total_amount.toString()).toBe("15600");
+        expect(birdSale.discount_amount.toString()).toBe("600");
+        expect(birdSale.due_amount.toString()).toBe("0");
+
+        const row = await prisma.ingestedSale.findUnique({ where: { id: ingested.rows[0]!.id } });
+        expect(row?.status).toBe("CONFIRMED");
+        expect(row?.bird_sale_id).toBe(birdSale.id);
+
+        // a second confirm of the same row is refused
+        await expect(
+            IngestService.confirm(ingested.rows[0]!.id, confirmInput),
+        ).rejects.toThrow("already");
+
+        await prisma.ingestedSale.deleteMany({ where: { id: ingested.rows[0]!.id } });
+        await prisma.birdSale.deleteMany({ where: { id: birdSale.id } });
+        await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batch.id } });
+        await prisma.batches.deleteMany({ where: { id: batch.id } });
+        await prisma.houses.deleteMany({ where: { id: house.id } });
+    });
+
+    test("dismissing keeps the row and records a reason", async () => {
+        const saleId = crypto.randomUUID();
+        const ingested = await IngestService.ingest(payload(saleId), {
+            device_id: deviceId,
+            profile_id: profileId,
+        });
+
+        const row = await IngestService.dismiss(
+            ingested.rows[0]!.id,
+            "Duplicate of a sale already entered by hand",
+            profileId,
+        );
+        expect(row.status).toBe("DISMISSED");
+        expect(row.dismissed_reason).toContain("Duplicate");
+    });
 });
