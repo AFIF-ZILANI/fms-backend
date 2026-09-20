@@ -14,7 +14,6 @@ export const createConsumptionSchema = z.object({
     unit: unitSchema,
     date: z.coerce.date(),
     note: z.string().optional(),
-    recorded_by_id: z.string().uuid(),
     idempotency_key: z.string().min(1).optional(),
 });
 
@@ -26,5 +25,5 @@ export const listConsumptionsQuerySchema = paginationQuerySchema.extend({
     occurred_to: z.coerce.date().optional(),
 });
 
-export type CreateConsumptionInput = z.infer<typeof createConsumptionSchema>;
+export type CreateConsumptionInput = z.infer<typeof createConsumptionSchema> & { recorded_by_id: string };
 export type ListConsumptionsQuery = z.infer<typeof listConsumptionsQuerySchema>;

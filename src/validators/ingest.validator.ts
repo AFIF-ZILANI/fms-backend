@@ -69,13 +69,11 @@ export const confirmIngestedSchema = z.object({
     price_per_kg: z.coerce.number().positive(),
     paid_amount: z.coerce.number().nonnegative().default(0),
     discount_amount: z.coerce.number().nonnegative().default(0),
-    reviewed_by_id: z.string().uuid(),
 });
 
 export const dismissIngestedSchema = z.object({
     reason: z.string().min(1).max(500),
-    reviewed_by_id: z.string().uuid(),
 });
 
-export type ConfirmIngestedInput = z.infer<typeof confirmIngestedSchema>;
-export type DismissIngestedInput = z.infer<typeof dismissIngestedSchema>;
+export type ConfirmIngestedInput = z.infer<typeof confirmIngestedSchema> & { reviewed_by_id: string };
+export type DismissIngestedInput = z.infer<typeof dismissIngestedSchema> & { reviewed_by_id: string };

@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -44,7 +45,10 @@ export const StockUnitController = {
 
     async bind(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<BindStockUnitInput>(c, "json");
+            const body = {
+                ...getValid<BindStockUnitInput>(c, "json"),
+                bound_by_id: await getActorId(c),
+            };
             const unit = await StockUnitService.bind(c.req.param("id") ?? "", body);
             return sendSuccess(c, unit, "Stock unit bound");
         });

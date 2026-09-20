@@ -13,7 +13,6 @@ export const createPaymentSchema = z.object({
     from_instrument_id: z.string().uuid(),
     to_instrument_id: z.string().uuid().optional(),
     transaction_ref: z.string().optional(),
-    handled_by_id: z.string().uuid().optional(),
     note: z.string().optional(),
 });
 
@@ -34,6 +33,6 @@ export const outstandingQuerySchema = z.object({
 });
 
 export type OutstandingQuery = z.infer<typeof outstandingQuerySchema>;
-export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
+export type CreatePaymentInput = z.infer<typeof createPaymentSchema> & { handled_by_id?: string };
 export type ListPaymentsQuery = z.infer<typeof listPaymentsQuerySchema>;
 export type TotalPaidQuery = z.infer<typeof totalPaidQuerySchema>;

@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -16,7 +17,10 @@ export const MedicationController = {
 
     async create(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<CreateMedicationInput>(c, "json");
+            const body = {
+                ...getValid<CreateMedicationInput>(c, "json"),
+                administered_by_id: await getActorId(c),
+            };
             const medication = await MedicationService.create(body);
             return sendSuccess(c, medication, "Medication logged", 201);
         });

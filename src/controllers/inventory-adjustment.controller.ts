@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -19,7 +20,10 @@ export const InventoryAdjustmentController = {
 
     async create(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<CreateInventoryAdjustmentInput>(c, "json");
+            const body = {
+                ...getValid<CreateInventoryAdjustmentInput>(c, "json"),
+                recorded_by_id: await getActorId(c),
+            };
             const adjustment = await InventoryAdjustmentService.create(body);
             return sendSuccess(c, adjustment, "Inventory adjustment recorded", 201);
         });

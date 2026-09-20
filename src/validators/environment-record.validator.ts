@@ -20,7 +20,6 @@ export const createEnvironmentRecordSchema = z.object({
     co2_ppm: z.coerce.number(),
     air_pressure_hpa: z.coerce.number(),
     time_period: timePeriod,
-    recorded_by_id: z.string().uuid(),
     idempotency_key: z.string().min(1).optional(),
 });
 
@@ -29,5 +28,5 @@ export const listEnvironmentRecordsQuerySchema = paginationQuerySchema.extend({
     house_id: z.string().uuid().optional(),
 });
 
-export type CreateEnvironmentRecordInput = z.infer<typeof createEnvironmentRecordSchema>;
+export type CreateEnvironmentRecordInput = z.infer<typeof createEnvironmentRecordSchema> & { recorded_by_id: string };
 export type ListEnvironmentRecordsQuery = z.infer<typeof listEnvironmentRecordsQuerySchema>;

@@ -23,12 +23,13 @@ export const BatchService = {
             prisma.batches.findMany({
                 where,
                 include,
-                orderBy: { created_at: "desc" },
+                // Running batches first (enum order puts RUNNING before
+                // CLOSED/SOLD), newest first within each -- what the list page shows.
+                orderBy: [{ status: "asc" }, { created_at: "desc" }],
                 ...toSkipTake(query),
             }),
             prisma.batches.count({ where }),
         ]);
-        console.log(batches);
         return { batches, meta: buildMeta(total, query) };
     },
 

@@ -8,7 +8,6 @@ export const createVaccinationSchema = z.object({
     dosage: z.coerce.number().int().positive("Dosage must be positive"),
     cause: z.string().optional(),
     period: z.string().optional(),
-    administered_by_id: z.string().uuid(),
     doctor_id: z.string().uuid().optional(),
     remarks: z.string().optional(),
     date: z.coerce.date().optional(),
@@ -19,5 +18,5 @@ export const listVaccinationsQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
 });
 
-export type CreateVaccinationInput = z.infer<typeof createVaccinationSchema>;
+export type CreateVaccinationInput = z.infer<typeof createVaccinationSchema> & { administered_by_id: string };
 export type ListVaccinationsQuery = z.infer<typeof listVaccinationsQuerySchema>;

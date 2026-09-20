@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -19,7 +20,10 @@ export const EnvironmentRecordController = {
 
     async create(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<CreateEnvironmentRecordInput>(c, "json");
+            const body = {
+                ...getValid<CreateEnvironmentRecordInput>(c, "json"),
+                recorded_by_id: await getActorId(c),
+            };
             const record = await EnvironmentRecordService.create(body);
             return sendSuccess(c, record, "Environment record logged", 201);
         });
