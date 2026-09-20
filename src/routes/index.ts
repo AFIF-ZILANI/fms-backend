@@ -43,10 +43,12 @@ import { supplierSupplyCategoryRoutes } from "@routes/supplier-supply-category.r
 import { taskTypeRoutes } from "@routes/task-type.routes";
 import { taskRoutes } from "@routes/task.routes";
 import { taskAssignmentRoutes } from "@routes/task-assignment.routes";
+import { deviceRoutes } from "@routes/device.routes";
 
 export const appRoutes = new Hono();
 
 appRoutes.route("/admins", adminRoutes);
+appRoutes.route("/devices", deviceRoutes);
 appRoutes.route("/employees", employeeRoutes);
 appRoutes.route("/suppliers", supplierRoutes);
 appRoutes.route("/customers", customerRoutes);

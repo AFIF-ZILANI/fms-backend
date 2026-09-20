@@ -417,6 +417,8 @@ model Profiles {
   auditLogs               AuditLog[]
   tasksAssigned           EmployeeTaskAssignment[]
   stockUnitsBound         StockUnit[]
+  devices                 Device[]
+  pairingCodes            PairingCode[]
 
   @@index([role])
 }
@@ -1274,4 +1276,36 @@ model Alerts {
   // No actor column here yet -- until one exists the app prefixes description
   // with the raiser's name (mobile/docs/PRD.md §6.20).
   idempotency_key String            @unique
+}
+
+// A paired mobile device. Tokens are long-lived deliberately: pairing is the
+// only way in, so an expired token would strand a phone holding unsynced sales
+// until an admin minted a fresh code. Revocation is immediate instead --
+// `revoked_at` is checked on every request.
+model Device {
+  id           String    @id @default(uuid())
+  profile_id   String
+  profile      Profiles  @relation(fields: [profile_id], references: [id])
+  label        String
+  platform     String?
+  token_hash   String    @unique // sha256; plaintext is returned once at pairing
+  last_seen_at DateTime?
+  revoked_at   DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([profile_id])
+}
+
+// Single-use, short-lived code an admin generates in the dashboard and the
+// operator types into the phone once. Keeps every secret out of the app bundle:
+// every EXPO_PUBLIC_* value in PoultryScale is baked into the APK.
+model PairingCode {
+  code       String    @id
+  profile_id String
+  profile    Profiles  @relation(fields: [profile_id], references: [id])
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([profile_id])
 }
