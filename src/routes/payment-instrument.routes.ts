@@ -28,3 +28,4 @@ paymentInstrumentRoutes.patch(
 );
 paymentInstrumentRoutes.post("/:id/deactivate", PaymentInstrumentController.deactivate);
 paymentInstrumentRoutes.post("/:id/reactivate", PaymentInstrumentController.reactivate);
+paymentInstrumentRoutes.delete("/:id", PaymentInstrumentController.remove);

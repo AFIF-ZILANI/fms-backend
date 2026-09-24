@@ -474,8 +474,8 @@ deleted item and don't block the delete.
 
 ### 6.2 Warehouses
 
-Deliberately minimal — no delete, no deactivate (§1.11). Just a named
-location.
+Deliberately minimal — no deactivate (§1.11). Just a named location, plus a
+guarded delete for mis-created ones.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
@@ -483,9 +483,19 @@ location.
 | GET | `/api/warehouses/:id` | 200 | — |
 | POST | `/api/warehouses` | 201 | `{ name }` |
 | PATCH | `/api/warehouses/:id` | 200 | `{ name }` (rename only) |
+| DELETE | `/api/warehouses/:id` | 200 | — — hard delete, unused warehouses only |
 
 **Errors**: **404** unknown `:id`; **400** empty `PATCH` body. No unique
 constraint on `name` → create can never 409.
+
+`DELETE` exists because there is no `is_active` to retire a typo with, and
+it is guarded for the same reason it didn't exist before: `InventoryAdjustment`
+is `onDelete: Cascade`, so an unguarded delete would take adjustment history
+with it. It refuses with **409** (`detail`: `"Warehouse has recorded stock
+history and cannot be deleted. Rename it instead."`) if any `Purchase`,
+`InventoryAdjustment`, or location-tagged `StockLedger` row points at it —
+which also covers transfers, since every transfer writes a ledger row tagged
+at each endpoint. A warehouse that has held stock is renamed, never removed.
 
 ### 6.3 Organizations + Item↔Organization links
 
@@ -550,6 +560,7 @@ a second Asset to the same unit 409s).
 | GET | `/api/assets/:id` | 200 | includes `stock_unit` |
 | POST | `/api/assets` | 201 | `{ stock_unit_id, name, purchase_cost, purchase_date, useful_life_batches }` |
 | PATCH | `/api/assets/:id/status` | 200 | `{ status: AssetStatus }` |
+| DELETE | `/api/assets/:id` | 200 | — — hard delete, un-depreciated assets only |
 
 `useful_life_batches` feeds `AssetDepreciation`'s formula (§11.2) — set it
 thoughtfully, it can't be corrected after the fact for already-computed
@@ -558,6 +569,14 @@ depreciation rows (those stay locked).
 **Errors**: **404** unknown `:id`. Create → **400** if `stock_unit_id`
 doesn't reference a real `StockUnit` (§1.7); **409** if that `StockUnit`
 already has an Asset (`stock_unit_id` is unique).
+
+`DELETE` undoes a mis-registration (wrong unit, duplicate): **409**
+(`detail`: `"Asset has depreciation history and cannot be deleted. Retire it
+instead."`) once any `AssetDepreciation` row exists — a depreciated asset is
+moved to `RETIRED`/`DISPOSED` via the status endpoint instead. The `StockUnit`
+is never touched: deleting the Asset frees its unique `stock_unit_id` so the
+unit can be registered again, and unblocks `DELETE /api/stock-units/:id`,
+which refuses while a linked Asset exists.
 
 ### 6.6 StockLedger — read-only
 
@@ -1249,12 +1268,20 @@ own bank account has `owner_type: "ADMIN"`, a supplier's account has
 | PATCH | `/api/payment-instruments/:id` | 200 | `{ type?, label?, bank_name?, account_no?, mobile_no?, mfs_type? }` (`owner_type`/`owner_id` not editable — not accepted by the update schema) |
 | POST | `/api/payment-instruments/:id/deactivate` | 200 | — |
 | POST | `/api/payment-instruments/:id/reactivate` | 200 | — |
+| DELETE | `/api/payment-instruments/:id` | 200 | — — hard delete, unused instruments only |
 
 **Errors**: **404** unknown `:id` on get/balance/patch/deactivate/
 reactivate; **400** empty `PATCH` body. `owner_id` isn't validated against
 any table (§1.13) — create can never 400/409 on a bad owner reference, and
 `owner_type`/`owner_id` aren't unique either, so create has essentially no
 business-rule error path at all beyond generic field validation.
+
+`DELETE` is for a mis-created instrument (wrong account number, duplicate):
+**409** (`detail`: `"Payment instrument has payment history and cannot be
+deleted. Deactivate it instead."`) as soon as any `Payment` references it as
+`from_instrument` or `to_instrument`. Once money has moved through an
+instrument it stays, so every payment keeps resolving to the account it
+actually used.
 
 ### 15.2 Payments
 

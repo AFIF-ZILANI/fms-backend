@@ -113,6 +113,64 @@ describe("AssetService", () => {
         expect(retired.status).toBe("RETIRED");
     });
 
+    test("remove hard-deletes an asset with no depreciation, freeing its unit", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        const asset = await AssetService.create({
+            stock_unit_id: unit!.id,
+            name: "Mis-registered Asset",
+            purchase_cost: 1000,
+            purchase_date: new Date(),
+            useful_life_batches: 5,
+        });
+        await AssetService.remove(asset!.id);
+
+        expect(await prisma.asset.findUnique({ where: { id: asset!.id } })).toBeNull();
+        // stock_unit_id is @unique -- the freed unit can be registered again.
+        const reRegistered = await AssetService.create({
+            stock_unit_id: unit!.id,
+            name: "Correctly Registered Asset",
+            purchase_cost: 1000,
+            purchase_date: new Date(),
+            useful_life_batches: 5,
+        });
+        createdAssetIds.push(reRegistered!.id);
+    });
+
+    test("remove refuses an asset with depreciation history", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        const asset = await AssetService.create({
+            stock_unit_id: unit!.id,
+            name: "Depreciated Asset",
+            purchase_cost: 10000,
+            purchase_date: new Date(),
+            useful_life_batches: 10,
+        });
+        createdAssetIds.push(asset!.id);
+
+        const batch = await prisma.batches.create({
+            data: {
+                batch_code: `ASSET-DEL-${crypto.randomUUID()}`,
+                breed: "CLASSIC",
+                expected_selling_date: new Date(Date.now() + 30 * 86400_000),
+                initial_chick_count: 100,
+                init_chicks_avg_wt: 40,
+            },
+        });
+        await prisma.assetDepreciation.create({
+            data: { asset_id: asset!.id, batch_id: batch.id, amount: 1000 },
+        });
+
+        await expect(AssetService.remove(asset!.id)).rejects.toBeInstanceOf(AppError);
+        expect(await prisma.asset.findUnique({ where: { id: asset!.id } })).not.toBeNull();
+
+        await prisma.assetDepreciation.deleteMany({ where: { asset_id: asset!.id } });
+        await prisma.batches.delete({ where: { id: batch.id } });
+    });
+
     test("getAll includes depreciations, getById includes depreciations with batch", async () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);

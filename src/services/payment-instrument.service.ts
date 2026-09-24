@@ -69,6 +69,29 @@ export const PaymentInstrumentService = {
         });
     },
 
+    /**
+     * Hard delete -- a mis-created instrument (wrong account number, duplicate) only.
+     * Once any Payment has moved through it, in either direction, it is part of the
+     * money trail and gets deactivated instead, so every payment still resolves to
+     * the account it actually used.
+     */
+    async remove(id: string) {
+        const instrument = await prisma.paymentInstrument.findUnique({
+            where: { id },
+            select: { _count: { select: { payments_from: true, payments_to: true } } },
+        });
+        if (!instrument) throw AppError.notFound("PaymentInstrument");
+
+        const attached = instrument._count.payments_from + instrument._count.payments_to;
+        if (attached > 0) {
+            throw AppError.conflict(
+                "Payment instrument has payment history and cannot be deleted. Deactivate it instead.",
+            );
+        }
+
+        return prisma.paymentInstrument.delete({ where: { id } });
+    },
+
     async setActive(id: string, is_active: boolean) {
         const instrument = await prisma.paymentInstrument.findUnique({ where: { id } });
         if (!instrument) throw AppError.notFound("PaymentInstrument");
