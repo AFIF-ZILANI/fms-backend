@@ -127,6 +127,45 @@ export const ItemService = {
         return prisma.item.update({ where: { id }, data: { is_active }, include });
     },
 
+    /**
+     * Hard delete -- only for an item that was never used (typo, duplicate,
+     * mis-created). Refuses as soon as any history references it: deactivate
+     * that one instead, so its purchases, ledger and consumption keep resolving
+     * to a real row. The FKs alone can't be trusted as the guard -- ItemUnit,
+     * ItemOrganization and *InventoryAdjustment* are onDelete: Cascade, so the
+     * adjustment history would be silently wiped -- hence the explicit count.
+     * ItemUnit/ItemOrganization/Suppliers links are config, not history, and
+     * are allowed to cascade away with the item.
+     */
+    async remove(id: string) {
+        const item = await prisma.item.findUnique({
+            where: { id },
+            select: {
+                _count: {
+                    select: {
+                        purchaseItems: true,
+                        ledgerEntries: true,
+                        consumptions: true,
+                        saleItems: true,
+                        feedingPrograms: true,
+                        inventoryAdjustments: true,
+                        stockTransfers: true,
+                    },
+                },
+            },
+        });
+        if (!item) throw AppError.notFound("Item");
+
+        const attached = Object.values(item._count).reduce((sum, n) => sum + n, 0);
+        if (attached > 0) {
+            throw AppError.conflict(
+                "Item has recorded history and cannot be deleted. Deactivate it instead.",
+            );
+        }
+
+        return prisma.item.delete({ where: { id } });
+    },
+
     /** Active items under their reorder level, balance computed from StockLedger. No pagination -- this list is meant to be short. */
     async getLowStock() {
         const items = await prisma.item.findMany({

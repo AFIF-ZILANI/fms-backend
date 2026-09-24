@@ -144,6 +144,31 @@ describe("ItemService", () => {
         expect(lowStock.some((i) => i.id === noReorderLevel!.id)).toBe(false);
     });
 
+    test("remove hard-deletes an unused item", async () => {
+        const item = await ItemService.create({ name: name(), category: "FEED", unit: "KG" });
+        await ItemService.remove(item!.id);
+        expect(await prisma.item.findUnique({ where: { id: item!.id } })).toBeNull();
+    });
+
+    test("remove refuses an item with recorded history", async () => {
+        const item = await ItemService.create({ name: name(), category: "FEED", unit: "KG" });
+        createdIds.push(item!.id);
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item!.id,
+                quantity: 5,
+                direction: "IN",
+                reason: "OPENING_BALANCE",
+                ref_type: "ADJUSTMENT",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+
+        await expect(ItemService.remove(item!.id)).rejects.toThrow(AppError);
+        expect(await prisma.item.findUnique({ where: { id: item!.id } })).not.toBeNull();
+    });
+
     test("WASTE category can be used for poultry-waste items", async () => {
         const item = await ItemService.create({
             name: `Poultry Waste ${crypto.randomUUID()}`,

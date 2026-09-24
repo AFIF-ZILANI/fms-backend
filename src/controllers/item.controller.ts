@@ -56,6 +56,13 @@ export const ItemController = {
         });
     },
 
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await ItemService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "Item deleted");
+        });
+    },
+
     async deactivate(c: Context) {
         return withHandler(c, async () => {
             const item = await ItemService.setActive(c.req.param("id") ?? "", false);
