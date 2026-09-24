@@ -43,7 +43,7 @@ npm run dev:node     # http://localhost:5085
 
 | Command               | Description                      |
 | --------------------- | -------------------------------- |
-| `bun run dev`         | Dev server with hot reload (Bun) |
+| `bun run dev`         | Dev server, restarts on change (Bun) |
 | `npm run dev:node`    | Dev server (Node.js via tsx)     |
 | `bun run start`       | Production server (Bun)          |
 | `npm run start:node`  | Production server (Node.js)      |

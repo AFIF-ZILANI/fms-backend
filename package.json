@@ -6,7 +6,7 @@
     "private": true,
     "scripts": {
         "postinstall": "prisma generate",
-        "dev": "bun --hot index.ts",
+        "dev": "bun --watch index.ts",
         "dev:node": "node --import tsx index.ts",
         "start": "bun index.ts",
         "start:node": "node --import tsx index.js",
