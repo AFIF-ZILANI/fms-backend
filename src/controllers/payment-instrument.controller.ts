@@ -41,6 +41,13 @@ export const PaymentInstrumentController = {
         });
     },
 
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await PaymentInstrumentService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "Payment instrument deleted");
+        });
+    },
+
     async deactivate(c: Context) {
         return withHandler(c, async () => {
             const instrument = await PaymentInstrumentService.setActive(

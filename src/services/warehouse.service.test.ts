@@ -18,6 +18,44 @@ describe("WarehouseService", () => {
         expect(found.name).toBe("Main Store");
     });
 
+    test("remove hard-deletes an unused warehouse", async () => {
+        const warehouse = await WarehouseService.create({ name: `Typo Store ${crypto.randomUUID()}` });
+        await WarehouseService.remove(warehouse.id);
+        expect(await prisma.warehouses.findUnique({ where: { id: warehouse.id } })).toBeNull();
+    });
+
+    test("remove refuses a warehouse with stock history", async () => {
+        const warehouse = await WarehouseService.create({ name: `Used Store ${crypto.randomUUID()}` });
+        createdIds.push(warehouse.id);
+        const item = await prisma.item.create({
+            data: {
+                name: `WH Delete Item ${crypto.randomUUID()}`,
+                normalized_key: `wh delete item ${crypto.randomUUID()}`,
+                category: "FEED",
+                unit: "KG",
+            },
+        });
+        const ledger = await prisma.stockLedger.create({
+            data: {
+                item_id: item.id,
+                quantity: 20,
+                direction: "IN",
+                reason: "OPENING_BALANCE",
+                ref_type: "ADJUSTMENT",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE",
+                location_id: warehouse.id,
+            },
+        });
+
+        await expect(WarehouseService.remove(warehouse.id)).rejects.toBeInstanceOf(AppError);
+        expect(await prisma.warehouses.findUnique({ where: { id: warehouse.id } })).not.toBeNull();
+
+        await prisma.stockLedger.delete({ where: { id: ledger.id } });
+        await prisma.item.delete({ where: { id: item.id } });
+    });
+
     test("getById on unknown id throws not-found", async () => {
         await expect(
             WarehouseService.getById("00000000-0000-0000-0000-000000000000"),

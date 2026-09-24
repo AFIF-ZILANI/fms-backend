@@ -40,6 +40,13 @@ export const WarehouseController = {
         });
     },
 
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await WarehouseService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "Warehouse deleted");
+        });
+    },
+
     async update(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<UpdateWarehouseInput>(c, "json");

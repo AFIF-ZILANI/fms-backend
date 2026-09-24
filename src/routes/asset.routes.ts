@@ -17,3 +17,4 @@ assetRoutes.patch(
     zValidatorRfc7807("json", updateAssetStatusSchema),
     AssetController.setStatus,
 );
+assetRoutes.delete("/:id", AssetController.remove);

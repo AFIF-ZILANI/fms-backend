@@ -25,6 +25,45 @@ describe("PaymentInstrumentService", () => {
         expect(found.is_active).toBe(true);
     });
 
+    test("remove hard-deletes an unused instrument", async () => {
+        const instrument = await PaymentInstrumentService.create({
+            owner_type: "ADMIN",
+            owner_id: crypto.randomUUID(),
+            type: "CASH",
+            label: `Typo Wallet ${crypto.randomUUID()}`,
+        });
+        await PaymentInstrumentService.remove(instrument.id);
+        expect(await prisma.paymentInstrument.findUnique({ where: { id: instrument.id } })).toBeNull();
+    });
+
+    test("remove refuses an instrument with payment history", async () => {
+        const instrument = await PaymentInstrumentService.create({
+            owner_type: "ADMIN",
+            owner_id: crypto.randomUUID(),
+            type: "CASH",
+            label: `Used Wallet ${crypto.randomUUID()}`,
+        });
+        createdIds.push(instrument.id);
+        // Written straight through prisma: PaymentService.create validates the ref against a
+        // real payable record, and none of that matters to the delete guard -- one row
+        // pointing at the instrument is the whole precondition.
+        const payment = await prisma.payment.create({
+            data: {
+                amount: 500,
+                payment_date: new Date(),
+                direction: "INCOMING",
+                ref_type: "SALE",
+                ref_id: crypto.randomUUID(),
+                from_instrument_id: instrument.id,
+            },
+        });
+
+        await expect(PaymentInstrumentService.remove(instrument.id)).rejects.toBeInstanceOf(AppError);
+        expect(await prisma.paymentInstrument.findUnique({ where: { id: instrument.id } })).not.toBeNull();
+
+        await prisma.payment.delete({ where: { id: payment.id } });
+    });
+
     test("getById on unknown id throws not-found", async () => {
         await expect(
             PaymentInstrumentService.getById("00000000-0000-0000-0000-000000000000"),

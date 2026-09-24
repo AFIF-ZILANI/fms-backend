@@ -33,6 +33,13 @@ export const AssetController = {
         });
     },
 
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await AssetService.remove(c.req.param("id") ?? "");
+            return sendSuccess(c, null, "Asset deleted");
+        });
+    },
+
     async setStatus(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<UpdateAssetStatusInput>(c, "json");

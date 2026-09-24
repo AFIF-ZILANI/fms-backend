@@ -26,3 +26,4 @@ warehouseRoutes.patch(
     zValidatorRfc7807("json", updateWarehouseSchema),
     WarehouseController.update,
 );
+warehouseRoutes.delete("/:id", WarehouseController.remove);

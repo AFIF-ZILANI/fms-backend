@@ -8,9 +8,10 @@ import type {
     ListWarehousesQuery,
 } from "@validators/warehouse.validator";
 
-// No is_active/delete here -- a warehouse is just a name, and InventoryAdjustment
-// cascades on delete, so removing one would silently destroy adjustment history.
-// Create + rename only; add lifecycle management if a real need shows up.
+// No is_active here -- a warehouse is just a name. Delete is guarded rather than
+// absent: InventoryAdjustment cascades on delete, so removing a warehouse that has
+// been used would silently destroy adjustment history -- remove() refuses in that
+// case, leaving delete usable only for a mis-created (never-used) row.
 export const WarehouseService = {
     async getAll(query: ListWarehousesQuery) {
         const [warehouses, total] = await Promise.all([
@@ -48,6 +49,36 @@ export const WarehouseService = {
 
     async create(data: CreateWarehouseInput) {
         return prisma.warehouses.create({ data });
+    },
+
+    /**
+     * Hard delete -- a mis-created warehouse (typo, duplicate) only. There is no
+     * is_active to fall back on, so this is the sole way to remove one, which is
+     * exactly why the guard matters: InventoryAdjustment is onDelete: Cascade, so an
+     * unguarded delete would take that history with it.
+     * StockLedger is polymorphic (location_type/location_id, no FK) -- counted
+     * separately. Transfers need no separate count: TransferService writes a ledger
+     * row tagged at each endpoint, so a warehouse that was ever a transfer end shows
+     * up in that count.
+     */
+    async remove(id: string) {
+        const warehouse = await prisma.warehouses.findUnique({
+            where: { id },
+            select: { _count: { select: { inventoryAdjustments: true, purchases: true } } },
+        });
+        if (!warehouse) throw AppError.notFound("Warehouse");
+
+        const ledgerRows = await prisma.stockLedger.count({
+            where: { location_type: "WAREHOUSE", location_id: id },
+        });
+        const attached = ledgerRows + Object.values(warehouse._count).reduce((sum, n) => sum + n, 0);
+        if (attached > 0) {
+            throw AppError.conflict(
+                "Warehouse has recorded stock history and cannot be deleted. Rename it instead.",
+            );
+        }
+
+        return prisma.warehouses.delete({ where: { id } });
     },
 
     async update(id: string, data: UpdateWarehouseInput) {
