@@ -16,6 +16,7 @@ itemRoutes.get("/stock-by-location", ItemController.getStockByLocation);
 itemRoutes.get("/:id", ItemController.getById);
 itemRoutes.post("/", zValidatorRfc7807("json", createItemSchema), ItemController.create);
 itemRoutes.patch("/:id", zValidatorRfc7807("json", updateItemSchema), ItemController.update);
+itemRoutes.delete("/:id", ItemController.remove);
 itemRoutes.post("/:id/deactivate", ItemController.deactivate);
 itemRoutes.post("/:id/reactivate", ItemController.reactivate);
 

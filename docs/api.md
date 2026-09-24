@@ -447,6 +447,7 @@ empty `PATCH` body).
 | PATCH | `/api/items/:id` | 200 | any subset of create fields |
 | POST | `/api/items/:id/deactivate` | 200 | — |
 | POST | `/api/items/:id/reactivate` | 200 | — |
+| DELETE | `/api/items/:id` | 200 | — — hard delete, unused items only |
 
 **Don't send `normalized_key`** — it's computed server-side from `name`
 (lowercased, trimmed, whitespace-collapsed) specifically to catch
@@ -459,6 +460,17 @@ update, not additive).
 `normalized_key` collides with an existing item (`detail`:
 `"normalized_key already in use"`); **400** if any id in `supplier_ids`
 doesn't reference a real Supplier (§1.7), or an empty `PATCH` body.
+
+`DELETE` is for mis-created rows (typo, duplicate) only. It refuses with
+**409** (`detail`: `"Item has recorded history and cannot be deleted.
+Deactivate it instead."`) as soon as any `PurchaseItem`, `StockLedger`,
+`Consumption`, `SaleItem`, `BatchFeedingProgram`, `InventoryAdjustment` or
+`StockTransfer` references the item — history always keeps its item row, so
+nothing anywhere ends up pointing at a missing one. An item that is in use
+is retired with `deactivate`, which hides it from pickers and low-stock
+while every past record still resolves. `ItemUnit`, `ItemOrganization` and
+`Suppliers` links are configuration, not history: they cascade away with a
+deleted item and don't block the delete.
 
 ### 6.2 Warehouses
 
