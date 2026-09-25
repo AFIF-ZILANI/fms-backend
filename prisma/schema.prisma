@@ -30,6 +30,22 @@ enum EmployeeRoleNames {
   INTERN
 }
 
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
+/// Where the employee is in the hiring paperwork sequence documented in
+/// docs/employee_hire.md. Set by hand -- there is no workflow engine behind it.
+enum EmploymentStatus {
+  APPOINTED
+  PROBATION
+  CONFIRMED
+  TERMINATED
+}
+
 enum SupplierRoleNames {
   SALES_MAN
   OWNER
@@ -443,6 +459,28 @@ model Employees {
   salary       Decimal           @db.Decimal(10, 2) // baseline; PayrollRecord snapshots the actual monthly figure
   joining_date DateTime          @default(now())
   rating       Float?            @default(0)
+
+  // ── Hire profile (docs/employee_hire.md) ────────────────────────────────
+  // Nullable in the database, required in the create validator: rows that
+  // predate this migration have none of it, but no new hire may skip it.
+  // The photo is not here -- it reuses Profiles.avatar_id -> Avatars.
+  date_of_birth      DateTime? // age is derived at render time, never stored
+  marital_status     MaritalStatus?
+  education          String? // highest level completed
+  experience         String? // prior relevant work, free text
+  nid_number         String? // the number only; the scan stays in the paper file
+  reference_name     String?
+  reference_relation String?
+  reference_phone    String?
+
+  // Emergency contact -- exactly one per employee, so flat columns, not a table.
+  emergency_name     String?
+  emergency_relation String?
+  emergency_phone    String?
+
+  employment_status  EmploymentStatus @default(APPOINTED)
+  probation_end_date DateTime?
+
   created_at   DateTime          @default(now())
   updated_at   DateTime          @updatedAt
 
