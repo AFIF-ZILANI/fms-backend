@@ -2,6 +2,7 @@ import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 
 const houseType = z.enum(["BROODER", "GROWER", "LAYER"]);
+const housePhase = z.enum(["READY", "CLEANING", "DISINFECTING", "RESTING", "MAINTENANCE"]);
 
 export const createHouseSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -10,11 +11,13 @@ export const createHouseSchema = z.object({
     capacity: z.coerce.number().int().positive().optional(),
 });
 
-export const updateHouseSchema = createHouseSchema.partial();
+// phase is update-only -- a new house always starts READY.
+export const updateHouseSchema = createHouseSchema.partial().extend({ phase: housePhase.optional() });
 
 export const listHousesQuerySchema = paginationQuerySchema.extend({
     type: houseType.optional(),
     is_active: z.enum(["true", "false"]).optional(),
+    phase: housePhase.optional(),
     // true = no batch currently occupying it (no BatchHouseBalance row with quantity > 0)
     is_available: z.enum(["true", "false"]).optional(),
 });

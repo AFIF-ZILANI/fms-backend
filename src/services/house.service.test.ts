@@ -152,6 +152,19 @@ describe("HouseService", () => {
         expect(neverUsed.last_vacated_at).toBeNull();
     });
 
+    test("phase defaults to READY and update sets it", async () => {
+        const house = await HouseService.create({ name: "Shed Phase", type: "BROODER", number: 82 });
+        createdIds.push(house.id);
+        expect(house.phase).toBe("READY");
+
+        const cleaning = await HouseService.update(house.id, { phase: "CLEANING" });
+        expect(cleaning.phase).toBe("CLEANING");
+
+        const { houses } = await HouseService.getAll({ page: 1, limit: 100, phase: "CLEANING" });
+        expect(houses.some((h) => h.id === house.id)).toBe(true);
+        expect(houses.every((h) => h.phase === "CLEANING")).toBe(true);
+    });
+
     test("remove deletes an untouched house but refuses one with history", async () => {
         const clean = await HouseService.create({ name: "Shed Del", type: "GROWER", number: 90 });
         await HouseService.remove(clean.id);

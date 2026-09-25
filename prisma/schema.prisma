@@ -55,6 +55,16 @@ enum HouseType {
   LAYER
 }
 
+/// Where an empty house is in its turnaround. Ignored while birds are in the
+/// house -- occupancy is derived from BatchHouseBalance, not stored here.
+enum HousePhase {
+  READY
+  CLEANING
+  DISINFECTING
+  RESTING
+  MAINTENANCE
+}
+
 enum BatchStatus {
   RUNNING
   CLOSED
@@ -515,6 +525,7 @@ model Houses {
   type       HouseType
   number     Int
   capacity   Int? // max birds this house can hold; null = no limit tracked
+  phase      HousePhase @default(READY) // operator-set turnaround stage; only meaningful while the house is empty
   is_active  Boolean   @default(true) // never hard-delete -- mortality/allocation/environment history attaches once a batch runs through it
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
