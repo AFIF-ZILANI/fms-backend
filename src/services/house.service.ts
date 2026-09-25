@@ -9,6 +9,12 @@ import type {
 } from "@validators/house.validator";
 
 export const HouseService = {
+    /**
+     * Each house carries its current occupants so the houses table can show the
+     * running batch, how many birds went in vs. how many are still alive, when
+     * the house started running, and when it should free up -- without the
+     * client fanning out one request per house.
+     */
     async getAll(query: ListHousesQuery) {
         const where = {
             ...(query.type !== undefined && { type: query.type }),
@@ -23,11 +29,82 @@ export const HouseService = {
             prisma.houses.findMany({
                 where,
                 orderBy: { created_at: "desc" },
+                include: {
+                    batchHouseBalances: {
+                        where: { quantity: { gt: 0 } },
+                        include: {
+                            batch: {
+                                select: {
+                                    id: true,
+                                    batch_code: true,
+                                    status: true,
+                                    starting_date: true,
+                                    expected_selling_date: true,
+                                },
+                            },
+                        },
+                    },
+                },
                 ...toSkipTake(query),
             }),
             prisma.houses.count({ where }),
         ]);
-        return { houses, meta: buildMeta(total, query) };
+
+        const occupiedPairs = houses.flatMap((h) =>
+            h.batchHouseBalances.map((b) => ({ house_id: h.id, batch_id: b.batch_id })),
+        );
+        // "Placed" is every bird ever moved INTO this house for the batch still
+        // in it (the INITIAL placement included) -- alive is what's left after
+        // mortality and transfers out, so the two together show the loss.
+        const inbound = occupiedPairs.length
+            ? await prisma.batchHouseAllocation.findMany({
+                  where: {
+                      to_house_id: { in: [...new Set(occupiedPairs.map((p) => p.house_id))] },
+                      batch_id: { in: [...new Set(occupiedPairs.map((p) => p.batch_id))] },
+                  },
+                  select: { to_house_id: true, batch_id: true, quantity: true, occurred_at: true },
+              })
+            : [];
+
+        const emptyHouseIds = houses.filter((h) => h.batchHouseBalances.length === 0).map((h) => h.id);
+        // A house empties the moment its last balance hits zero -- that covers
+        // birds leaving by sale or mortality too, which an outbound allocation
+        // row wouldn't.
+        const vacated = emptyHouseIds.length
+            ? await prisma.batchHouseBalance.groupBy({
+                  by: ["house_id"],
+                  where: { house_id: { in: emptyHouseIds }, quantity: 0 },
+                  _max: { updated_at: true },
+              })
+            : [];
+        const vacatedByHouse = new Map(vacated.map((v) => [v.house_id, v._max.updated_at]));
+
+        return {
+            houses: houses.map(({ batchHouseBalances, ...house }) => ({
+                ...house,
+                occupants: batchHouseBalances.map((balance) => {
+                    const moves = inbound.filter(
+                        (a) => a.to_house_id === house.id && a.batch_id === balance.batch_id,
+                    );
+                    const since = moves.reduce<Date | null>(
+                        (earliest, move) =>
+                            earliest === null || move.occurred_at < earliest ? move.occurred_at : earliest,
+                        null,
+                    );
+                    return {
+                        batch_id: balance.batch_id,
+                        batch_code: balance.batch.batch_code,
+                        batch_status: balance.batch.status,
+                        alive: balance.quantity,
+                        placed: moves.reduce((sum, move) => sum + move.quantity, 0),
+                        since: since ?? balance.batch.starting_date,
+                        expected_selling_date: balance.batch.expected_selling_date,
+                    };
+                }),
+                last_vacated_at: vacatedByHouse.get(house.id) ?? null,
+            })),
+            meta: buildMeta(total, query),
+        };
     },
 
     async getById(id: string) {

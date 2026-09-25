@@ -110,6 +110,48 @@ describe("HouseService", () => {
         expect(unavailable.houses.some((h) => h.id === empty.id)).toBe(false);
     });
 
+    test("listing carries occupants: placed vs alive, since, and expected free date", async () => {
+        const house = await HouseService.create({ name: "Shed Occ", type: "BROODER", number: 80 });
+        const empty = await HouseService.create({ name: "Shed Empty", type: "BROODER", number: 81 });
+        createdIds.push(house.id, empty.id);
+
+        const profile = await prisma.profiles.create({
+            data: { name: "House Occ Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+        });
+        createdProfileIds.push(profile.id);
+        const sellingDate = new Date(Date.now() + 30 * 86400_000);
+        const batch = await BatchService.create({
+            batch_code: `HOUSE-OCC-${crypto.randomUUID()}`,
+            breed: "CLASSIC",
+            expected_selling_date: sellingDate,
+            initial_chick_count: 500,
+            init_chicks_avg_wt: 40,
+            house_id: house.id,
+            recorded_by_id: profile.id,
+        });
+        createdBatchIds.push(batch!.id);
+
+        // 20 birds die -- placed stays at what was moved in, alive drops.
+        await prisma.batchHouseBalance.updateMany({
+            where: { batch_id: batch!.id, house_id: house.id },
+            data: { quantity: 480 },
+        });
+
+        const { houses } = await HouseService.getAll({ page: 1, limit: 100 });
+        const occupied = houses.find((h) => h.id === house.id)!;
+        expect(occupied.occupants).toHaveLength(1);
+        expect(occupied.occupants[0]!.batch_code).toBe(batch!.batch_code);
+        expect(occupied.occupants[0]!.placed).toBe(500);
+        expect(occupied.occupants[0]!.alive).toBe(480);
+        expect(occupied.occupants[0]!.batch_status).toBe("RUNNING");
+        expect(new Date(occupied.occupants[0]!.expected_selling_date).getTime()).toBe(sellingDate.getTime());
+        expect(occupied.last_vacated_at).toBeNull();
+
+        const neverUsed = houses.find((h) => h.id === empty.id)!;
+        expect(neverUsed.occupants).toHaveLength(0);
+        expect(neverUsed.last_vacated_at).toBeNull();
+    });
+
     test("remove deletes an untouched house but refuses one with history", async () => {
         const clean = await HouseService.create({ name: "Shed Del", type: "GROWER", number: 90 });
         await HouseService.remove(clean.id);
