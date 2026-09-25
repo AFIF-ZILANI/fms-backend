@@ -130,6 +130,31 @@ export const EmployeeService = {
         }
     },
 
+    /**
+     * Terminating is one act, not two: the employment ends and the profile goes
+     * inactive together, so a terminated employee can never be left showing as
+     * active staff because the second call failed.
+     */
+    async terminate(id: string) {
+        const employee = await prisma.employees.findUnique({ where: { id } });
+        if (!employee) throw AppError.notFound("Employee");
+        if (employee.employment_status === "TERMINATED") {
+            throw AppError.badRequest("Employee is already terminated");
+        }
+
+        await prisma.$transaction([
+            prisma.employees.update({
+                where: { id },
+                data: { employment_status: "TERMINATED" },
+            }),
+            prisma.profiles.update({
+                where: { id: employee.profile_id },
+                data: { is_active: false },
+            }),
+        ]);
+        return this.getById(id);
+    },
+
     async setActive(id: string, is_active: boolean) {
         const employee = await prisma.employees.findUnique({ where: { id } });
         if (!employee) throw AppError.notFound("Employee");
