@@ -5,6 +5,32 @@ const employeeRole = z.enum(["MANAGER", "WORKER", "INTERN"]);
 const maritalStatus = z.enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED"]);
 const employmentStatus = z.enum(["APPOINTED", "PROBATION", "CONFIRMED", "TERMINATED"]);
 
+/**
+ * Highest level completed. Stored as a plain String column so the list can grow
+ * without a migration, but constrained here -- including the madrasah stream
+ * (Dakhil, Alim), which is as common as SSC/HSC around the farm.
+ */
+export const EDUCATION_LEVELS = [
+    "NONE",
+    "PRIMARY",
+    "JSC",
+    "SSC",
+    "DAKHIL",
+    "HSC",
+    "ALIM",
+    "DIPLOMA",
+    "BACHELOR",
+    "MASTER",
+] as const;
+const education = z.enum(EDUCATION_LEVELS);
+
+/**
+ * E.164 for Bangladesh: +880 then a 10-digit mobile (01XXXXXXXXX without the
+ * leading 0) or a 9-10 digit landline. The form supplies the +880 prefix, so a
+ * value arriving without it is a client that skipped the component.
+ */
+const phone = z.string().regex(/^\+880\d{9,10}$/, "Must be a valid +880 number");
+
 /** What the browser gets back from a direct-to-Cloudinary upload. */
 const avatarSchema = z.object({
     public_id: z.string().min(1),
@@ -16,11 +42,11 @@ const avatarSchema = z.object({
  * their columns are nullable -- the columns stay nullable for rows that predate
  * the hire-profile migration, but no new hire may skip them.
  */
-export const createEmployeeSchema = z.object({
+const employeeFields = {
     // identity
     name: z.string().min(1, "Name is required"),
-    mobile: z.string().min(6, "Mobile is required"),
-    email: z.string().email("Invalid email").optional(),
+    mobile: phone,
+    email: z.string().email("Invalid email"),
     address: z.string().min(1, "Address is required"),
     date_of_birth: z.coerce.date({ message: "Date of birth is required" }),
     marital_status: maritalStatus,
@@ -35,21 +61,58 @@ export const createEmployeeSchema = z.object({
     probation_end_date: z.coerce.date().optional(),
 
     // background
-    education: z.string().min(1, "Educational background is required"),
-    experience: z.string().min(1, "Experience is required"),
+    education: education,
+    experience_years: z.coerce.number().int().min(0, "Years can't be negative"),
+    experience: z.string().min(1, "Describe the experience"),
 
-    // emergency contact -- mandatory
+    // emergency contact -- name, relationship and phone mandatory; the rest optional
     emergency_name: z.string().min(1, "Emergency contact name is required"),
     emergency_relation: z.string().min(1, "Emergency contact relationship is required"),
-    emergency_phone: z.string().min(6, "Emergency contact phone is required"),
+    emergency_phone: phone,
+    emergency_email: z.string().email("Invalid email").optional(),
+    emergency_address: z.string().optional(),
 
-    // reference -- recommended, not required
-    reference_name: z.string().optional(),
-    reference_relation: z.string().optional(),
-    reference_phone: z.string().optional(),
-});
+    // Reference -- optional, and either an employee or an outside person. These
+    // are nullable, not merely optional: switching an existing employee's
+    // reference from one kind to the other has to clear the other kind's fields,
+    // and only an explicit null can say "erase this".
+    reference_employee_id: z.string().uuid().nullable().optional(),
+    reference_name: z.string().nullable().optional(),
+    reference_phone: phone.nullable().optional(),
+    reference_address: z.string().nullable().optional(),
+};
 
-export const updateEmployeeSchema = createEmployeeSchema
+/**
+ * A reference is either one of our own employees or an outside person -- never
+ * both, and an outside reference that has a name needs a phone to be reachable.
+ */
+type ReferenceFields = {
+    reference_employee_id?: string | null | undefined;
+    reference_name?: string | null | undefined;
+    reference_phone?: string | null | undefined;
+};
+
+const notBothKinds = (d: ReferenceFields) =>
+    !(d.reference_employee_id && (d.reference_name || d.reference_phone));
+
+const outsideReferenceHasPhone = (d: ReferenceFields) => !d.reference_name || !!d.reference_phone;
+
+const NOT_BOTH = {
+    message: "A reference is either an employee or an outside contact, not both",
+    path: ["reference_employee_id"],
+};
+const NEEDS_PHONE = {
+    message: "Phone is required for an outside reference",
+    path: ["reference_phone"],
+};
+
+export const createEmployeeSchema = z
+    .object(employeeFields)
+    .refine(notBothKinds, NOT_BOTH)
+    .refine(outsideReferenceHasPhone, NEEDS_PHONE);
+
+export const updateEmployeeSchema = z
+    .object(employeeFields)
     .omit({ joining_date: true })
     .partial()
     .extend({
@@ -58,7 +121,9 @@ export const updateEmployeeSchema = createEmployeeSchema
             .min(0, "Rating must be 0-5")
             .max(5, "Rating must be 0-5")
             .optional(),
-    });
+    })
+    .refine(notBothKinds, NOT_BOTH)
+    .refine(outsideReferenceHasPhone, NEEDS_PHONE);
 
 export const listEmployeesQuerySchema = paginationQuerySchema.extend({
     role: employeeRole.optional(),

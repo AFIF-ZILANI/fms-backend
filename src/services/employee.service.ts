@@ -8,7 +8,14 @@ import type {
     ListEmployeesQuery,
 } from "@validators/employee.validator";
 
-const include = { profile: { include: { avatar: true } } } as const;
+const include = {
+    profile: { include: { avatar: true } },
+    // Just enough to name an in-house reference on the detail page -- the full
+    // employee record is one click away at /employees/:id.
+    reference_employee: {
+        select: { id: true, profile: { select: { name: true, mobile: true } } },
+    },
+} as const;
 
 // A payload spans two rows: Profiles owns the person (name, contact, photo),
 // Employees owns the job and the hire profile. Each method destructures the
@@ -87,7 +94,7 @@ export const EmployeeService = {
             throw AppError.badRequest("No update fields provided");
         }
 
-        const { name, mobile, email, address, avatar, ...employee } = data;
+        const { name, mobile, email, address, avatar, reference_employee_id, ...employee } = data;
         try {
             return await prisma.$transaction(async (tx) => {
                 // A replaced photo writes a new Avatars row rather than mutating the
@@ -102,6 +109,15 @@ export const EmployeeService = {
                     where: { id },
                     data: {
                         ...defined(employee),
+                        // Nested writes put this update on Prisma's relation-shaped
+                        // input, where the reference is connected rather than set as
+                        // a raw id. An explicit null disconnects it -- that's how the
+                        // form switches a reference from an employee to an outsider.
+                        ...(reference_employee_id !== undefined && {
+                            reference_employee: reference_employee_id
+                                ? { connect: { id: reference_employee_id } }
+                                : { disconnect: true },
+                        }),
                         ...(Object.keys(profileUpdate).length > 0 && {
                             profile: { update: profileUpdate },
                         }),

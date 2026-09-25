@@ -13,6 +13,7 @@ const avatarIds: string[] = [];
 const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => ({
     name: "Test Worker",
     mobile: mobile(),
+    email: `worker${Math.floor(Math.random() * 1e9)}@zerodfarms.test`,
     address: "Shed 3, Gazipur",
     date_of_birth: new Date("1995-04-12"),
     marital_status: "SINGLE",
@@ -21,7 +22,8 @@ const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => (
     role: "WORKER",
     salary: 15000,
     education: "HSC",
-    experience: "2 years at a layer farm",
+    experience_years: 2,
+    experience: "Layer farm in Gazipur, feeding and cleaning",
     emergency_name: "Karim Mia",
     emergency_relation: "father",
     emergency_phone: "+8801710000000",
@@ -125,6 +127,7 @@ describe("EmployeeService", () => {
         const found = await EmployeeService.getById(employee!.id);
         expect(found.marital_status).toBe("SINGLE");
         expect(found.education).toBe("HSC");
+        expect(found.experience_years).toBe(2);
         expect(found.emergency_phone).toBe("+8801710000000");
         // Nobody sets this on create, so the default has to hold.
         expect(found.employment_status).toBe("APPOINTED");
@@ -134,5 +137,40 @@ describe("EmployeeService", () => {
         const { emergency_phone, ...incomplete } = hire();
         expect(createEmployeeSchema.safeParse(incomplete).success).toBe(false);
         expect(createEmployeeSchema.safeParse(hire()).success).toBe(true);
+    });
+
+    test("a reference can point at another employee", async () => {
+        const referrer = await EmployeeService.create(hire({ name: "Referrer" }));
+        createdIds.push(referrer!.id);
+        if (referrer!.profile.avatar_id) avatarIds.push(referrer!.profile.avatar_id);
+
+        const referred = await EmployeeService.create(
+            hire({ name: "Referred", reference_employee_id: referrer!.id }),
+        );
+        createdIds.push(referred!.id);
+        if (referred!.profile.avatar_id) avatarIds.push(referred!.profile.avatar_id);
+
+        expect(referred!.reference_employee?.profile.name).toBe("Referrer");
+    });
+
+    test("validator rejects a reference that is both an employee and an outsider", () => {
+        const both = createEmployeeSchema.safeParse(
+            hire({
+                reference_employee_id: "3c2f1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+                reference_name: "Outsider",
+                reference_phone: "+8801710000001",
+            }),
+        );
+        expect(both.success).toBe(false);
+    });
+
+    test("validator rejects an outside reference with no phone", () => {
+        expect(createEmployeeSchema.safeParse(hire({ reference_name: "Outsider" })).success).toBe(
+            false,
+        );
+    });
+
+    test("validator rejects a mobile without the +880 prefix", () => {
+        expect(createEmployeeSchema.safeParse(hire({ mobile: "01710000000" })).success).toBe(false);
     });
 });
