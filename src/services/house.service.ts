@@ -19,6 +19,7 @@ export const HouseService = {
         const where = {
             ...(query.type !== undefined && { type: query.type }),
             ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
+            ...(query.phase !== undefined && { phase: query.phase }),
             ...(query.is_available !== undefined && {
                 batchHouseBalances: {
                     [query.is_available === "true" ? "none" : "some"]: { quantity: { gt: 0 } },
@@ -150,8 +151,8 @@ export const HouseService = {
         const house = await prisma.houses.findUnique({ where: { id } });
         if (!house) throw AppError.notFound("House");
 
-        const { name, type, number, capacity } = data;
-        if (!name && !type && number === undefined && capacity === undefined) {
+        const { name, type, number, capacity, phase } = data;
+        if (!name && !type && number === undefined && capacity === undefined && !phase) {
             throw AppError.badRequest("No update fields provided");
         }
 
@@ -162,6 +163,7 @@ export const HouseService = {
                 ...(type && { type }),
                 ...(number !== undefined && { number }),
                 ...(capacity !== undefined && { capacity }),
+                ...(phase && { phase }),
             },
         });
     },

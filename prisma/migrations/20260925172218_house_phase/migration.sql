@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "HousePhase" AS ENUM ('READY', 'CLEANING', 'DISINFECTING', 'RESTING', 'MAINTENANCE');
+
+-- AlterTable
+ALTER TABLE "Houses" ADD COLUMN     "phase" "HousePhase" NOT NULL DEFAULT 'READY';
