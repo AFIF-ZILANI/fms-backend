@@ -173,4 +173,23 @@ describe("EmployeeService", () => {
     test("validator rejects a mobile without the +880 prefix", () => {
         expect(createEmployeeSchema.safeParse(hire({ mobile: "01710000000" })).success).toBe(false);
     });
+
+    test("terminate ends the employment and deactivates the profile together", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Leaver" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        const terminated = await EmployeeService.terminate(employee!.id);
+        expect(terminated.employment_status).toBe("TERMINATED");
+        expect(terminated.profile.is_active).toBe(false);
+    });
+
+    test("terminating twice is a bad request", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Left Already" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        await EmployeeService.terminate(employee!.id);
+        await expect(EmployeeService.terminate(employee!.id)).rejects.toMatchObject({ status: 400 });
+    });
 });

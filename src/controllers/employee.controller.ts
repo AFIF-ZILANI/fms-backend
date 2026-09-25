@@ -41,6 +41,13 @@ export const EmployeeController = {
         });
     },
 
+    async terminate(c: Context) {
+        return withHandler(c, async () => {
+            const employee = await EmployeeService.terminate(c.req.param("id") ?? "");
+            return sendSuccess(c, employee, "Employee terminated");
+        });
+    },
+
     async deactivate(c: Context) {
         return withHandler(c, async () => {
             const employee = await EmployeeService.setActive(c.req.param("id") ?? "", false);
