@@ -464,19 +464,30 @@ model Employees {
   // Nullable in the database, required in the create validator: rows that
   // predate this migration have none of it, but no new hire may skip it.
   // The photo is not here -- it reuses Profiles.avatar_id -> Avatars.
-  date_of_birth      DateTime? // age is derived at render time, never stored
-  marital_status     MaritalStatus?
-  education          String? // highest level completed
-  experience         String? // prior relevant work, free text
-  nid_number         String? // the number only; the scan stays in the paper file
-  reference_name     String?
-  reference_relation String?
-  reference_phone    String?
+  date_of_birth    DateTime? // age is derived at render time, never stored
+  marital_status   MaritalStatus?
+  education        String? // highest level completed; the allowed set lives in the validator
+  experience       String? // where and what -- the note beside experience_years
+  experience_years Int? // whole years of relevant prior work
+  nid_number       String? // the number only; the scan stays in the paper file
 
   // Emergency contact -- exactly one per employee, so flat columns, not a table.
   emergency_name     String?
-  emergency_relation String?
+  emergency_relation String? // free text: the form offers a list plus "other"
   emergency_phone    String?
+  emergency_email    String?
+  emergency_address  String?
+
+  // Reference is either a current employee or an outside person -- never both.
+  // Enforced in the service, and expressed in the form as a segmented toggle so
+  // the invalid combination can't be entered (same shape as
+  // EmployeeTaskAssignment.house_id vs location_note).
+  reference_employee_id String?
+  reference_employee    Employees?  @relation("EmployeeReference", fields: [reference_employee_id], references: [id], onDelete: SetNull)
+  referredHires         Employees[] @relation("EmployeeReference")
+  reference_name        String?
+  reference_phone       String?
+  reference_address     String?
 
   employment_status  EmploymentStatus @default(APPOINTED)
   probation_end_date DateTime?
@@ -489,6 +500,7 @@ model Employees {
   taskAssignments   EmployeeTaskAssignment[]
 
   @@index([role])
+  @@index([reference_employee_id])
 }
 
 model Admins {
