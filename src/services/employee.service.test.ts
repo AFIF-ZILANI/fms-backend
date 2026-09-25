@@ -2,9 +2,31 @@ import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EmployeeService } from "./employee.service";
 import { AppError } from "@lib/app-error";
+import { createEmployeeSchema } from "@validators/employee.validator";
+import type { CreateEmployeeInput } from "@validators/employee.validator";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 const createdIds: string[] = [];
+const avatarIds: string[] = [];
+
+/** A complete hire payload -- every field docs/employee_hire.md marks Mandatory. */
+const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => ({
+    name: "Test Worker",
+    mobile: mobile(),
+    address: "Shed 3, Gazipur",
+    date_of_birth: new Date("1995-04-12"),
+    marital_status: "SINGLE",
+    nid_number: "1990123456789",
+    avatar: { public_id: "employees/test", image_url: "https://res.cloudinary.com/x/test.jpg" },
+    role: "WORKER",
+    salary: 15000,
+    education: "HSC",
+    experience: "2 years at a layer farm",
+    emergency_name: "Karim Mia",
+    emergency_relation: "father",
+    emergency_phone: "+8801710000000",
+    ...over,
+});
 
 describe("EmployeeService", () => {
     afterAll(async () => {
@@ -12,15 +34,11 @@ describe("EmployeeService", () => {
         await prisma.profiles.deleteMany({
             where: { employees: { id: { in: createdIds } } },
         });
+        await prisma.avatars.deleteMany({ where: { id: { in: avatarIds } } });
     });
 
     test("create then getById round-trips", async () => {
-        const employee = await EmployeeService.create({
-            name: "Test Worker",
-            mobile: mobile(),
-            role: "WORKER",
-            salary: 15000,
-        });
+        const employee = await EmployeeService.create(hire({ name: "Test Worker", role: "WORKER", salary: 15000 }));
         createdIds.push(employee!.id);
 
         const found = await EmployeeService.getById(employee!.id);
@@ -33,21 +51,11 @@ describe("EmployeeService", () => {
 
     test("duplicate mobile throws a conflict", async () => {
         const sharedMobile = mobile();
-        const first = await EmployeeService.create({
-            name: "First",
-            mobile: sharedMobile,
-            role: "WORKER",
-            salary: 10000,
-        });
+        const first = await EmployeeService.create(hire({ name: "First", role: "WORKER", salary: 10000, mobile: sharedMobile }));
         createdIds.push(first!.id);
 
         await expect(
-            EmployeeService.create({
-                name: "Second",
-                mobile: sharedMobile,
-                role: "WORKER",
-                salary: 10000,
-            }),
+            EmployeeService.create(hire({ name: "Second", role: "WORKER", salary: 10000, mobile: sharedMobile })),
         ).rejects.toMatchObject({ status: 409 });
     });
 
@@ -58,12 +66,7 @@ describe("EmployeeService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const employee = await EmployeeService.create({
-            name: "Updatable",
-            mobile: mobile(),
-            role: "INTERN",
-            salary: 5000,
-        });
+        const employee = await EmployeeService.create(hire({ name: "Updatable", role: "INTERN", salary: 5000 }));
         createdIds.push(employee!.id);
 
         await expect(EmployeeService.update(employee!.id, {})).rejects.toMatchObject({
@@ -72,12 +75,7 @@ describe("EmployeeService", () => {
     });
 
     test("update can promote role and change salary/rating", async () => {
-        const employee = await EmployeeService.create({
-            name: "Promotable",
-            mobile: mobile(),
-            role: "WORKER",
-            salary: 12000,
-        });
+        const employee = await EmployeeService.create(hire({ name: "Promotable", role: "WORKER", salary: 12000 }));
         createdIds.push(employee!.id);
 
         const promoted = await EmployeeService.update(employee!.id, {
@@ -91,12 +89,7 @@ describe("EmployeeService", () => {
     });
 
     test("setActive(false) then setActive(true) round-trips is_active", async () => {
-        const employee = await EmployeeService.create({
-            name: "Togglable",
-            mobile: mobile(),
-            role: "WORKER",
-            salary: 9000,
-        });
+        const employee = await EmployeeService.create(hire({ name: "Togglable", role: "WORKER", salary: 9000 }));
         createdIds.push(employee!.id);
 
         const deactivated = await EmployeeService.setActive(employee!.id, false);
@@ -107,16 +100,39 @@ describe("EmployeeService", () => {
     });
 
     test("listing filters by role", async () => {
-        const employee = await EmployeeService.create({
-            name: "FilterMe",
-            mobile: mobile(),
-            role: "INTERN",
-            salary: 4000,
-        });
+        const employee = await EmployeeService.create(hire({ name: "FilterMe", role: "INTERN", salary: 4000 }));
         createdIds.push(employee!.id);
 
         const { employees } = await EmployeeService.getAll({ page: 1, limit: 100, role: "INTERN" });
         expect(employees.some((e) => e.id === employee!.id)).toBe(true);
         expect(employees.every((e) => e.role === "INTERN")).toBe(true);
+    });
+
+    test("create writes the photo as an Avatars row and links it to the profile", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Photographed" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        expect(employee!.profile.avatar_id).not.toBeNull();
+        expect(employee!.profile.avatar?.public_id).toBe("employees/test");
+    });
+
+    test("the hire profile round-trips", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Detailed" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        const found = await EmployeeService.getById(employee!.id);
+        expect(found.marital_status).toBe("SINGLE");
+        expect(found.education).toBe("HSC");
+        expect(found.emergency_phone).toBe("+8801710000000");
+        // Nobody sets this on create, so the default has to hold.
+        expect(found.employment_status).toBe("APPOINTED");
+    });
+
+    test("validator rejects a hire missing a mandatory field", () => {
+        const { emergency_phone, ...incomplete } = hire();
+        expect(createEmployeeSchema.safeParse(incomplete).success).toBe(false);
+        expect(createEmployeeSchema.safeParse(hire()).success).toBe(true);
     });
 });
