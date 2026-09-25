@@ -9,6 +9,7 @@ import type {
     CloseBatchInput,
     ListBatchesQuery,
 } from "@validators/batch.validator";
+import { markEmptiedHousesCleaning } from "@lib/house-turnaround";
 
 const include = { houseBalances: { include: { house: true } } } as const;
 
@@ -144,6 +145,11 @@ export const BatchService = {
             if (remaining !== 0) {
                 await tx.batchHouseBalance.updateMany({ where: { batch_id: id }, data: { quantity: 0 } });
             }
+            const vacated = await tx.batchHouseBalance.findMany({
+                where: { batch_id: id },
+                select: { house_id: true },
+            });
+            await markEmptiedHousesCleaning(tx, vacated.map((b) => b.house_id));
 
             const closed = await tx.batches.update({
                 where: { id },

@@ -8,6 +8,7 @@ import type {
     CreateBirdSaleInput,
     ListBirdSalesQuery,
 } from "@validators/bird-sale.validator";
+import { markEmptiedHousesCleaning } from "@lib/house-turnaround";
 
 function buildWhere(query: BirdSalesSummaryQuery) {
     return {
@@ -133,6 +134,7 @@ export const BirdSaleService = {
                     where: { id: balance.id },
                     data: { quantity: { decrement: data.birds_count } },
                 });
+                await markEmptiedHousesCleaning(tx, [data.house_id]);
 
                 return birdSale;
             });

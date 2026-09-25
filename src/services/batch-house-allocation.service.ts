@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { markEmptiedHousesCleaning } from "@lib/house-turnaround";
 import type {
     CreateAllocationInput,
     ListAllocationsQuery,
@@ -59,6 +60,7 @@ export const BatchHouseAllocationService = {
                         where: { id: balance.id },
                         data: { quantity: { decrement: data.quantity } },
                     });
+                    await markEmptiedHousesCleaning(tx, [fromHouseId]);
                 }
 
                 if (data.to_house_id !== undefined) {
