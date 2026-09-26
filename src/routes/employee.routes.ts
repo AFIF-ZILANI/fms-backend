@@ -26,5 +26,6 @@ employeeRoutes.patch(
     EmployeeController.update,
 );
 employeeRoutes.post("/:id/terminate", EmployeeController.terminate);
+employeeRoutes.post("/:id/reinstate", EmployeeController.reinstate);
 employeeRoutes.post("/:id/deactivate", EmployeeController.deactivate);
 employeeRoutes.post("/:id/reactivate", EmployeeController.reactivate);
