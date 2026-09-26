@@ -192,4 +192,23 @@ describe("EmployeeService", () => {
         await EmployeeService.terminate(employee!.id);
         await expect(EmployeeService.terminate(employee!.id)).rejects.toMatchObject({ status: 400 });
     });
+
+    test("reinstate brings them back as APPOINTED and active", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Rehired" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        await EmployeeService.terminate(employee!.id);
+        const back = await EmployeeService.reinstate(employee!.id);
+        expect(back.employment_status).toBe("APPOINTED");
+        expect(back.profile.is_active).toBe(true);
+    });
+
+    test("reinstating someone who was never terminated is a bad request", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Still Here" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        await expect(EmployeeService.reinstate(employee!.id)).rejects.toMatchObject({ status: 400 });
+    });
 });

@@ -48,6 +48,13 @@ export const EmployeeController = {
         });
     },
 
+    async reinstate(c: Context) {
+        return withHandler(c, async () => {
+            const employee = await EmployeeService.reinstate(c.req.param("id") ?? "");
+            return sendSuccess(c, employee, "Employee reinstated");
+        });
+    },
+
     async deactivate(c: Context) {
         return withHandler(c, async () => {
             const employee = await EmployeeService.setActive(c.req.param("id") ?? "", false);

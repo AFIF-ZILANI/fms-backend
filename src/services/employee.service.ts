@@ -155,6 +155,30 @@ export const EmployeeService = {
         return this.getById(id);
     },
 
+    /**
+     * The mirror of terminate: a rehire starts the paperwork sequence over, so
+     * they come back as APPOINTED rather than resuming whatever stage they left at.
+     */
+    async reinstate(id: string) {
+        const employee = await prisma.employees.findUnique({ where: { id } });
+        if (!employee) throw AppError.notFound("Employee");
+        if (employee.employment_status !== "TERMINATED") {
+            throw AppError.badRequest("Employee is not terminated");
+        }
+
+        await prisma.$transaction([
+            prisma.employees.update({
+                where: { id },
+                data: { employment_status: "APPOINTED" },
+            }),
+            prisma.profiles.update({
+                where: { id: employee.profile_id },
+                data: { is_active: true },
+            }),
+        ]);
+        return this.getById(id);
+    },
+
     async setActive(id: string, is_active: boolean) {
         const employee = await prisma.employees.findUnique({ where: { id } });
         if (!employee) throw AppError.notFound("Employee");
