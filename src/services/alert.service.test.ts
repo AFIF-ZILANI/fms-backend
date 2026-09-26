@@ -208,4 +208,72 @@ describe("AlertService", () => {
         expect(match).toBeDefined();
         createdAlertIds.push(match!.id);
     });
+
+    test("scan warns when a probation has already ended", async () => {
+        const profile = await prisma.profiles.create({
+            data: {
+                name: "Probation Scan",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "EMPLOYEE",
+            },
+        });
+        createdProfileIds.push(profile.id);
+        const employee = await prisma.employees.create({
+            data: {
+                profile_id: profile.id,
+                role: "WORKER",
+                salary: 10000,
+                employment_status: "PROBATION",
+                // Yesterday -- past due, so this escalates to WARNING.
+                probation_end_date: new Date(Date.now() - 86_400_000),
+            },
+        });
+        createdEmployeeIds.push(employee.id);
+
+        await AlertService.runScan();
+        const { alerts } = await AlertService.getAll({
+            page: 1,
+            limit: 100,
+            type: "EMPLOYEE",
+            status: "ACTIVE",
+        });
+        const match = alerts.find(
+            (a) => a.related_id === employee.id && a.title.includes("probation ended"),
+        );
+        expect(match).toBeDefined();
+        expect(match!.level).toBe("WARNING");
+        createdAlertIds.push(match!.id);
+    });
+
+    test("scan leaves a probation that is still far off alone", async () => {
+        const profile = await prisma.profiles.create({
+            data: {
+                name: "Probation Far",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "EMPLOYEE",
+            },
+        });
+        createdProfileIds.push(profile.id);
+        const employee = await prisma.employees.create({
+            data: {
+                profile_id: profile.id,
+                role: "WORKER",
+                salary: 10000,
+                employment_status: "PROBATION",
+                probation_end_date: new Date(Date.now() + 60 * 86_400_000),
+            },
+        });
+        createdEmployeeIds.push(employee.id);
+
+        await AlertService.runScan();
+        const { alerts } = await AlertService.getAll({
+            page: 1,
+            limit: 100,
+            type: "EMPLOYEE",
+            status: "ACTIVE",
+        });
+        expect(alerts.some((a) => a.related_id === employee.id && a.title.includes("probation"))).toBe(
+            false,
+        );
+    });
 });

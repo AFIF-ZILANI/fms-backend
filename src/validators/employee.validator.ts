@@ -58,7 +58,9 @@ const employeeFields = {
     salary: z.coerce.number().positive("Salary must be positive"),
     joining_date: z.coerce.date().optional(),
     employment_status: employmentStatus.optional(),
-    probation_end_date: z.coerce.date().optional(),
+    // Nullable, not merely optional: clearing the date has to be expressible,
+    // and an omitted key on a PATCH means "leave unchanged".
+    probation_end_date: z.coerce.date().nullable().optional(),
 
     // background
     education: education,
