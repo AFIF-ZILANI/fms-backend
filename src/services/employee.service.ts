@@ -22,6 +22,14 @@ const include = {
 // split itself -- create and update have different field-optionality, and one
 // shared helper would only launder that difference into a cast.
 
+/**
+ * A probation end date only means anything while the employee is on probation.
+ * Enforced here rather than in each form, so no caller -- web, mobile, a later
+ * script -- can leave a confirmed employee showing a probation deadline.
+ */
+const probationOverride = (status?: string) =>
+    status && status !== "PROBATION" ? { probation_end_date: null } : {};
+
 /** Drops keys whose value is undefined -- Prisma treats an explicit undefined
  *  the same as absent, but exactOptionalPropertyTypes objects to passing it. */
 function defined<T extends object>(obj: T) {
@@ -77,7 +85,11 @@ export const EmployeeService = {
                     },
                 });
                 return tx.employees.create({
-                    data: { ...defined(employee), profile_id: profileRow.id },
+                    data: {
+                        ...defined(employee),
+                        ...probationOverride(employee.employment_status),
+                        profile_id: profileRow.id,
+                    },
                     include,
                 });
             });
@@ -109,6 +121,7 @@ export const EmployeeService = {
                     where: { id },
                     data: {
                         ...defined(employee),
+                        ...probationOverride(employee.employment_status),
                         // Nested writes put this update on Prisma's relation-shaped
                         // input, where the reference is connected rather than set as
                         // a raw id. An explicit null disconnects it -- that's how the
@@ -145,7 +158,7 @@ export const EmployeeService = {
         await prisma.$transaction([
             prisma.employees.update({
                 where: { id },
-                data: { employment_status: "TERMINATED" },
+                data: { employment_status: "TERMINATED", probation_end_date: null },
             }),
             prisma.profiles.update({
                 where: { id: employee.profile_id },
@@ -169,7 +182,7 @@ export const EmployeeService = {
         await prisma.$transaction([
             prisma.employees.update({
                 where: { id },
-                data: { employment_status: "APPOINTED" },
+                data: { employment_status: "APPOINTED", probation_end_date: null },
             }),
             prisma.profiles.update({
                 where: { id: employee.profile_id },

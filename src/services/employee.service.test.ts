@@ -211,4 +211,54 @@ describe("EmployeeService", () => {
 
         await expect(EmployeeService.reinstate(employee!.id)).rejects.toMatchObject({ status: 400 });
     });
+
+    test("leaving probation clears the probation end date", async () => {
+        const employee = await EmployeeService.create(
+            hire({
+                name: "Probationer",
+                employment_status: "PROBATION",
+                probation_end_date: new Date("2026-12-01"),
+            }),
+        );
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        expect(employee!.probation_end_date).not.toBeNull();
+
+        // The form doesn't send the date when the status isn't PROBATION, so an
+        // omitted key must not leave the old deadline behind.
+        const confirmed = await EmployeeService.update(employee!.id, {
+            employment_status: "CONFIRMED",
+        });
+        expect(confirmed!.probation_end_date).toBeNull();
+    });
+
+    test("terminating clears the probation end date too", async () => {
+        const employee = await EmployeeService.create(
+            hire({
+                name: "Probation Leaver",
+                employment_status: "PROBATION",
+                probation_end_date: new Date("2026-12-01"),
+            }),
+        );
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        const terminated = await EmployeeService.terminate(employee!.id);
+        expect(terminated.probation_end_date).toBeNull();
+    });
+
+    test("an update that doesn't touch status leaves the probation date alone", async () => {
+        const employee = await EmployeeService.create(
+            hire({
+                name: "Still On Probation",
+                employment_status: "PROBATION",
+                probation_end_date: new Date("2026-12-01"),
+            }),
+        );
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        const renamed = await EmployeeService.update(employee!.id, { name: "Renamed" });
+        expect(renamed!.probation_end_date).not.toBeNull();
+    });
 });
