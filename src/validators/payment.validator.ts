@@ -1,3 +1,5 @@
+// PAYROLL is absent on purpose: salary payments are PayrollPayout rows, which
+// can require proof of transfer. See docs/employee-payroll-design.md.
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 
@@ -8,7 +10,7 @@ export const createPaymentSchema = z.object({
     // ref_id is a polymorphic reference (resolved via ref_type), not a real
     // FK -- same pattern as StockLedger.ref_type/ref_id. Not validated
     // against the target table.
-    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE", "PAYROLL"]),
+    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE"]),
     ref_id: z.string().uuid(),
     from_instrument_id: z.string().uuid(),
     to_instrument_id: z.string().uuid().optional(),
@@ -17,19 +19,19 @@ export const createPaymentSchema = z.object({
 });
 
 export const listPaymentsQuerySchema = paginationQuerySchema.extend({
-    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE", "PAYROLL"]).optional(),
+    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE"]).optional(),
     ref_id: z.string().uuid().optional(),
     direction: z.enum(["INCOMING", "OUTGOING"]).optional(),
     instrument_id: z.string().uuid().optional(),
 });
 
 export const totalPaidQuerySchema = z.object({
-    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE", "PAYROLL"]),
+    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE"]),
     ref_id: z.string().uuid(),
 });
 
 export const outstandingQuerySchema = z.object({
-    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE", "PAYROLL"]),
+    ref_type: z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE"]),
 });
 
 export type OutstandingQuery = z.infer<typeof outstandingQuerySchema>;

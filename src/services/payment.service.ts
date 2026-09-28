@@ -12,7 +12,6 @@ const REF_LABEL: Record<RefType, string> = {
     BIRD_SALE: "BirdSale",
     PURCHASE: "Purchase",
     EXPENSE: "Expense",
-    PAYROLL: "PayrollRecord",
 };
 
 /** What a referenced record owes before any Payment rows are netted off.
@@ -49,15 +48,6 @@ async function owedForRef(
                 return (
                     await tx.expense.findUnique({ where: { id: ref_id }, select: { amount: true } })
                 )?.amount;
-            case "PAYROLL":
-                return (
-                    await tx.payrollRecord.findUnique({
-                        where: { id: ref_id },
-                        // Deprecated route -- salary payments move to PayrollPayout,
-                        // which can require proof of transfer. See employee-payroll-design.md.
-                        select: { total_pay: true },
-                    })
-                )?.total_pay;
         }
     })();
 
