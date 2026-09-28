@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { PerformanceScoreEntryService } from "./performance-score-entry.service";
+import { PayrollPayoutService } from "./payroll-payout.service";
 import { PayrollRecordService } from "./payroll-record.service";
 
 let profileId: string;
@@ -41,6 +42,10 @@ describe("PayrollRecordService", () => {
     });
 
     afterAll(async () => {
+        // Payouts reference payroll records, so they go first.
+        await prisma.payrollPayout.deleteMany({
+            where: { payroll_record: { employee_id: { in: createdEmployeeIds } } },
+        });
         await prisma.payrollRecord.deleteMany({
             where: { employee_id: { in: createdEmployeeIds } },
         });
@@ -165,5 +170,56 @@ describe("PayrollRecordService", () => {
         expect(record.score_sum).toBe(0);
         expect(record.adjustment_percent).toBe(0);
         expect(record.total_pay.toNumber()).toBe(12000);
+    });
+
+    test("payslip carries the wage split, the entries behind it, and a masked account", async () => {
+        const employee = await newEmployee(15000);
+        const month = new Date("2026-11-15T00:00:00Z");
+
+        await PerformanceScoreEntryService.create({
+            employee_id: employee.id,
+            given_by_id: profileId,
+            criterion: "ATTENDANCE_PERFECT",
+            reason: "No unexcused absence",
+            incident_date: month,
+        });
+
+        const record = await PayrollRecordService.generate({ employee_id: employee.id, month });
+        const payout = await PayrollPayoutService.create({
+            payroll_record_id: record.id,
+            method: "BKASH",
+            account_number: "01712345678",
+        });
+        await PayrollPayoutService.markPaid(payout!.id, { transaction_ref: "BKA9Z1" });
+
+        const slip = await PayrollRecordService.payslip(record.id);
+        expect(slip.fixed_wage.toNumber()).toBe(13500);
+        expect(slip.allowance.toNumber()).toBe(1950); // P = +3
+        expect(slip.total_pay.toNumber()).toBe(15450);
+        expect(slip.entries).toHaveLength(1);
+        expect(slip.entries[0]!.reason).toBe("No unexcused absence");
+        // The whole account number has no business being on a payslip response.
+        expect(slip.payout!.account_last4).toBe("5678");
+        expect(JSON.stringify(slip)).not.toContain("01712345678");
+        expect(slip.payout!.status).toBe("CONFIRMED");
+    });
+
+    test("a voided entry drops off the payslip", async () => {
+        const employee = await newEmployee(15000);
+        const month = new Date("2026-12-15T00:00:00Z");
+
+        const entry = await PerformanceScoreEntryService.create({
+            employee_id: employee.id,
+            given_by_id: profileId,
+            criterion: "HELPED_COWORKER",
+            reason: "credited to the wrong person",
+            incident_date: month,
+        });
+        await PerformanceScoreEntryService.void(entry!.id, { void_reason: "wrong employee" });
+
+        const record = await PayrollRecordService.generate({ employee_id: employee.id, month });
+        const slip = await PayrollRecordService.payslip(record.id);
+        expect(slip.entries).toHaveLength(0);
+        expect(slip.score_sum).toBe(0);
     });
 });

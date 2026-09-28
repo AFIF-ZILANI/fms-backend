@@ -13,6 +13,8 @@ payrollRecordRoutes.get(
     zValidatorRfc7807("query", listPayrollRecordsQuerySchema),
     PayrollRecordController.getAll,
 );
+payrollRecordRoutes.get("/:id", PayrollRecordController.getById);
+payrollRecordRoutes.get("/:id/payslip", PayrollRecordController.payslip);
 payrollRecordRoutes.post(
     "/generate",
     zValidatorRfc7807("json", generatePayrollSchema),
