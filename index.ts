@@ -1,5 +1,6 @@
 import { app } from "./src/app";
 import env from "./src/config/env";
+import { startAlertScanLoop } from "./src/lib/alert-scan-loop";
 
 const port = Number(env.PORT);
 
@@ -18,3 +19,5 @@ else {
         console.log(`[Node] Server running on http://localhost:${port}`);
     });
 }
+
+startAlertScanLoop();

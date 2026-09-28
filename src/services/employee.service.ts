@@ -115,6 +115,21 @@ export const EmployeeService = {
             throw AppError.badRequest("No update fields provided");
         }
 
+        // TERMINATED and is_active are two halves of one fact, and only
+        // terminate()/reinstate() move both. Editing the status around them would
+        // leave a terminated employee reading as active staff, or an active one
+        // with no termination date -- so those transitions are refused here.
+        if (data.employment_status && data.employment_status !== existing.employment_status) {
+            if (existing.employment_status === "TERMINATED") {
+                throw AppError.badRequest(
+                    "This employee is terminated -- reinstate them before changing their stage",
+                );
+            }
+            if (data.employment_status === "TERMINATED") {
+                throw AppError.badRequest("Use terminate to end employment");
+            }
+        }
+
         const { name, mobile, email, address, avatar, reference_employee_id, ...employee } = data;
         try {
             return await prisma.$transaction(async (tx) => {
