@@ -219,6 +219,9 @@ enum PaymentRefType {
   BIRD_SALE
   PURCHASE
   EXPENSE
+  /// Deprecated -- salary payments move to PayrollPayout, which can enforce
+  /// proof-of-transfer. Retained only until existing PAYROLL rows are backfilled;
+  /// do not use for new salary payments. See docs/employee-payroll-design.md.
   PAYROLL
 }
 
@@ -244,6 +247,29 @@ enum PerformanceCriterion {
   UNEXCUSED_ABSENCE
   PATTERN_LATENESS
   OTHER
+}
+
+/// An entry is never deleted -- a wrong one is VOIDED with a reason, leaving both
+/// the entry and the correction on record.
+enum ScoreEntryStatus {
+  ACTIVE
+  DISPUTED
+  VOIDED
+}
+
+enum PayoutMethod {
+  BANK
+  BKASH
+  NAGAD
+  ROCKET
+  CASH
+}
+
+enum PayoutStatus {
+  PENDING
+  SENT
+  FAILED
+  CONFIRMED
 }
 
 enum AuditAction {
@@ -435,7 +461,10 @@ model Profiles {
   salesRecorded           Sale[]
   birdSalesRecorded       BirdSale[]
   environmentRecordsTaken EnvironmentRecords[]
-  scoresGiven             PerformanceScoreEntry[]
+  scoresGiven             PerformanceScoreEntry[] @relation("ScoreGivenBy")
+  scoresApproved          PerformanceScoreEntry[] @relation("ScoreApprovedBy")
+  payoutAccountsVerified  EmployeePayoutAccount[] @relation("PayoutAccountVerifiedBy")
+  payoutsPaid             PayrollPayout[]         @relation("PayoutPaidBy")
   inventoryAdjustments    InventoryAdjustment[]
   stockTransfersRecorded  StockTransfer[]
   medicationsGiven        Medications[]
@@ -456,7 +485,12 @@ model Employees {
   profile_id   String            @unique
   profile      Profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade)
   role         EmployeeRoleNames
-  salary       Decimal           @db.Decimal(10, 2) // baseline; PayrollRecord snapshots the actual monthly figure
+  // Performance pay is an allowance on top of a guaranteed wage, never a deduction
+  // from one -- see docs/employee-payroll-design.md. fixed_wage is stored rather
+  // than derived from reference_salary: it is the figure written into a signed
+  // appointment letter, and must survive any later change to the 0.9 ratio.
+  reference_salary Decimal         @db.Decimal(10, 2) // R -- normal-month total pay
+  fixed_wage       Decimal         @db.Decimal(10, 2) // 0.9 × R, guaranteed monthly
   joining_date DateTime          @default(now())
   rating       Float?            @default(0)
 
@@ -498,6 +532,7 @@ model Employees {
   performanceScores PerformanceScoreEntry[]
   payrollRecords    PayrollRecord[]
   taskAssignments   EmployeeTaskAssignment[]
+  payoutAccounts    EmployeePayoutAccount[]
 
   @@index([role])
   @@index([reference_employee_id])
@@ -1242,15 +1277,25 @@ model PerformanceScoreEntry {
   employee_id     String
   employee        Employees            @relation(fields: [employee_id], references: [id])
   given_by_id     String
-  given_by        Profiles             @relation(fields: [given_by_id], references: [id])
+  given_by        Profiles             @relation("ScoreGivenBy", fields: [given_by_id], references: [id])
+  // Required when criterion = OTHER, which is also capped at ±5 per employee per
+  // month -- enforced in the service, not expressible here.
+  approved_by_id  String?
+  approved_by     Profiles?            @relation("ScoreApprovedBy", fields: [approved_by_id], references: [id])
   criterion       PerformanceCriterion
   points          Int // signed; snapshot of the criterion's value at time of entry
   reason          String // required — never optional
-  date            DateTime             @default(now())
+  // The day it happened, not the day it was typed. A late write-up still belongs
+  // to the month it occurred in, so this is what buckets the payroll month.
+  incident_date   DateTime
+  notice_doc_url  String? // required when points <= -4: written notice comes first
+  status          ScoreEntryStatus     @default(ACTIVE)
+  void_reason     String? // required when status = VOIDED
+  acknowledged_at DateTime? // when the employee confirmed they were shown it
   created_at      DateTime             @default(now())
   idempotency_key String               @unique // client-generated; prevents double-insert on offline sync retry
 
-  @@index([employee_id, date])
+  @@index([employee_id, incident_date])
 }
 
 model PayrollRecord {
@@ -1258,18 +1303,74 @@ model PayrollRecord {
   employee_id        String
   employee           Employees @relation(fields: [employee_id], references: [id])
   month              DateTime // normalized to first-of-month
-  baseline_salary    Decimal   @db.Decimal(10, 2)
+  // R and the guaranteed wage are snapshotted here, not read back from Employees:
+  // a later raise must never rewrite what someone was actually paid in March.
+  reference_salary   Decimal   @db.Decimal(10, 2)
+  fixed_wage         Decimal   @db.Decimal(10, 2)
   score_sum          Int // raw sum, pre-clamp, kept for audit/history
-  adjustment_percent Decimal   @db.Decimal(5, 2) // clamped to [-10, +20], the value actually applied
-  final_salary       Decimal   @db.Decimal(10, 2)
+  // P -- an Int, not a Decimal: a clamped sum of integer points can't carry a fraction.
+  adjustment_percent Int
+  allowance          Decimal   @db.Decimal(10, 2) // R × (10 + P) / 100, rounded to whole taka
+  total_pay          Decimal   @db.Decimal(10, 2) // fixed_wage + allowance
+  // Generating payroll locks the month: entries dated inside it are then rejected.
+  locked_at          DateTime  @default(now())
   created_at         DateTime  @default(now())
+
+  payout PayrollPayout?
 
   @@unique([employee_id, month])
 }
 
-// ════════════════════════════════════════════════════════════════════
-// TASK ASSIGNMENT (mobile field app -- see mobile/docs/PRD.md)
-// ════════════════════════════════════════════════════════════════════
+/// Where an employee's wage is sent. Append-only: a change is a new row plus
+/// active_to on the old one, never an edit -- redirecting someone's salary is the
+/// most attractive target in a payroll system.
+model EmployeePayoutAccount {
+  id              String       @id @default(uuid())
+  employee_id     String
+  employee        Employees    @relation(fields: [employee_id], references: [id])
+  method          PayoutMethod
+  account_name    String
+  account_number  String
+  bank_name       String?
+  branch_name     String?
+  routing_number  String? // 9-digit BEFTN
+  holder_relation String? // null = the employee's own account
+  consent_doc_url String? // required when holder_relation is set
+  verified_by_id  String?
+  verified_by     Profiles?    @relation("PayoutAccountVerifiedBy", fields: [verified_by_id], references: [id])
+  verified_at     DateTime?
+  active_from     DateTime     @default(now())
+  active_to       DateTime? // set when superseded
+  created_at      DateTime     @default(now())
+
+  payouts PayrollPayout[]
+
+  @@index([employee_id, active_to])
+}
+
+/// Paying a payroll, as distinct from calculating it. Replaces PaymentRefType.PAYROLL
+/// -- a salary payout can't be marked paid without proof of transfer, which the
+/// generic Payment model has no way to require.
+model PayrollPayout {
+  id                String                 @id @default(uuid())
+  payroll_record_id String                 @unique
+  payroll_record    PayrollRecord          @relation(fields: [payroll_record_id], references: [id])
+  payout_account_id String?
+  payout_account    EmployeePayoutAccount? @relation(fields: [payout_account_id], references: [id])
+  // Snapshotted even though payout_account_id points at the account: that account
+  // can be closed and superseded, but the payout must keep showing where the money went.
+  method            PayoutMethod
+  account_number    String
+  amount            Decimal                @db.Decimal(10, 2)
+  fee_paid_by_farm  Decimal                @default(0) @db.Decimal(10, 2)
+  transaction_ref   String? // required unless method = CASH
+  receipt_doc_url   String? // required when method = CASH
+  status            PayoutStatus           @default(PENDING)
+  paid_by_id        String?
+  paid_by           Profiles?              @relation("PayoutPaidBy", fields: [paid_by_id], references: [id])
+  paid_at           DateTime?
+  created_at        DateTime               @default(now())
+}
 
 model EmployeeTaskAssignment {
   id             String    @id @default(uuid())
