@@ -131,6 +131,9 @@ export const updateEmployeeSchema = z
 
 export const listEmployeesQuerySchema = paginationQuerySchema.extend({
     role: employeeRole.optional(),
+    // Name or mobile. Needed server-side once the list is paginated -- filtering
+    // in memory would only ever search the page you happen to be looking at.
+    q: z.string().trim().min(1).optional(),
     employment_status: employmentStatus.optional(),
     // kept as the raw "true"/"false" string -- see admin.validator.ts for why
     // (.transform() after .optional() breaks key-optionality under

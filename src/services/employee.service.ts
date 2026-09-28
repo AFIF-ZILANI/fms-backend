@@ -36,14 +36,23 @@ const leavingProbation = (status?: string) => !!status && status !== "PROBATION"
 
 export const EmployeeService = {
     async getAll(query: ListEmployeesQuery) {
+        // is_active and q both constrain the same relation, so they merge into one
+        // `profile` clause rather than the second quietly replacing the first.
+        const profileWhere = {
+            ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
+            ...(query.q !== undefined && {
+                OR: [
+                    { name: { contains: query.q, mode: "insensitive" as const } },
+                    { mobile: { contains: query.q } },
+                ],
+            }),
+        };
         const where = {
             ...(query.role !== undefined && { role: query.role }),
             ...(query.employment_status !== undefined && {
                 employment_status: query.employment_status,
             }),
-            ...(query.is_active !== undefined && {
-                profile: { is_active: query.is_active === "true" },
-            }),
+            ...(Object.keys(profileWhere).length > 0 && { profile: profileWhere }),
         };
         const [employees, total] = await Promise.all([
             prisma.employees.findMany({
