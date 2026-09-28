@@ -267,7 +267,7 @@ describe("EmployeeService", () => {
 
     test("listing searches by name and by mobile, and pages", async () => {
         const unique = `Zz${Math.floor(Math.random() * 1e6)}`;
-        const created = [];
+        const created: Array<{ id: string; profile: { mobile: string } }> = [];
         for (let i = 0; i < 3; i++) {
             const e = await EmployeeService.create(hire({ name: `${unique} Worker ${i}` }));
             createdIds.push(e!.id);

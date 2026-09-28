@@ -3,9 +3,11 @@ import prisma from "@lib/db";
 import { PerformanceScoreEntryService } from "./performance-score-entry.service";
 import { PayrollPayoutService } from "./payroll-payout.service";
 import { PayrollRecordService } from "./payroll-record.service";
+import { EmployeeService } from "./employee.service";
 
 let profileId: string;
 const createdEmployeeIds: string[] = [];
+const recordIdsToClean: string[] = [];
 const createdProfileIds: string[] = [];
 
 async function newEmployee(salary: number) {
@@ -47,7 +49,9 @@ describe("PayrollRecordService", () => {
             where: { payroll_record: { employee_id: { in: createdEmployeeIds } } },
         });
         await prisma.payrollRecord.deleteMany({
-            where: { employee_id: { in: createdEmployeeIds } },
+            where: {
+                OR: [{ employee_id: { in: createdEmployeeIds } }, { id: { in: recordIdsToClean } }],
+            },
         });
         await prisma.performanceScoreEntry.deleteMany({
             where: { employee_id: { in: createdEmployeeIds } },
@@ -221,5 +225,57 @@ describe("PayrollRecordService", () => {
         const slip = await PayrollRecordService.payslip(record.id);
         expect(slip.entries).toHaveLength(0);
         expect(slip.score_sum).toBe(0);
+    });
+
+    test("the month an employee left in is still payable", async () => {
+        const employee = await newEmployee(15000);
+        await EmployeeService.terminate(employee.id);
+
+        // Terminated today, so this month's wage is still owed.
+        const record = await PayrollRecordService.generate({
+            employee_id: employee.id,
+            month: new Date(),
+        });
+        recordIdsToClean.push(record.id);
+        expect(record.total_pay.toNumber()).toBe(15000);
+    });
+
+    test("payroll can't be generated for a month after the employee left", async () => {
+        const employee = await newEmployee(15000);
+        await EmployeeService.terminate(employee.id);
+
+        const nextMonth = new Date();
+        nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+        await expect(
+            PayrollRecordService.generate({ employee_id: employee.id, month: nextMonth }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("reinstating clears the block", async () => {
+        const employee = await newEmployee(15000);
+        await EmployeeService.terminate(employee.id);
+        await EmployeeService.reinstate(employee.id);
+
+        const nextMonth = new Date();
+        nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+        const record = await PayrollRecordService.generate({
+            employee_id: employee.id,
+            month: nextMonth,
+        });
+        recordIdsToClean.push(record.id);
+        expect(record.total_pay.toNumber()).toBe(15000);
+    });
+
+    test("an appointed employee and one on probation are both fully payable", async () => {
+        for (const status of ["APPOINTED", "PROBATION"] as const) {
+            const employee = await newEmployee(15000);
+            await EmployeeService.update(employee.id, { employment_status: status });
+            const record = await PayrollRecordService.generate({
+                employee_id: employee.id,
+                month: new Date("2026-01-15T00:00:00Z"),
+            });
+            recordIdsToClean.push(record.id);
+            expect(record.total_pay.toNumber()).toBe(15000);
+        }
     });
 });
