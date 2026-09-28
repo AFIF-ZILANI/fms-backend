@@ -318,4 +318,45 @@ describe("EmployeeService", () => {
         expect(employees).toHaveLength(1);
         expect(employees[0]!.id).toBe(active!.id);
     });
+
+    test("the stage moves appointed -> probation -> confirmed", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Progressing" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        expect(employee!.employment_status).toBe("APPOINTED");
+
+        const onProbation = await EmployeeService.update(employee!.id, {
+            employment_status: "PROBATION",
+            probation_end_date: new Date("2026-12-01"),
+        });
+        expect(onProbation!.employment_status).toBe("PROBATION");
+        expect(onProbation!.probation_end_date).not.toBeNull();
+
+        const confirmed = await EmployeeService.update(employee!.id, {
+            employment_status: "CONFIRMED",
+        });
+        expect(confirmed!.employment_status).toBe("CONFIRMED");
+        // Confirming ends probation, so the deadline goes with it.
+        expect(confirmed!.probation_end_date).toBeNull();
+    });
+
+    test("the stage can't be edited around terminate and reinstate", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Edge Case" }));
+        createdIds.push(employee!.id);
+        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+
+        // Ending employment has to go through terminate, which also deactivates.
+        await expect(
+            EmployeeService.update(employee!.id, { employment_status: "TERMINATED" }),
+        ).rejects.toMatchObject({ status: 400 });
+
+        await EmployeeService.terminate(employee!.id);
+        // And a terminated employee can't be edited back into the workforce.
+        await expect(
+            EmployeeService.update(employee!.id, { employment_status: "CONFIRMED" }),
+        ).rejects.toMatchObject({ status: 400 });
+
+        const back = await EmployeeService.reinstate(employee!.id);
+        expect(back.profile.is_active).toBe(true);
+    });
 });
