@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { fixedWageFor } from "@lib/payroll-math";
 import type {
     CreateEmployeeInput,
     UpdateEmployeeInput,
@@ -27,8 +28,10 @@ const include = {
  * Enforced here rather than in each form, so no caller -- web, mobile, a later
  * script -- can leave a confirmed employee showing a probation deadline.
  */
-const probationOverride = (status?: string) =>
-    status && status !== "PROBATION" ? { probation_end_date: null } : {};
+/** A probation end date only means anything while the employee is on probation.
+ *  Spread inline at each write: a named helper returning a union confuses
+ *  Prisma's checked/unchecked input overloads. */
+const leavingProbation = (status?: string) => !!status && status !== "PROBATION";
 
 /** Drops keys whose value is undefined -- Prisma treats an explicit undefined
  *  the same as absent, but exactOptionalPropertyTypes objects to passing it. */
@@ -87,7 +90,11 @@ export const EmployeeService = {
                 return tx.employees.create({
                     data: {
                         ...defined(employee),
-                        ...probationOverride(employee.employment_status),
+                        ...(leavingProbation(employee.employment_status) && {
+                            probation_end_date: null,
+                        }),
+                        reference_salary: employee.reference_salary,
+                        fixed_wage: fixedWageFor(employee.reference_salary),
                         profile_id: profileRow.id,
                     },
                     include,
@@ -121,7 +128,14 @@ export const EmployeeService = {
                     where: { id },
                     data: {
                         ...defined(employee),
-                        ...probationOverride(employee.employment_status),
+                        ...(leavingProbation(employee.employment_status) && {
+                            probation_end_date: null,
+                        }),
+                        // Keep the guaranteed wage in step with a changed reference
+                        // salary -- they are one decision, not two fields to remember.
+                        ...(employee.reference_salary !== undefined && {
+                            fixed_wage: fixedWageFor(employee.reference_salary),
+                        }),
                         // Nested writes put this update on Prisma's relation-shaped
                         // input, where the reference is connected rather than set as
                         // a raw id. An explicit null disconnects it -- that's how the

@@ -55,7 +55,9 @@ const employeeFields = {
 
     // employment
     role: employeeRole,
-    salary: z.coerce.number().positive("Salary must be positive"),
+    // R -- the normal-month total. fixed_wage is derived from it (0.9 × R) in the
+    // service and never accepted from a client: the two must not drift apart.
+    reference_salary: z.coerce.number().positive("Reference salary must be positive"),
     joining_date: z.coerce.date().optional(),
     employment_status: employmentStatus.optional(),
     // Nullable, not merely optional: clearing the date has to be expressible,

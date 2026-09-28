@@ -20,7 +20,7 @@ const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => (
     nid_number: "1990123456789",
     avatar: { public_id: "employees/test", image_url: "https://res.cloudinary.com/x/test.jpg" },
     role: "WORKER",
-    salary: 15000,
+    reference_salary: 15000,
     education: "HSC",
     experience_years: 2,
     experience: "Layer farm in Gazipur, feeding and cleaning",
@@ -40,24 +40,25 @@ describe("EmployeeService", () => {
     });
 
     test("create then getById round-trips", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Test Worker", role: "WORKER", salary: 15000 }));
+        const employee = await EmployeeService.create(hire({ name: "Test Worker", role: "WORKER", reference_salary: 15000 }));
         createdIds.push(employee!.id);
 
         const found = await EmployeeService.getById(employee!.id);
         expect(found.profile.name).toBe("Test Worker");
         expect(found.profile.role).toBe("EMPLOYEE");
         expect(found.role).toBe("WORKER");
-        expect(found.salary.toNumber()).toBe(15000);
+        expect(found.reference_salary.toNumber()).toBe(15000);
+        expect(found.fixed_wage.toNumber()).toBe(13500); // 0.9 × R, derived by the service
         expect(found.profile.is_active).toBe(true);
     });
 
     test("duplicate mobile throws a conflict", async () => {
         const sharedMobile = mobile();
-        const first = await EmployeeService.create(hire({ name: "First", role: "WORKER", salary: 10000, mobile: sharedMobile }));
+        const first = await EmployeeService.create(hire({ name: "First", role: "WORKER", reference_salary: 10000, mobile: sharedMobile }));
         createdIds.push(first!.id);
 
         await expect(
-            EmployeeService.create(hire({ name: "Second", role: "WORKER", salary: 10000, mobile: sharedMobile })),
+            EmployeeService.create(hire({ name: "Second", role: "WORKER", reference_salary: 10000, mobile: sharedMobile })),
         ).rejects.toMatchObject({ status: 409 });
     });
 
@@ -68,7 +69,7 @@ describe("EmployeeService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Updatable", role: "INTERN", salary: 5000 }));
+        const employee = await EmployeeService.create(hire({ name: "Updatable", role: "INTERN", reference_salary: 5000 }));
         createdIds.push(employee!.id);
 
         await expect(EmployeeService.update(employee!.id, {})).rejects.toMatchObject({
@@ -77,21 +78,23 @@ describe("EmployeeService", () => {
     });
 
     test("update can promote role and change salary/rating", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Promotable", role: "WORKER", salary: 12000 }));
+        const employee = await EmployeeService.create(hire({ name: "Promotable", role: "WORKER", reference_salary: 12000 }));
         createdIds.push(employee!.id);
 
         const promoted = await EmployeeService.update(employee!.id, {
             role: "MANAGER",
-            salary: 25000,
+            reference_salary: 25000,
             rating: 4.5,
         });
         expect(promoted!.role).toBe("MANAGER");
-        expect(promoted!.salary.toNumber()).toBe(25000);
+        expect(promoted!.reference_salary.toNumber()).toBe(25000);
+        // A changed reference salary must drag the guaranteed wage with it.
+        expect(promoted!.fixed_wage.toNumber()).toBe(22500);
         expect(promoted!.rating).toBe(4.5);
     });
 
     test("setActive(false) then setActive(true) round-trips is_active", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Togglable", role: "WORKER", salary: 9000 }));
+        const employee = await EmployeeService.create(hire({ name: "Togglable", role: "WORKER", reference_salary: 9000 }));
         createdIds.push(employee!.id);
 
         const deactivated = await EmployeeService.setActive(employee!.id, false);
@@ -102,7 +105,7 @@ describe("EmployeeService", () => {
     });
 
     test("listing filters by role", async () => {
-        const employee = await EmployeeService.create(hire({ name: "FilterMe", role: "INTERN", salary: 4000 }));
+        const employee = await EmployeeService.create(hire({ name: "FilterMe", role: "INTERN", reference_salary: 4000 }));
         createdIds.push(employee!.id);
 
         const { employees } = await EmployeeService.getAll({ page: 1, limit: 100, role: "INTERN" });

@@ -7,6 +7,7 @@ import { PerformanceScoreEntryService } from "@services/performance-score-entry.
 import type {
     CreateScoreEntryInput,
     ListScoreEntriesQuery,
+    VoidScoreEntryInput,
 } from "@validators/performance-score-entry.validator";
 
 export const PerformanceScoreEntryController = {
@@ -26,6 +27,28 @@ export const PerformanceScoreEntryController = {
             };
             const entry = await PerformanceScoreEntryService.create(body);
             return sendSuccess(c, entry, "Score entry recorded", 201);
+        });
+    },
+
+    async void(c: Context) {
+        return withHandler(c, async () => {
+            const body = getValid<VoidScoreEntryInput>(c, "json");
+            const entry = await PerformanceScoreEntryService.void(c.req.param("id") ?? "", body);
+            return sendSuccess(c, entry, "Score entry voided");
+        });
+    },
+
+    async dispute(c: Context) {
+        return withHandler(c, async () => {
+            const entry = await PerformanceScoreEntryService.dispute(c.req.param("id") ?? "");
+            return sendSuccess(c, entry, "Score entry disputed");
+        });
+    },
+
+    async acknowledge(c: Context) {
+        return withHandler(c, async () => {
+            const entry = await PerformanceScoreEntryService.acknowledge(c.req.param("id") ?? "");
+            return sendSuccess(c, entry, "Score entry acknowledged");
         });
     },
 };

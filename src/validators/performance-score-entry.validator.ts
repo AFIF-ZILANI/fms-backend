@@ -34,7 +34,13 @@ export const createScoreEntrySchema = z
         // the client.
         points: z.coerce.number().int().optional(),
         reason: z.string().min(1, "Reason is required"),
-        date: z.coerce.date().optional(),
+        // The day it happened, not the day it was typed. Required, because it is
+        // what decides which month's payroll the entry lands in.
+        incident_date: z.coerce.date({ message: "Incident date is required" }),
+        // Required when criterion is OTHER (Owner co-signs the escape hatch).
+        approved_by_id: z.string().uuid().optional(),
+        // Required when the entry is -4 or worse: written notice comes first.
+        notice_doc_url: z.string().url("Must be a link to the notice").optional(),
         idempotency_key: z.string().min(1).optional(),
     })
     .refine(
@@ -42,10 +48,19 @@ export const createScoreEntrySchema = z
             data.criterion !== "OTHER" ||
             (data.points !== undefined && data.points !== 0 && Math.abs(data.points) <= 5),
         { message: "OTHER requires points between -5 and 5, excluding 0" },
-    );
+    )
+    .refine((data) => data.criterion !== "OTHER" || !!data.approved_by_id, {
+        message: "An OTHER entry needs Owner approval",
+        path: ["approved_by_id"],
+    });
+
+export const voidScoreEntrySchema = z.object({
+    void_reason: z.string().min(1, "A void reason is required"),
+});
 
 export const listScoreEntriesQuerySchema = paginationQuerySchema.extend({
     employee_id: z.string().uuid().optional(),
+    status: z.enum(["ACTIVE", "DISPUTED", "VOIDED"]).optional(),
     // The field app's performance screen reads one month at a time; without
     // these it would fetch an employee's entire score history to total a month.
     date_from: z.coerce.date().optional(),
@@ -53,4 +68,5 @@ export const listScoreEntriesQuerySchema = paginationQuerySchema.extend({
 });
 
 export type CreateScoreEntryInput = z.infer<typeof createScoreEntrySchema> & { given_by_id: string };
+export type VoidScoreEntryInput = z.infer<typeof voidScoreEntrySchema>;
 export type ListScoreEntriesQuery = z.infer<typeof listScoreEntriesQuerySchema>;

@@ -141,7 +141,7 @@ describe("TaskService", () => {
             },
         });
         const employee = await prisma.employees.create({
-            data: { profile_id: profile.id, role: "WORKER", salary: 15000 },
+            data: { profile_id: profile.id, role: "WORKER", reference_salary: 15000, fixed_wage: 13500 },
         });
         const assignment = await prisma.employeeTaskAssignment.create({
             data: {

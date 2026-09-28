@@ -142,7 +142,13 @@ async function checkNegativePerformancePatterns() {
     for (const employee of employees) {
         if (!employee.profile.is_active) continue;
         const entries = await prisma.performanceScoreEntry.findMany({
-            where: { employee_id: employee.id, date: { gte: monthStart } },
+            // Bucketed by when it happened, and only settled entries: a disputed
+            // or voided entry shouldn't raise a pattern warning.
+            where: {
+                employee_id: employee.id,
+                status: "ACTIVE",
+                incident_date: { gte: monthStart },
+            },
         });
         const sum = entries.reduce((total, entry) => total + entry.points, 0);
         if (sum <= NEGATIVE_PATTERN_THRESHOLD) {
