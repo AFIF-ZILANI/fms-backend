@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { trendWindow } from "@lib/trend-window";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemBalances } from "@lib/stock-balance";
@@ -251,10 +252,9 @@ export const AnalyticsService = {
      * a straight aggregation. Groups by calendar day (YYYY-MM-DD), not by
      * raw DateTime; same-day logs at different times are summed into one entry. */
     async mortalityTrend(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.mortalityLog.findMany({
-            where: { date: { gte: since, lte: new Date() } },
+            where: { date: window },
             select: { date: true, count_died: true },
         });
 
@@ -274,12 +274,11 @@ export const AnalyticsService = {
      * reasoning as the FCR gap noted on batchPerformance. A raw groupBy can't
      * reach through the item relation for unit, so this groups in memory. */
     async feedTrend(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         // ponytail: this string is a live FK code (ItemCategory.code) a user can rename via Settings,
         // which silently breaks this comparison with no error -- needs a stable-key mechanism if this keeps mattering.
         const rows = await prisma.consumption.findMany({
-            where: { date: { gte: since, lte: new Date() }, item: { category: "FEED" } },
+            where: { date: window, item: { category: "FEED" } },
             select: { date: true, base_quantity: true, item: { select: { unit: true } } },
         });
 
@@ -306,10 +305,9 @@ export const AnalyticsService = {
      * the same day at different times as separate groups instead of one --
      * same trap `mortalityTrend` (Task 1) hit and fixed the same way. */
     async salesTrend(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.birdSale.findMany({
-            where: { sale_date: { gte: since, lte: new Date() } },
+            where: { sale_date: window },
             select: { sale_date: true, total_amount: true, net_weight: true },
         });
 
@@ -336,16 +334,15 @@ export const AnalyticsService = {
      * revenue grouped by Item.category, plus total BirdSale revenue folded
      * in as its own "BIRD" entry (BirdSale has no Item/category of its own). */
     async salesByProductLine(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
 
         const [saleItems, birdSaleRevenue] = await Promise.all([
             prisma.saleItem.findMany({
-                where: { sale: { sale_date: { gte: since, lte: new Date() } } },
+                where: { sale: { sale_date: window } },
                 select: { total_price: true, item: { select: { category: true } } },
             }),
             prisma.birdSale.aggregate({
-                where: { sale_date: { gte: since, lte: new Date() } },
+                where: { sale_date: window },
                 _sum: { total_amount: true },
             }),
         ]);
@@ -370,12 +367,11 @@ export const AnalyticsService = {
      * is only used to filter the range here, not as a groupBy key, so the
      * DateTime-precision trap those two work around doesn't apply. */
     async birdGradeDistribution(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
 
         const grouped = await prisma.birdSale.groupBy({
             by: ["grade"],
-            where: { sale_date: { gte: since, lte: new Date() } },
+            where: { sale_date: window },
             _sum: { birds_count: true, total_amount: true, net_weight: true },
         });
 
@@ -457,11 +453,10 @@ export const AnalyticsService = {
      * Item.category. Unlike salesByProductLine, no synthetic category is
      * needed here: every PurchaseItem always has a real Item/category. */
     async purchasesByCategory(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
 
         const purchaseItems = await prisma.purchaseItem.findMany({
-            where: { purchase: { purchase_date: { gte: since, lte: new Date() } } },
+            where: { purchase: { purchase_date: window } },
             select: { total_price: true, item: { select: { category: true } } },
         });
 
@@ -482,10 +477,9 @@ export const AnalyticsService = {
      * purchases on the same day at different times as separate groups --
      * same trap salesTrend/mortalityTrend work around the same way. */
     async purchasesTrend(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.purchase.findMany({
-            where: { purchase_date: { gte: since, lte: new Date() } },
+            where: { purchase_date: window },
             select: { purchase_date: true, total_amount: true },
         });
 
@@ -588,10 +582,9 @@ export const AnalyticsService = {
      * same trap feedTrend's own comment flags. Both directions valued at the
      * same avg purchase cost per item (moving-average costing). */
     async stockMovementTrend(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.stockLedger.findMany({
-            where: { occurred_at: { gte: since, lte: new Date() } },
+            where: { occurred_at: window },
             select: { item_id: true, quantity: true, direction: true, occurred_at: true },
         });
         const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
@@ -614,10 +607,9 @@ export const AnalyticsService = {
     /** Consumption valued at avg purchase cost, grouped by item category
      * over `days` days -- mirrors purchasesByCategory's shape. */
     async consumptionByCategory(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.consumption.findMany({
-            where: { date: { gte: since, lte: new Date() } },
+            where: { date: window },
             select: { item_id: true, base_quantity: true, item: { select: { category: true } } },
         });
         const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
@@ -637,10 +629,9 @@ export const AnalyticsService = {
 
     /** Daily total consumption value over `days` days -- mirrors purchasesTrend's shape. */
     async consumptionTrend(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.consumption.findMany({
-            where: { date: { gte: since, lte: new Date() } },
+            where: { date: window },
             select: { item_id: true, base_quantity: true, date: true },
         });
         const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));
@@ -664,10 +655,9 @@ export const AnalyticsService = {
      * always log as ADJUSTMENT) -- this is forward-compatible and will read
      * empty until one does, not a bug. */
     async wastageByCategory(days: number) {
-        const since = new Date(Date.now() - days * 86_400_000);
-        since.setUTCHours(0, 0, 0, 0);
+        const window = trendWindow(days);
         const rows = await prisma.stockLedger.findMany({
-            where: { occurred_at: { gte: since, lte: new Date() }, reason: { in: ["WASTAGE", "EXPIRED"] } },
+            where: { occurred_at: window, reason: { in: ["WASTAGE", "EXPIRED"] } },
             select: { item_id: true, quantity: true, item: { select: { category: true } } },
         });
         const avgCosts = await getItemAvgCosts(Array.from(new Set(rows.map((r) => r.item_id))));

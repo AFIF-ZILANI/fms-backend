@@ -219,10 +219,9 @@ enum PaymentRefType {
   BIRD_SALE
   PURCHASE
   EXPENSE
-  /// Deprecated -- salary payments move to PayrollPayout, which can enforce
-  /// proof-of-transfer. Retained only until existing PAYROLL rows are backfilled;
-  /// do not use for new salary payments. See docs/employee-payroll-design.md.
-  PAYROLL
+  // PAYROLL is deliberately absent: salary payments live in PayrollPayout, which
+  // can require proof of transfer. Existing rows were backfilled and the enum
+  // value dropped -- see docs/employee-payroll-design.md.
 }
 
 enum PerformanceCriterion {

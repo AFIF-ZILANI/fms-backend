@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { defined } from "@lib/defined";
 import { fixedWageFor } from "@lib/payroll-math";
 import type {
     CreateEmployeeInput,
@@ -32,14 +33,6 @@ const include = {
  *  Spread inline at each write: a named helper returning a union confuses
  *  Prisma's checked/unchecked input overloads. */
 const leavingProbation = (status?: string) => !!status && status !== "PROBATION";
-
-/** Drops keys whose value is undefined -- Prisma treats an explicit undefined
- *  the same as absent, but exactOptionalPropertyTypes objects to passing it. */
-function defined<T extends object>(obj: T) {
-    return Object.fromEntries(
-        Object.entries(obj).filter(([, v]) => v !== undefined),
-    ) as { [K in keyof T]: Exclude<T[K], undefined> };
-}
 
 export const EmployeeService = {
     async getAll(query: ListEmployeesQuery) {
