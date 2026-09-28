@@ -164,7 +164,7 @@ describe("AlertService", () => {
         });
         createdProfileIds.push(profile.id);
         const employee = await prisma.employees.create({
-            data: { profile_id: profile.id, role: "WORKER", salary: 10000 },
+            data: { profile_id: profile.id, role: "WORKER", reference_salary: 10000, fixed_wage: 9000 },
         });
         createdEmployeeIds.push(employee.id);
         const giver = await prisma.profiles.create({
@@ -183,6 +183,7 @@ describe("AlertService", () => {
                 criterion: "NEGLIGENT_LOSS",
                 points: -5,
                 reason: "scan test",
+                incident_date: new Date(),
                 idempotency_key: crypto.randomUUID(),
             },
         });
@@ -193,6 +194,7 @@ describe("AlertService", () => {
                 criterion: "UNEXCUSED_ABSENCE",
                 points: -2,
                 reason: "scan test",
+                incident_date: new Date(),
                 idempotency_key: crypto.randomUUID(),
             },
         });
@@ -222,7 +224,7 @@ describe("AlertService", () => {
             data: {
                 profile_id: profile.id,
                 role: "WORKER",
-                salary: 10000,
+                reference_salary: 10000, fixed_wage: 9000,
                 employment_status: "PROBATION",
                 // Yesterday -- past due, so this escalates to WARNING.
                 probation_end_date: new Date(Date.now() - 86_400_000),
@@ -258,7 +260,7 @@ describe("AlertService", () => {
             data: {
                 profile_id: profile.id,
                 role: "WORKER",
-                salary: 10000,
+                reference_salary: 10000, fixed_wage: 9000,
                 employment_status: "PROBATION",
                 probation_end_date: new Date(Date.now() + 60 * 86_400_000),
             },

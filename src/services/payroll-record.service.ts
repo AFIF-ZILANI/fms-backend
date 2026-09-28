@@ -1,18 +1,16 @@
 import prisma from "@lib/db";
-import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
+import { computePay } from "@lib/payroll-math";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     GeneratePayrollInput,
     ListPayrollRecordsQuery,
 } from "@validators/payroll-record.validator";
 
-const CLAMP_MIN = -10;
-const CLAMP_MAX = 20;
-
 // PayrollRecord is a locked snapshot -- no update, ever (employee-payroll-
-// design.md: even if Employees.salary or a criterion's point value changes
-// later, past months' actual pay stays correct and auditable).
+// design.md: even if the employee's reference salary or a criterion's point
+// value changes later, past months' actual pay stays correct and auditable).
+// Generating it also locks the month against new or edited score entries.
 export const PayrollRecordService = {
     async getAll(query: ListPayrollRecordsQuery) {
         const where = {
@@ -31,8 +29,10 @@ export const PayrollRecordService = {
 
     /** Manual month-end action (per employee-payroll-design.md's open item,
      * resolved here the same way Batches.close() is manual): sums the
-     * month's PerformanceScoreEntry points, clamps to [-10, +20], applies
-     * to the employee's current baseline salary, locks the result. */
+     * month's ACTIVE PerformanceScoreEntry points, clamps to [-10, +20], and
+     * pays the guaranteed fixed wage plus an allowance of R × (10 + P) / 100.
+     * VOIDED and DISPUTED entries are excluded: a disputed entry isn't settled,
+     * and paying on it would have to be unwound. */
     async generate(data: GeneratePayrollInput) {
         const employee = await prisma.employees.findUnique({ where: { id: data.employee_id } });
         if (!employee) throw AppError.notFound("Employee");
@@ -52,26 +52,28 @@ export const PayrollRecordService = {
         }
 
         const entries = await prisma.performanceScoreEntry.findMany({
-            where: { employee_id: data.employee_id, date: { gte: monthStart, lt: monthEnd } },
+            where: {
+                employee_id: data.employee_id,
+                status: "ACTIVE",
+                incident_date: { gte: monthStart, lt: monthEnd },
+            },
         });
         const score_sum = entries.reduce((sum, e) => sum + e.points, 0);
-        const adjustment_percent = Math.max(CLAMP_MIN, Math.min(CLAMP_MAX, score_sum));
-
-        const baseline_salary = employee.salary;
-        const final_salary = baseline_salary
-            .times(
-                new Prisma.Decimal(1).plus(new Prisma.Decimal(adjustment_percent).dividedBy(100)),
-            )
-            .toDecimalPlaces(2);
+        const { adjustment_percent, fixed_wage, allowance, total_pay } = computePay(
+            employee.reference_salary,
+            score_sum,
+        );
 
         return prisma.payrollRecord.create({
             data: {
                 employee_id: data.employee_id,
                 month: monthStart,
-                baseline_salary,
+                reference_salary: employee.reference_salary,
+                fixed_wage,
                 score_sum,
                 adjustment_percent,
-                final_salary,
+                allowance,
+                total_pay,
             },
         });
     },

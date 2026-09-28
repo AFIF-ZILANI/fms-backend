@@ -53,9 +53,11 @@ async function owedForRef(
                 return (
                     await tx.payrollRecord.findUnique({
                         where: { id: ref_id },
-                        select: { final_salary: true },
+                        // Deprecated route -- salary payments move to PayrollPayout,
+                        // which can require proof of transfer. See employee-payroll-design.md.
+                        select: { total_pay: true },
                     })
-                )?.final_salary;
+                )?.total_pay;
         }
     })();
 
