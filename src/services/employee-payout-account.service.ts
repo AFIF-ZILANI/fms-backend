@@ -67,7 +67,9 @@ export const EmployeePayoutAccountService = {
                     data: {
                         ...defined(data),
                         active_from: now,
-                        ...(data.verified_by_id !== undefined && { verified_at: now }),
+                        // Who approved it comes from the session, so it is always
+                        // known and the timestamp always goes with it.
+                        verified_at: now,
                     },
                     include,
                 });

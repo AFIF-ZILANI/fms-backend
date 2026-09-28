@@ -20,9 +20,6 @@ export const createPayoutAccountSchema = z
         // their signed consent has to be on file.
         holder_relation: z.string().optional(),
         consent_doc_url: z.string().url("Must be a link to the signed consent").optional(),
-        // The Owner approving the change. The employee's signed change request is
-        // a paper artefact; this records who authorised acting on it.
-        verified_by_id: z.string().uuid().optional(),
     })
     .refine((d) => !d.holder_relation || !!d.consent_doc_url, {
         message: "A third-party account needs the holder's signed consent on file",
@@ -39,5 +36,11 @@ export const listPayoutAccountsQuerySchema = paginationQuerySchema.extend({
     active_only: z.enum(["true", "false"]).optional(),
 });
 
-export type CreatePayoutAccountInput = z.infer<typeof createPayoutAccountSchema>;
+// verified_by_id is stamped by the controller from the session, never accepted
+// from the body -- a client that can name who approved a change of wage
+// destination can forge the approval for it. Same rule as given_by_id on score
+// entries (server/src/lib/current-actor.ts).
+export type CreatePayoutAccountInput = z.infer<typeof createPayoutAccountSchema> & {
+    verified_by_id: string;
+};
 export type ListPayoutAccountsQuery = z.infer<typeof listPayoutAccountsQuerySchema>;

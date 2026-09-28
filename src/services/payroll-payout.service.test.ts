@@ -6,6 +6,8 @@ import { PayrollPayoutService } from "./payroll-payout.service";
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 let employeeId: string;
 let profileId: string;
+// Stands in for the session actor the controller stamps on.
+let approverId: string;
 const recordIds: string[] = [];
 
 async function newPayrollRecord(month: Date) {
@@ -40,6 +42,11 @@ describe("Payout APIs", () => {
             },
         });
         employeeId = employee.id;
+
+        const approver = await prisma.profiles.create({
+            data: { name: "Payout Approver", mobile: mobile(), role: "ADMIN" },
+        });
+        approverId = approver.id;
     });
 
     afterAll(async () => {
@@ -47,7 +54,7 @@ describe("Payout APIs", () => {
         await prisma.payrollRecord.deleteMany({ where: { id: { in: recordIds } } });
         await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: employeeId } });
         await prisma.employees.delete({ where: { id: employeeId } });
-        await prisma.profiles.delete({ where: { id: profileId } });
+        await prisma.profiles.deleteMany({ where: { id: { in: [profileId, approverId] } } });
     });
 
     test("adding an account closes the one it replaces, rather than editing it", async () => {
@@ -56,14 +63,19 @@ describe("Payout APIs", () => {
             method: "BKASH",
             account_name: "Payout Worker",
             account_number: "01711111111",
+            verified_by_id: approverId,
         });
         expect(first!.active_to).toBeNull();
+        // Approval is stamped from the session, so it is always recorded.
+        expect(first!.verified_by_id).toBe(approverId);
+        expect(first!.verified_at).not.toBeNull();
 
         const second = await EmployeePayoutAccountService.create({
             employee_id: employeeId,
             method: "BKASH",
             account_name: "Payout Worker",
             account_number: "01722222222",
+            verified_by_id: approverId,
         });
 
         const reloadedFirst = await EmployeePayoutAccountService.getById(first!.id);

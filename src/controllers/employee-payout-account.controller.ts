@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -26,7 +27,10 @@ export const EmployeePayoutAccountController = {
 
     async create(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<CreatePayoutAccountInput>(c, "json");
+            const body = {
+                ...getValid<CreatePayoutAccountInput>(c, "json"),
+                verified_by_id: await getActorId(c),
+            };
             const account = await EmployeePayoutAccountService.create(body);
             return sendSuccess(c, account, "Payout account added", 201);
         });
