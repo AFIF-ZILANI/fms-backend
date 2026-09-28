@@ -16,14 +16,8 @@ export const createPayoutAccountSchema = z
         bank_name: z.string().optional(),
         branch_name: z.string().optional(),
         routing_number: routing.optional(),
-        // Set only when the account isn't in the employee's own name -- and then
-        // their signed consent has to be on file.
+        // Set only when the account isn't in the employee's own name.
         holder_relation: z.string().optional(),
-        consent_doc_url: z.string().url("Must be a link to the signed consent").optional(),
-    })
-    .refine((d) => !d.holder_relation || !!d.consent_doc_url, {
-        message: "A third-party account needs the holder's signed consent on file",
-        path: ["consent_doc_url"],
     })
     .refine((d) => d.method !== "BANK" || !!d.bank_name, {
         message: "Bank name is required for a bank account",

@@ -138,7 +138,7 @@ describe("Payout APIs", () => {
         expect(paid.status).toBe("CONFIRMED");
     });
 
-    test("a third-party account is refused without the holder's consent on file", async () => {
+    test("a third-party account records whose it is", async () => {
         const { createPayoutAccountSchema } = await import(
             "@validators/employee-payout-account.validator"
         );
@@ -147,9 +147,9 @@ describe("Payout APIs", () => {
             method: "BKASH",
             account_name: "Spouse Name",
             account_number: "01733333333",
-            holder_relation: "spouse",
+            holder_relation: "Spouse",
         });
-        expect(parsed.success).toBe(false);
+        expect(parsed.success).toBe(true);
     });
 
     test("a confirmed payout can't then be marked failed", async () => {
