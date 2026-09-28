@@ -17,6 +17,20 @@ export const PayrollRecordController = {
         });
     },
 
+    async getById(c: Context) {
+        return withHandler(c, async () => {
+            const record = await PayrollRecordService.getById(c.req.param("id") ?? "");
+            return sendSuccess(c, record, "Payroll record fetched successfully");
+        });
+    },
+
+    async payslip(c: Context) {
+        return withHandler(c, async () => {
+            const payslip = await PayrollRecordService.payslip(c.req.param("id") ?? "");
+            return sendSuccess(c, payslip, "Payslip fetched successfully");
+        });
+    },
+
     async generate(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<GeneratePayrollInput>(c, "json");

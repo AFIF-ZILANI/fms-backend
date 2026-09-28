@@ -27,6 +27,61 @@ export const PayrollRecordService = {
         return { records, meta: buildMeta(total, query) };
     },
 
+    async getById(id: string) {
+        const record = await prisma.payrollRecord.findUnique({
+            where: { id },
+            include: { employee: { include: { profile: true } }, payout: true },
+        });
+        if (!record) throw AppError.notFound("Payroll record");
+        return record;
+    },
+
+    /**
+     * Everything a payslip shows, assembled server-side: the wage split, every
+     * score entry behind the month's allowance with its reason, and how it was
+     * paid. The account number is masked to its last 4 digits here rather than
+     * in the view -- a payslip request has no business receiving the whole one.
+     */
+    async payslip(id: string) {
+        const record = await this.getById(id);
+        const monthStart = record.month;
+        const monthEnd = new Date(
+            Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1),
+        );
+
+        const entries = await prisma.performanceScoreEntry.findMany({
+            where: {
+                employee_id: record.employee_id,
+                status: "ACTIVE",
+                incident_date: { gte: monthStart, lt: monthEnd },
+            },
+            orderBy: { incident_date: "asc" },
+            select: { id: true, criterion: true, points: true, reason: true, incident_date: true },
+        });
+
+        const { payout, employee, ...figures } = record;
+        return {
+            ...figures,
+            employee: {
+                id: employee.id,
+                name: employee.profile.name,
+                mobile: employee.profile.mobile,
+                role: employee.role,
+                joining_date: employee.joining_date,
+            },
+            entries,
+            payout: payout && {
+                method: payout.method,
+                account_last4: payout.account_number.slice(-4),
+                amount: payout.amount,
+                fee_paid_by_farm: payout.fee_paid_by_farm,
+                status: payout.status,
+                transaction_ref: payout.transaction_ref,
+                paid_at: payout.paid_at,
+            },
+        };
+    },
+
     /** Manual month-end action (per employee-payroll-design.md's open item,
      * resolved here the same way Batches.close() is manual): sums the
      * month's ACTIVE PerformanceScoreEntry points, clamps to [-10, +20], and
