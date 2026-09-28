@@ -99,6 +99,25 @@ export const PayrollRecordService = {
             Date.UTC(data.month.getUTCFullYear(), data.month.getUTCMonth() + 1, 1),
         );
 
+        // An employee who has left is still owed the month they left in, so the
+        // termination month itself is payable -- but nothing after it. APPOINTED
+        // and PROBATION are fully payable: a probationer is a worker, and
+        // "appointed" only means the confirmation letter hasn't been issued.
+        if (employee.terminated_at) {
+            const leftMonth = new Date(
+                Date.UTC(
+                    employee.terminated_at.getUTCFullYear(),
+                    employee.terminated_at.getUTCMonth(),
+                    1,
+                ),
+            );
+            if (monthStart > leftMonth) {
+                throw AppError.badRequest(
+                    `${employee.terminated_at.toISOString().slice(0, 10)} was this employee's last day; payroll can't be generated for a later month`,
+                );
+            }
+        }
+
         const existing = await prisma.payrollRecord.findUnique({
             where: { employee_id_month: { employee_id: data.employee_id, month: monthStart } },
         });

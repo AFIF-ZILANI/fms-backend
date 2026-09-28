@@ -174,7 +174,11 @@ export const EmployeeService = {
         await prisma.$transaction([
             prisma.employees.update({
                 where: { id },
-                data: { employment_status: "TERMINATED", probation_end_date: null },
+                data: {
+                    employment_status: "TERMINATED",
+                    probation_end_date: null,
+                    terminated_at: new Date(),
+                },
             }),
             prisma.profiles.update({
                 where: { id: employee.profile_id },
@@ -198,7 +202,13 @@ export const EmployeeService = {
         await prisma.$transaction([
             prisma.employees.update({
                 where: { id },
-                data: { employment_status: "APPOINTED", probation_end_date: null },
+                data: {
+                    employment_status: "APPOINTED",
+                    probation_end_date: null,
+                    // Cleared, not kept: they are employed again, and a stale date
+                    // would keep blocking payroll for every month after it.
+                    terminated_at: null,
+                },
             }),
             prisma.profiles.update({
                 where: { id: employee.profile_id },

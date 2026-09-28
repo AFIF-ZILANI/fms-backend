@@ -524,6 +524,9 @@ model Employees {
 
   employment_status  EmploymentStatus @default(APPOINTED)
   probation_end_date DateTime?
+  // When employment ended. Payroll may still be generated for the month they
+  // left in -- the final month's wage is owed -- but not for months after it.
+  terminated_at      DateTime?
 
   created_at   DateTime          @default(now())
   updated_at   DateTime          @updatedAt
