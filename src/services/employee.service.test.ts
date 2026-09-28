@@ -264,4 +264,58 @@ describe("EmployeeService", () => {
         const renamed = await EmployeeService.update(employee!.id, { name: "Renamed" });
         expect(renamed!.probation_end_date).not.toBeNull();
     });
+
+    test("listing searches by name and by mobile, and pages", async () => {
+        const unique = `Zz${Math.floor(Math.random() * 1e6)}`;
+        const created = [];
+        for (let i = 0; i < 3; i++) {
+            const e = await EmployeeService.create(hire({ name: `${unique} Worker ${i}` }));
+            createdIds.push(e!.id);
+            if (e!.profile.avatar_id) avatarIds.push(e!.profile.avatar_id);
+            created.push(e!);
+        }
+
+        const byName = await EmployeeService.getAll({ page: 1, limit: 50, q: unique });
+        expect(byName.employees).toHaveLength(3);
+
+        // Case-insensitive, so the search box doesn't care how it was typed.
+        const lowered = await EmployeeService.getAll({ page: 1, limit: 50, q: unique.toLowerCase() });
+        expect(lowered.employees).toHaveLength(3);
+
+        const byMobile = await EmployeeService.getAll({
+            page: 1,
+            limit: 50,
+            q: created[0]!.profile.mobile,
+        });
+        expect(byMobile.employees.some((e) => e.id === created[0]!.id)).toBe(true);
+
+        // Paging the filtered set, not the whole table.
+        const firstPage = await EmployeeService.getAll({ page: 1, limit: 2, q: unique });
+        expect(firstPage.employees).toHaveLength(2);
+        expect(firstPage.meta.total).toBe(3);
+        expect(firstPage.meta.totalPages).toBe(2);
+
+        const secondPage = await EmployeeService.getAll({ page: 2, limit: 2, q: unique });
+        expect(secondPage.employees).toHaveLength(1);
+    });
+
+    test("search and the active filter narrow together, not one replacing the other", async () => {
+        const unique = `Yy${Math.floor(Math.random() * 1e6)}`;
+        const active = await EmployeeService.create(hire({ name: `${unique} Active` }));
+        const inactive = await EmployeeService.create(hire({ name: `${unique} Gone` }));
+        for (const e of [active, inactive]) {
+            createdIds.push(e!.id);
+            if (e!.profile.avatar_id) avatarIds.push(e!.profile.avatar_id);
+        }
+        await EmployeeService.setActive(inactive!.id, false);
+
+        const { employees } = await EmployeeService.getAll({
+            page: 1,
+            limit: 50,
+            q: unique,
+            is_active: "true",
+        });
+        expect(employees).toHaveLength(1);
+        expect(employees[0]!.id).toBe(active!.id);
+    });
 });
