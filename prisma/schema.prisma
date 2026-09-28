@@ -1334,7 +1334,6 @@ model EmployeePayoutAccount {
   branch_name     String?
   routing_number  String? // 9-digit BEFTN
   holder_relation String? // null = the employee's own account
-  consent_doc_url String? // required when holder_relation is set
   verified_by_id  String?
   verified_by     Profiles?    @relation("PayoutAccountVerifiedBy", fields: [verified_by_id], references: [id])
   verified_at     DateTime?

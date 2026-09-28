@@ -218,12 +218,15 @@ payroll system, so an account is never edited in place. A change is a **new row
 plus `active_to` set on the old one**, and requires:
 
 - the employee's **signed change request**, and
-- **Owner approval** (`verified_by_id`, `verified_at`).
+- **Owner approval**, stamped from the session as `verified_by_id` /
+  `verified_at` and never accepted from the request body — a client that can
+  name who approved a change of wage destination can forge the approval.
 
 If the wallet or account is **not in the employee's own name**, record
-`holder_relation` (e.g. spouse, father) and store their **signed consent** at
-`consent_doc_url`. A blank `holder_relation` means the account is the employee's
-own.
+`holder_relation` (e.g. spouse, father). A blank `holder_relation` means the
+account is the employee's own. No separate consent document is collected: the
+signed change request already names the account, and the Owner approving it is
+recorded on the row.
 
 ### Paying
 
@@ -263,7 +266,6 @@ model EmployeePayoutAccount {
   branch_name     String?
   routing_number  String?      // 9-digit BEFTN
   holder_relation String?      // null = the employee's own account
-  consent_doc_url String?      // required when holder_relation is set
   verified_by_id  String?
   verified_by     Profiles?    @relation("PayoutAccountVerifiedBy", fields: [verified_by_id], references: [id])
   verified_at     DateTime?
