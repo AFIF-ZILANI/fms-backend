@@ -8,10 +8,17 @@ const createdIds: string[] = [];
 
 describe("CustomerService", () => {
     afterAll(async () => {
+        // Resolve the profiles BEFORE deleting the rows that point at them --
+        // querying through the relation afterwards matches nothing, which is how
+        // this leaked a profile per test.
+        const profileIds = (
+            await prisma.customers.findMany({
+                where: { id: { in: createdIds } },
+                select: { profile_id: true },
+            })
+        ).map((r) => r.profile_id);
         await prisma.customers.deleteMany({ where: { id: { in: createdIds } } });
-        await prisma.profiles.deleteMany({
-            where: { customers: { id: { in: createdIds } } },
-        });
+        await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
     });
 
     test("create then getById round-trips", async () => {
