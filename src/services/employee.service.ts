@@ -1,5 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
+import { getDefaultActorId } from "@lib/current-actor";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
@@ -187,7 +188,8 @@ export const EmployeeService = {
                         ...(leavingProbation(employee.employment_status) && {
                             probation_end_date: null,
                         }),
-                        reference_salary: employee.reference_salary,
+                        // Null when omitted: pay them the role's standard.
+                        reference_salary: employee.reference_salary ?? null,
                         profile_id: profileRow.id,
                     },
                     include,
@@ -221,7 +223,17 @@ export const EmployeeService = {
             }
         }
 
-        const { name, mobile, email, address, avatar, reference_employee_id, ...employee } = data;
+        const {
+            name,
+            mobile,
+            email,
+            address,
+            avatar,
+            reference_employee_id,
+            actor_id,
+            role,
+            ...employee
+        } = data;
         try {
             return await prisma.$transaction(async (tx) => {
                 // A replaced photo writes a new Avatars row rather than mutating the
@@ -232,6 +244,28 @@ export const EmployeeService = {
                     ...defined({ name, mobile, email, address }),
                     ...(avatarRow && { avatar_id: avatarRow.id }),
                 };
+
+                // AuditLog's first writer. Redirecting someone's pay is the one
+                // employee edit worth a permanent record, and an override is
+                // meant to be visible as an exception rather than a silent edit.
+                if (employee.reference_salary !== undefined) {
+                    const beforeValue = existing.reference_salary?.toString() ?? null;
+                    const afterValue = String(employee.reference_salary);
+                    if (beforeValue !== afterValue) {
+                        await tx.auditLog.create({
+                            data: {
+                                table_name: "Employees",
+                                record_id: id,
+                                action: "UPDATE",
+                                changed_by_id: actor_id ?? (await getDefaultActorId()),
+                                before_data: { reference_salary: beforeValue },
+                                after_data: { reference_salary: afterValue },
+                                note: "Salary override changed",
+                            },
+                        });
+                    }
+                }
+
                 return tx.employees.update({
                     where: { id },
                     data: {
@@ -248,6 +282,11 @@ export const EmployeeService = {
                                 ? { connect: { id: reference_employee_id } }
                                 : { disconnect: true },
                         }),
+                        // Same reason role can't be a plain scalar here: profile's
+                        // nested update above already puts this write on the
+                        // relation-shaped (checked) input, where role only exists
+                        // via roleRef.
+                        ...(role !== undefined && { roleRef: { connect: { code: role } } }),
                         ...(Object.keys(profileUpdate).length > 0 && {
                             profile: { update: profileUpdate },
                         }),

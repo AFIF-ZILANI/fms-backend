@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 
-const employeeRole = z.enum(["MANAGER", "WORKER", "INTERN"]);
+// Any code in EmployeeRole. Validity is enforced by the FK rather than a list
+// here -- the whole point of the table is that the owner adds roles without a
+// deploy. Same pattern as Expense.category.
+const employeeRole = z.string().trim().min(1, "Role is required");
 const maritalStatus = z.enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED"]);
 const employmentStatus = z.enum(["APPOINTED", "PROBATION", "CONFIRMED", "TERMINATED"]);
 
@@ -55,9 +58,12 @@ const employeeFields = {
 
     // employment
     role: employeeRole,
-    // R -- the normal-month total. fixed_wage is derived from it (0.9 × R) in the
-    // service and never accepted from a client: the two must not drift apart.
-    reference_salary: z.coerce.number().positive("Reference salary must be positive"),
+    // Optional: omit it and the employee is paid their role's standard. A value
+    // here is an override, and is audited as an exception.
+    reference_salary: z.coerce
+        .number()
+        .positive("Reference salary must be positive")
+        .optional(),
     joining_date: z.coerce.date().optional(),
     employment_status: employmentStatus.optional(),
     // Nullable, not merely optional: clearing the date has to be expressible,
@@ -142,5 +148,10 @@ export const listEmployeesQuerySchema = paginationQuerySchema.extend({
 });
 
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
-export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
+// actor_id is stamped by the controller from getActorId(c), never accepted from
+// the body -- a client that can name the actor could forge attribution on the
+// audit row a salary-override change writes.
+export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema> & {
+    actor_id?: string;
+};
 export type ListEmployeesQuery = z.infer<typeof listEmployeesQuerySchema>;

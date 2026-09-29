@@ -17,7 +17,16 @@ export async function getActorId(c: Context): Promise<string> {
     // A paired device already proved an identity (requireDevice); trust it.
     const device = c.get("device") as { profile_id: string } | undefined;
     if (device) return device.profile_id;
+    return getDefaultActorId();
+}
 
+/**
+ * The device-less fallback on its own, for a service called without a
+ * Context -- a test hitting EmployeeService.update() directly, say. The
+ * controller path always has a Context and goes through getActorId above;
+ * this is what it falls back to anyway.
+ */
+export async function getDefaultActorId(): Promise<string> {
     if (cachedAdminProfileId) return cachedAdminProfileId;
     const admin = await prisma.admins.findFirst({
         orderBy: { created_at: "asc" },

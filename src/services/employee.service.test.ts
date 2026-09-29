@@ -4,7 +4,7 @@ import { EmployeeService } from "./employee.service";
 import { AppError } from "@lib/app-error";
 import { createEmployeeSchema } from "@validators/employee.validator";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
-import { fixedWageFor } from "@lib/payroll-math";
+import { fixedWageFor, referenceSalaryFor } from "@lib/payroll-math";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 const createdIds: string[] = [];
@@ -22,7 +22,11 @@ function track(employee: { id: string; profile_id: string; profile: { avatar_id:
     return employee;
 }
 
-/** A complete hire payload -- every field docs/employee_hire.md marks Mandatory. */
+/**
+ * A complete hire payload -- every field docs/employee_hire.md marks Mandatory.
+ * reference_salary is deliberately not defaulted here: it's an optional
+ * override, and a test that wants one absent should get an absent one.
+ */
 const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => ({
     name: "Test Worker",
     mobile: mobile(),
@@ -33,7 +37,6 @@ const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => (
     nid_number: "1990123456789",
     avatar: { public_id: "employees/test", image_url: "https://res.cloudinary.com/x/test.jpg" },
     role: "WORKER",
-    reference_salary: 15000,
     education: "HSC",
     experience_years: 2,
     experience: "Layer farm in Gazipur, feeding and cleaning",
@@ -68,6 +71,11 @@ describe("EmployeeService", () => {
             where: { reference_employee_id: { in: createdIds } },
             data: { reference_employee_id: null },
         });
+        // changed_by_id is a FK to Profiles, so audit rows must go before the
+        // employees (and their profiles) they reference.
+        await prisma.auditLog.deleteMany({
+            where: { table_name: "Employees", record_id: { in: createdIds } },
+        });
         await prisma.employees.deleteMany({ where: { id: { in: createdIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
         await prisma.avatars.deleteMany({ where: { id: { in: avatarIds } } });
@@ -81,7 +89,7 @@ describe("EmployeeService", () => {
         expect(found.profile.name).toBe("Test Worker");
         expect(found.profile.role).toBe("EMPLOYEE");
         expect(found.role).toBe("WORKER");
-        expect(found.reference_salary.toNumber()).toBe(15000);
+        expect(found.reference_salary!.toNumber()).toBe(15000);
         expect(fixedWageFor(found.reference_salary!).toNumber()).toBe(13500); // 0.9 × R, derived by the service
         expect(found.profile.is_active).toBe(true);
     });
@@ -121,7 +129,7 @@ describe("EmployeeService", () => {
             rating: 4.5,
         });
         expect(promoted!.role).toBe("MANAGER");
-        expect(promoted!.reference_salary.toNumber()).toBe(25000);
+        expect(promoted!.reference_salary!.toNumber()).toBe(25000);
         // A changed reference salary must drag the guaranteed wage with it.
         expect(fixedWageFor(promoted!.reference_salary!).toNumber()).toBe(22500);
         expect(promoted!.rating).toBe(4.5);
@@ -136,6 +144,61 @@ describe("EmployeeService", () => {
 
         const reactivated = await EmployeeService.setActive(employee!.id, true);
         expect(reactivated.profile.is_active).toBe(true);
+    });
+
+    test("an employee created without a salary uses their role's standard", async () => {
+        const role = await prisma.employeeRole.findUniqueOrThrow({ where: { code: "WORKER" } });
+        // No reference_salary key at all -- the override is genuinely absent.
+        const employee = await EmployeeService.create(
+            hire({ name: "Standard Worker", role: "WORKER" }),
+        );
+        track(employee!);
+        expect(employee!.reference_salary).toBeNull();
+
+        const loaded = await prisma.employees.findUniqueOrThrow({
+            where: { id: employee!.id },
+            include: { roleRef: { select: { reference_salary: true } } },
+        });
+        expect(referenceSalaryFor(loaded).toNumber()).toBe(role.reference_salary.toNumber());
+    });
+
+    test("changing a salary override writes one audit row carrying both figures", async () => {
+        const employee = await EmployeeService.create(
+            hire({ name: "Audited Worker", role: "WORKER", reference_salary: 12000 }),
+        );
+        track(employee!);
+
+        await EmployeeService.update(employee!.id, { reference_salary: 13000 });
+
+        const logs = await prisma.auditLog.findMany({
+            where: { table_name: "Employees", record_id: employee!.id, action: "UPDATE" },
+        });
+        expect(logs).toHaveLength(1);
+        const before = logs[0]!.before_data as { reference_salary: string };
+        const after = logs[0]!.after_data as { reference_salary: string };
+        expect(Number(before.reference_salary)).toBe(12000);
+        expect(Number(after.reference_salary)).toBe(13000);
+        expect(logs[0]!.changed_by_id).toBeTruthy();
+    });
+
+    test("an update that does not touch the salary writes no audit row", async () => {
+        const employee = await EmployeeService.create(
+            hire({ name: "Unaudited Worker", role: "WORKER", reference_salary: 12000 }),
+        );
+        track(employee!);
+
+        await EmployeeService.update(employee!.id, { rating: 4.0 });
+
+        const logs = await prisma.auditLog.findMany({
+            where: { table_name: "Employees", record_id: employee!.id },
+        });
+        expect(logs).toHaveLength(0);
+    });
+
+    test("a role code with no row behind it is rejected", async () => {
+        await expect(
+            EmployeeService.create(hire({ name: "Bad Role", role: "NO_SUCH_ROLE" })),
+        ).rejects.toMatchObject({ status: 400 });
     });
 
     test("listing filters by role", async () => {

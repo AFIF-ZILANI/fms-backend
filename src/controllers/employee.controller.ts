@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -42,7 +43,10 @@ export const EmployeeController = {
 
     async update(c: Context) {
         return withHandler(c, async () => {
-            const body = getValid<UpdateEmployeeInput>(c, "json");
+            const body = {
+                ...getValid<UpdateEmployeeInput>(c, "json"),
+                actor_id: await getActorId(c),
+            };
             const employee = await EmployeeService.update(c.req.param("id") ?? "", body);
             return sendSuccess(c, employee, "Employee updated");
         });
