@@ -14,6 +14,8 @@ employeeRoutes.get(
     zValidatorRfc7807("query", listEmployeesQuerySchema),
     EmployeeController.getAll,
 );
+// Before /:id, or "kpis" is read as an employee id.
+employeeRoutes.get("/kpis", EmployeeController.kpis);
 employeeRoutes.get("/:id", EmployeeController.getById);
 employeeRoutes.post(
     "/",

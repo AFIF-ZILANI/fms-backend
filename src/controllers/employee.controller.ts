@@ -18,6 +18,13 @@ export const EmployeeController = {
         });
     },
 
+    async kpis(c: Context) {
+        return withHandler(c, async () => {
+            const kpis = await EmployeeService.kpis();
+            return sendSuccess(c, kpis, "Employee KPIs fetched successfully");
+        });
+    },
+
     async getById(c: Context) {
         return withHandler(c, async () => {
             const employee = await EmployeeService.getById(c.req.param("id") ?? "");
