@@ -199,17 +199,47 @@ so they are different rows.
 
 ### Methods
 
-`BANK | BKASH | NAGAD | ROCKET | CASH`.
+`BANK | BKASH | NAGAD | ROCKET`.
 
 Default to **MFS (bKash/Nagad) for shed workers** and **bank transfer where the
-employee has an account**. **CASH is a documented exception only**, and needs a
-signed receipt — never a bare ledger line.
+employee has an account**. **Cash is not a payout method.** A wage handed over in
+cash leaves nothing an auditor can follow, so every payout needs a destination
+account on file and the transaction reference it produced. The schema enum still
+carries `CASH` for historical rows; the validator does not accept it, so no new
+payout can use it. An employee with no account on file cannot be paid — that is
+the intended block, not a gap.
 
-On MFS cash-out fees: either the farm covers the fee (recorded on the payout as
-`fee_paid_by_farm`, so the employee receives the full figure on their payslip) or
-the farm disburses from a **bKash/Nagad business disbursement account**, where
-rates differ from personal send-money. Current rates need checking before the
-first run — they change, and the choice between the two depends on the spread.
+### MFS cash-out fees
+
+**The farm covers the fee.** Two reasons, and the second is the one that matters:
+
+- The employee's contract figure is what they should end up holding. Making them
+  eat ~1.85% of it turns every payday into an argument about a number nobody
+  agreed to.
+- Under the Labour Act 2006 the employer may deduct from wages only what §125
+  authorises, and a transfer cost isn't on that list. A fee the MFS charges the
+  employee on withdrawal isn't the employer deducting anything — but *netting the
+  fee off before transferring* is, and that's the mistake the design has to make
+  impossible. It is: `total_pay` is transferred in full, and the fee is a separate
+  figure the farm bears. (Not legal advice — worth one pass by a local adviser
+  before the first run.)
+
+Paying via a **bKash/Nagad business disbursement account** is cheaper than
+personal send-money, so the fee is worth re-checking against current rates before
+the first run rather than assumed.
+
+Recorded in two places, because they answer different questions:
+
+- `PayrollPayout.fee_paid_by_farm` — what was absorbed on *this* payout, so the
+  payslip can show the employee receiving the full contract figure.
+- An **`Expense`** row under a `SALARY_TRANSFER_FEE` category — so the fee lands
+  in the P&L as an operating cost. It never inflates `total_pay`: the gross is the
+  signed contract figure, and letting a transfer fee into it would corrupt both
+  the payslip and the performance-pay arithmetic built on top of it.
+
+The Expense row is currently entered by hand alongside the payout. Deriving it
+from `fee_paid_by_farm` on confirm is the obvious next step — until then, a fee
+recorded on the payout but not as an Expense is invisible to the P&L.
 
 ### Payout Accounts Are Append-Only
 
@@ -230,9 +260,9 @@ recorded on the row.
 
 ### Paying
 
-- A payroll **cannot be marked paid without proof**: a `transaction_ref` (bKash
-  TrxID, bank reference) or, for CASH, an uploaded signed receipt at
-  `receipt_doc_url`.
+- A payroll **cannot be marked paid without proof**: the `transaction_ref` from
+  the transfer (bKash TrxID, bank reference). There is no alternative form of
+  proof, because there is no payout method that produces one.
 - Pay by the **7th working day after month end**. FMS raises a warning on **day
   5** — the same alert scan that already watches probation end dates and
   ungenerated payroll.
@@ -245,7 +275,7 @@ enum PayoutMethod {
   BKASH
   NAGAD
   ROCKET
-  CASH
+  CASH // historical only -- rejected by the validator, see Methods above
 }
 
 enum PayoutStatus {
@@ -288,8 +318,8 @@ model PayrollPayout {
   account_number    String        // snapshot
   amount            Decimal       @db.Decimal(10, 2)
   fee_paid_by_farm  Decimal       @default(0) @db.Decimal(10, 2)
-  transaction_ref   String?       // required unless method = CASH
-  receipt_doc_url   String?       // required when method = CASH
+  transaction_ref   String?       // required to mark paid
+  receipt_doc_url   String?       // unused -- kept for historical CASH rows
   status            PayoutStatus  @default(PENDING)
   paid_by_id        String?
   paid_by           Profiles?     @relation("PayoutPaidBy", fields: [paid_by_id], references: [id])
@@ -349,7 +379,8 @@ Enforced in application logic **now**, ahead of the wider multi-user work:
 - `OTHER` requires `approved_by_id` and is capped at ±5 per employee per month.
 - Entries of -4 or worse require `notice_doc_url`.
 - A month with a `PayrollRecord` rejects new or edited entries in that month.
-- No payout marked paid without `transaction_ref`, or `receipt_doc_url` for CASH.
+- No payout marked paid without `transaction_ref`.
+- No payout at all for an employee with no active payout account.
 
 Deferred:
 

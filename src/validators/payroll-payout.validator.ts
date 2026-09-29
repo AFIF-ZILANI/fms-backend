@@ -6,8 +6,7 @@ const method = z.enum(PAYOUT_METHODS);
 
 export const createPayrollPayoutSchema = z.object({
     payroll_record_id: z.string().uuid(),
-    // Omit to use the employee's currently active payout account. Supplying one
-    // explicitly is for the CASH exception, where there may be no account at all.
+    // Omit to use the employee's currently active payout account.
     payout_account_id: z.string().uuid().optional(),
     method: method.optional(),
     account_number: z.string().optional(),
@@ -18,22 +17,15 @@ export const createPayrollPayoutSchema = z.object({
 });
 
 /**
- * Marking a payout paid is the one write that needs proof. The rule is
- * conditional -- a transaction reference for every electronic method, a signed
- * receipt for cash -- which is exactly what the generic Payment model could
- * never express (docs/employee-payroll-design.md).
+ * Marking a payout paid is the one write that needs proof: the transaction
+ * reference from the transfer, which is exactly what the generic Payment model
+ * could never require (docs/employee-payroll-design.md).
  */
-export const markPaidSchema = z
-    .object({
-        transaction_ref: z.string().min(1).optional(),
-        receipt_doc_url: z.string().url("Must be a link to the signed receipt").optional(),
-        paid_by_id: z.string().uuid().optional(),
-        paid_at: z.coerce.date().optional(),
-    })
-    .refine((d) => !!d.transaction_ref || !!d.receipt_doc_url, {
-        message: "A payout needs a transaction reference, or a signed receipt for cash",
-        path: ["transaction_ref"],
-    });
+export const markPaidSchema = z.object({
+    transaction_ref: z.string().min(1, "A transaction reference is required"),
+    paid_by_id: z.string().uuid().optional(),
+    paid_at: z.coerce.date().optional(),
+});
 
 export const failPayoutSchema = z.object({
     reason: z.string().min(1, "A reason is required"),

@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 
-export const PAYOUT_METHODS = ["BANK", "BKASH", "NAGAD", "ROCKET", "CASH"] as const;
+// CASH is deliberately absent, though the schema enum still carries it for any
+// historical row: a salary paid in cash leaves no trace anyone can audit, so
+// wages go to a bank account or an MFS wallet and nowhere else.
+export const PAYOUT_METHODS = ["BANK", "BKASH", "NAGAD", "ROCKET"] as const;
 const method = z.enum(PAYOUT_METHODS);
 
 /** 9-digit BEFTN routing number. */
