@@ -11,10 +11,16 @@ describe("SupplierService", () => {
         // ponytail: SupplierSupplyLink has no onDelete: Cascade to Suppliers,
         // so links must be cleared before the supplier row itself.
         await prisma.supplierSupplyLink.deleteMany({ where: { supplier_id: { in: createdIds } } });
+        // Resolve the profiles BEFORE deleting the suppliers -- querying through
+        // the relation afterwards matches nothing, leaking a profile per test.
+        const profileIds = (
+            await prisma.suppliers.findMany({
+                where: { id: { in: createdIds } },
+                select: { profile_id: true },
+            })
+        ).map((r) => r.profile_id);
         await prisma.suppliers.deleteMany({ where: { id: { in: createdIds } } });
-        await prisma.profiles.deleteMany({
-            where: { suppliers: { id: { in: createdIds } } },
-        });
+        await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
     });
 
     test("create then getById round-trips", async () => {
@@ -121,7 +127,19 @@ describe("SupplierService supplies (join-table backed)", () => {
         await prisma.supplierSupplyLink.deleteMany({
             where: { supplier_id: { in: createdSupplierIds } },
         });
+        // Resolve first: several suppliers here are created with random mobiles,
+        // so the fixed list below can never cover them -- that is how
+        // "Test Supplier 4" leaked a profile on every run.
+        const profileIds = (
+            await prisma.suppliers.findMany({
+                where: { id: { in: createdSupplierIds } },
+                select: { profile_id: true },
+            })
+        ).map((r) => r.profile_id);
         await prisma.suppliers.deleteMany({ where: { id: { in: createdSupplierIds } } });
+        await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
+        // Belt and braces for the fixed mobiles: a previous run that died before
+        // its teardown would otherwise make this one fail on a unique conflict.
         await prisma.profiles.deleteMany({
             where: { mobile: { in: ["01700000001", "01700000002", "01700000003"] } },
         });
