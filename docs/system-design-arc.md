@@ -1,8 +1,9 @@
 # FMS — System Design Arc
 
 Ties together `docs/PREVIOUS_CONTEXT.md` (original planning), the three feature
-designs (inventory, batch management, employee payroll), and `codes/schema.prisma`
-into one picture of how the whole system fits together.
+designs (inventory, batch management, employee payroll), and
+`server/prisma/schema.prisma` into one picture of how the whole system fits
+together.
 
 ## 1. Mission, in one paragraph
 
@@ -60,9 +61,9 @@ as it grows:
 | **Batch**     | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                                             | Placement, brooder→grower transfer, mortality, the batch-closing lifecycle (not yet defined — see §7) |
 | **Inventory** | `Item`, `Purchase`, `PurchaseItem`, `StockUnit`, `Asset`, `AssetDepreciation`, `Consumption`, `StockLedger`, `InventoryAdjustment` | Lot costing, code binding, consumption/depletion, depreciation                                        |
 | **Treatment** | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`                                                               | Links treatment records to actual stock draws via `Consumption`                                       |
-| **Payroll**   | `PerformanceScoreEntry`, `PayrollRecord`, `Employees`                                                                              | Point-ledger scoring, monthly clamp-and-compute                                                       |
+| **Payroll**   | `PerformanceScoreEntry`, `PayrollRecord`, `PayrollPayout`, `EmployeePayoutAccount`, `Employees`                                     | Point-ledger scoring, monthly clamp-and-compute, proof-of-transfer payout                             |
 | **Sales**     | `Sale`, `SaleItem`, `BirdSale`                                                                                                     | Revenue recognition                                                                                   |
-| **Money**     | `Expense`, `Payment`, `PaymentInstrument`                                                                                          | Cost classification (`cost_type`), cash movement                                                      |
+| **Money**     | `Expense`, `Payment`, `PaymentInstrument`                                                                                          | Cost classification (`cost_type`), cash movement. Payroll writes here but is not authored here — §4    |
 | **Reporting** | reads across all of the above                                                                                                      | Bird-days allocation (v2), batch P&L, payroll summaries                                               |
 
 Reporting is deliberately read-only against the other modules' tables rather than
@@ -84,9 +85,31 @@ Treatment service writes a `Consumption` row (`batch_id`, `house_id`, `quantity`
 One bottle can span this sequence across several batches and houses over its life.
 
 **Month end payroll** → for each employee, sum `PerformanceScoreEntry.points` for the
-month → clamp to `[-10, +20]` → apply to `Employees.salary` → write one
-`PayrollRecord` (locked snapshot) → a `Payment` row pays it out, `ref_type` pointing
-back at the `PayrollRecord`.
+month → clamp to `[-10, +20]` → apply to `Employees.reference_salary` → write one
+`PayrollRecord` (locked snapshot) → a `PayrollPayout` against that record carries the
+money out, snapshotting the destination off the employee's active
+`EmployeePayoutAccount` and deriving the transfer fee the farm absorbs.
+
+Confirming that payout is the accounting event, and it fans out into the Money
+module inside one transaction: a `SALARY` `Expense` for the wage, a
+`SALARY_TRANSFER_FEE` `Expense` for the fee, and one `OUTGOING` `Payment` for the
+cash that left the farm's wallet — wage plus fee, since that is what moved in one
+transfer — with `ref_type = PAYROLL` pointing back at the payout.
+
+Two things about that shape are deliberate and easy to get backwards:
+
+- **The payout is the authority, `Payment` is the consequence.** A wage cannot be
+  paid by writing a `Payment` row: `createPaymentSchema` refuses `ref_type =
+  PAYROLL`, because only `PayrollPayout` can make proof of transfer a condition of
+  being marked paid. `Payment` remains the general cash ledger and payroll appears
+  in it — it is just not authored there. See `docs/payroll-ledger-bridge.md`.
+- **The cash row references the payout, not the `PayrollRecord`.** The record is a
+  calculation; the payout is the transfer. One `Payment` per transfer keeps an
+  instrument's statement lined up with the provider's own.
+
+Wages land as `SHARED_PERIOD`, so they are farm-wide cost and stay out of batch P&L
+until the bird-days allocation in §7 — a `PayrollRecord` has no batch, and shed
+labour spans whatever batches are running that month.
 
 ## 5. Offline-first sync
 
@@ -135,12 +158,11 @@ duplicate mortality entry is discovered in production.
 - **Auth/role enforcement** — the schema has the actors (`UserRole`,
   `EmployeeRoleNames`) but no permission layer yet; matches the original "single-user
   for v1" plan, becomes required once a second person starts entering data.
-- **ORM/runtime confirmation** — `schema.prisma` validates cleanly, but that only
-  proves the schema syntax is correct (the validator is a Rust/WASM engine,
-  runtime-agnostic). It does **not** confirm Prisma's client generation and query
-  engine behave correctly under Bun specifically — that needs an actual
-  `prisma generate` + a smoke-test query run with Bun before fully committing over
-  Drizzle.
+- **Pre-bridge payroll cash** — the 8 payouts confirmed before the payroll→ledger
+  bridge have `SALARY` expenses but no cash rows, because nobody recorded which
+  wallet those transfers left. `cash_position` is ৳98,070 optimistic until someone
+  confirms an opening adjustment against the instrument that actually paid. The
+  number is known; only the wallet is not. See `docs/payroll-ledger-bridge.md`.
 - **Postgres hosting** (Supabase/Neon/Railway/self-hosted) — unchanged open item from
   the original plan.
 - **Field App design** — the mobile scanning/execution app is referenced throughout
@@ -150,11 +172,27 @@ duplicate mortality entry is discovered in production.
 ## 8. Verification so far
 
 ```
-cd codes && npx prisma validate --schema=./schema.prisma   # passes
+cd server && bun test src/services/     # 321 tests across 40 files, against real Postgres
+cd server && npx tsc --noEmit           # 10 errors, all in two test files -- see below
+cd web    && npx tsc --noEmit && npx vite build   # clean
 ```
 
-No migration has been generated, no database exists, no backend or frontend code has
-been written — this and the three feature docs are the complete design surface so
-far. Next concrete step, when ready, is `prisma migrate dev` against a real Postgres
-instance plus a `prisma generate` + Bun smoke test to close the ORM confirmation gap
-above.
+The design surface is no longer the whole story: **29 migrations are applied against
+a real Postgres database**, the server exposes 52 route groups over a full service
+layer, and the web app has 15 page modules. Every service test runs against the real
+database rather than a mock, so the suite exercises Prisma's query engine on every
+run.
+
+That closes what §7 used to list as the ORM/runtime gap: `prisma generate` produces a
+working client (7.8.0) and 321 tests execute real queries through it **under Bun**,
+which is the evidence that item asked for. Prisma over Drizzle is settled.
+
+`tsc` is **not** clean on the server: `item.service.test.ts` and
+`organization.service.test.ts` pass unit codes (`ML`, `G`) that the `Unit` enum no
+longer carries, 10 errors between them. They are test fixtures written against an
+older enum, no source file is affected, and `bun test` passes because Bun strips
+types rather than checking them — which is exactly why the errors survived. Worth
+clearing, or the next real type error hides in the noise.
+
+Still only a design: the **Field App**. `mobile/` is scaffolded — config, assets,
+lockfile — with no screens in it yet.
