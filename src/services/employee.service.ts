@@ -3,7 +3,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
-import { computePay } from "@lib/payroll-math";
+import { computePay, referenceSalaryFor } from "@lib/payroll-math";
 import type {
     CreateEmployeeInput,
     UpdateEmployeeInput,
@@ -85,6 +85,7 @@ export const EmployeeService = {
                 select: {
                     id: true,
                     reference_salary: true,
+                    roleRef: { select: { reference_salary: true } },
                     employment_status: true,
                     probation_end_date: true,
                     payoutAccounts: { where: { active_to: null }, select: { id: true } },
@@ -118,7 +119,7 @@ export const EmployeeService = {
             const score = pointsByEmployee.get(e.id) ?? 0;
             // The projection uses the same formula payroll will, so the figure on
             // the dashboard is the one that will actually be paid.
-            wage_bill_projected += computePay(e.reference_salary, score).total_pay.toNumber();
+            wage_bill_projected += computePay(referenceSalaryFor(e), score).total_pay.toNumber();
             if (score < 0) negative_performers += 1;
             if (e.payoutAccounts.length === 0) no_payout_account += 1;
             if (
