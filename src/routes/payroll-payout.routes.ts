@@ -15,6 +15,8 @@ payrollPayoutRoutes.get(
     zValidatorRfc7807("query", listPayrollPayoutsQuerySchema),
     PayrollPayoutController.getAll,
 );
+// Before /:id, or "fee-rates" is parsed as a payout id.
+payrollPayoutRoutes.get("/fee-rates", PayrollPayoutController.feeRates);
 payrollPayoutRoutes.get("/:id", PayrollPayoutController.getById);
 payrollPayoutRoutes.post(
     "/",

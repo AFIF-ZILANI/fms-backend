@@ -44,6 +44,9 @@ describe("PayrollRecordService", () => {
     });
 
     afterAll(async () => {
+        // Confirming a payout writes a transfer-fee expense against the actor,
+        // so it has to go before the profile it points at.
+        await prisma.expense.deleteMany({ where: { recorded_by_id: profileId } });
         // Payouts reference payroll records, so they go first.
         await prisma.payrollPayout.deleteMany({
             where: { payroll_record: { employee_id: { in: createdEmployeeIds } } },
@@ -194,7 +197,10 @@ describe("PayrollRecordService", () => {
             method: "BKASH",
             account_number: "01712345678",
         });
-        await PayrollPayoutService.markPaid(payout!.id, { transaction_ref: "BKA9Z1" });
+        await PayrollPayoutService.markPaid(payout!.id, {
+            transaction_ref: "BKA9Z1",
+            paid_by_id: profileId,
+        });
 
         const slip = await PayrollRecordService.payslip(record.id);
         expect(slip.fixed_wage.toNumber()).toBe(13500);

@@ -209,37 +209,61 @@ carries `CASH` for historical rows; the validator does not accept it, so no new
 payout can use it. An employee with no account on file cannot be paid — that is
 the intended block, not a gap.
 
-### MFS cash-out fees
+### Transfer fees
 
-**The farm covers the fee.** Two reasons, and the second is the one that matters:
+Two different fees get confused here, so they are named apart:
 
-- The employee's contract figure is what they should end up holding. Making them
-  eat ~1.85% of it turns every payday into an argument about a number nobody
-  agreed to.
-- Under the Labour Act 2006 the employer may deduct from wages only what §125
-  authorises, and a transfer cost isn't on that list. A fee the MFS charges the
-  employee on withdrawal isn't the employer deducting anything — but *netting the
-  fee off before transferring* is, and that's the mistake the design has to make
-  impossible. It is: `total_pay` is transferred in full, and the fee is a separate
-  figure the farm bears. (Not legal advice — worth one pass by a local adviser
-  before the first run.)
+- **The send fee** — what the *farm* pays to move the money. The farm bears it,
+  and FMS computes and records it. This is the one the system models.
+- **The cash-out fee** — what the *employee* pays their MFS to withdraw notes
+  (~1.85% on a personal bKash). The farm does not pay this and cannot see it: it
+  is charged by bKash to the employee, on their own withdrawal, at a time and
+  amount FMS never learns. Nothing to record.
 
-Paying via a **bKash/Nagad business disbursement account** is cheaper than
-personal send-money, so the fee is worth re-checking against current rates before
-the first run rather than assumed.
+What the send fee actually is, by destination:
 
-Recorded in two places, because they answer different questions:
+| Destination | Charge | Note |
+| --- | --- | --- |
+| Bank (BEFTN) | none | BEFTN credits are free to the sender; RTGS carries a small flat charge, but wages go by BEFTN |
+| bKash / Nagad / Rocket | flat per transaction | Send Money from a personal account |
+| MFS business disbursement | a percentage | Negotiated per contract, and cheaper per taka at payroll volume |
 
-- `PayrollPayout.fee_paid_by_farm` — what was absorbed on *this* payout, so the
-  payslip can show the employee receiving the full contract figure.
-- An **`Expense`** row under a `SALARY_TRANSFER_FEE` category — so the fee lands
-  in the P&L as an operating cost. It never inflates `total_pay`: the gross is the
-  signed contract figure, and letting a transfer fee into it would corrupt both
-  the payslip and the performance-pay arithmetic built on top of it.
+So the fee is **not a single percentage** — it is `flat + amount x percent`, in
+`lib/payout-fees.ts`, one entry per method. A farm that signs a bKash
+disbursement agreement moves its number from `flat` to `percent` there and
+nothing else changes. **The defaults need verifying before the first run**: they
+are published personal-account rates as understood at the time of writing, and
+both bKash and Nagad revise theirs.
 
-The Expense row is currently entered by hand alongside the payout. Deriving it
-from `fee_paid_by_farm` on confirm is the obvious next step — until then, a fee
-recorded on the payout but not as an Expense is invisible to the P&L.
+On the legal side: under the Labour Act 2006 the employer may deduct from wages
+only what §125 authorises, and a transfer cost is not on that list. Netting the
+fee off before transferring would be an unauthorised deduction, so the design
+makes it impossible — `amount` is always the full `total_pay`, and the fee is a
+separate figure on top. (Not legal advice; worth one pass by a local adviser.)
+
+### Recording It
+
+The fee is **derived, never typed in.** `fee_paid_by_farm` is computed from the
+destination and the amount when the payout is created, and is absent from the
+request body: a client that can quote its own fee can quote any number into the
+P&L. It is snapshotted on the row because the published rate will have moved on
+by the time anyone reads it back.
+
+On confirm, in the same transaction as the status change, the fee becomes an
+**`Expense`** under category `SALARY_TRANSFER_FEE`, `cost_type SHARED_PERIOD`
+(farm-wide, recurring, traceable to no one batch), attributed to the actor who
+confirmed the payout. Written on confirm rather than create, because an unpaid
+payout has cost nothing yet. The category row is upserted on first use, so no
+seeding step stands between a fresh install and the first payroll.
+
+It never inflates `total_pay`: the gross is the signed contract figure, and
+letting a transfer fee into it would corrupt both the payslip and the
+performance-pay arithmetic built on top of it.
+
+Known gap: **salaries themselves are not `Expense` rows**, so the P&L currently
+sees the transfer fee but not the wage it carried. That predates this and is its
+own decision — the payroll-to-ledger bridge — not something to paper over by
+expensing wages from here.
 
 ### Payout Accounts Are Append-Only
 

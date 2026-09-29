@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { PAYOUT_FEES, transferFee } from "@lib/payout-fees";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -8,6 +9,10 @@ import type {
     ListPayrollPayoutsQuery,
     MarkPaidInput,
 } from "@validators/payroll-payout.validator";
+
+/** Created on first use rather than seeded -- nothing else has to be set up
+ *  before the first payroll can be paid. */
+const SALARY_TRANSFER_FEE = "SALARY_TRANSFER_FEE";
 
 const include = {
     payroll_record: {
@@ -22,6 +27,13 @@ const include = {
 } as const;
 
 export const PayrollPayoutService = {
+    /** The published rates the modal previews the fee with, so the figure the
+     *  user sees and the figure that gets stored come from one table. */
+    feeRates() {
+        return PAYOUT_FEES;
+    },
+
+
     async getAll(query: ListPayrollPayoutsQuery) {
         const where = {
             ...(query.status !== undefined && { status: query.status }),
@@ -90,17 +102,19 @@ export const PayrollPayoutService = {
             throw AppError.badRequest("That payout account belongs to a different employee");
         }
 
+        // The fee is derived from the destination and the amount, never sent by
+        // the client -- and snapshotted here, because the published rate will
+        // have moved on by the time anyone reads this row back.
+        const amount = data.amount ?? record.total_pay;
         try {
             return await prisma.payrollPayout.create({
                 data: {
                     payroll_record_id: record.id,
                     method,
                     account_number,
-                    amount: data.amount ?? record.total_pay,
+                    amount,
                     ...(account && { payout_account_id: account.id }),
-                    ...(data.fee_paid_by_farm !== undefined && {
-                        fee_paid_by_farm: data.fee_paid_by_farm,
-                    }),
+                    fee_paid_by_farm: transferFee(method, amount),
                 },
                 include,
             });
@@ -120,15 +134,41 @@ export const PayrollPayoutService = {
             throw AppError.badRequest("Payout is already confirmed");
         }
 
-        return prisma.payrollPayout.update({
-            where: { id },
-            data: {
-                status: "CONFIRMED",
-                paid_at: data.paid_at ?? new Date(),
-                transaction_ref: data.transaction_ref,
-                ...(data.paid_by_id !== undefined && { paid_by_id: data.paid_by_id }),
-            },
-            include,
+        const paid_at = data.paid_at ?? new Date();
+
+        return prisma.$transaction(async (tx) => {
+            // The fee the farm absorbed is an operating cost, so it belongs in
+            // the P&L and not only on the payout. Written here rather than on
+            // create: an unpaid payout has cost nothing yet.
+            if (payout.fee_paid_by_farm.greaterThan(0)) {
+                await tx.expenseCategoryLookup.upsert({
+                    where: { code: SALARY_TRANSFER_FEE },
+                    update: {},
+                    create: { code: SALARY_TRANSFER_FEE, label: "Salary transfer fee" },
+                });
+                await tx.expense.create({
+                    data: {
+                        category: SALARY_TRANSFER_FEE,
+                        // Farm-wide and recurring, traceable to no single batch.
+                        cost_type: "SHARED_PERIOD",
+                        amount: payout.fee_paid_by_farm,
+                        date: paid_at,
+                        recorded_by_id: data.paid_by_id,
+                        remarks: `${payout.method} transfer fee on payout ${payout.id}`,
+                    },
+                });
+            }
+
+            return tx.payrollPayout.update({
+                where: { id },
+                data: {
+                    status: "CONFIRMED",
+                    paid_at,
+                    transaction_ref: data.transaction_ref,
+                    paid_by_id: data.paid_by_id,
+                },
+                include,
+            });
         });
     },
 
