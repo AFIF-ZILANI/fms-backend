@@ -260,10 +260,10 @@ It never inflates `total_pay`: the gross is the signed contract figure, and
 letting a transfer fee into it would corrupt both the payslip and the
 performance-pay arithmetic built on top of it.
 
-Known gap: **salaries themselves are not `Expense` rows**, so the P&L currently
-sees the transfer fee but not the wage it carried. That predates this and is its
-own decision — the payroll-to-ledger bridge — not something to paper over by
-expensing wages from here.
+Known gap: **salaries themselves reach neither the cost book nor the cash book**,
+so the P&L sees the transfer fee but not the wage it carried, and `cash_position`
+never drops when wages go out. Designed in `docs/payroll-ledger-bridge.md`, which
+is waiting on three decisions; not papered over by expensing wages from here.
 
 ### Payout Accounts Are Append-Only
 
