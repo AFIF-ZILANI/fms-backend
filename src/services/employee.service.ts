@@ -248,8 +248,16 @@ export const EmployeeService = {
                 // AuditLog's first writer. Redirecting someone's pay is the one
                 // employee edit worth a permanent record, and an override is
                 // meant to be visible as an exception rather than a silent edit.
+                // Read fresh inside the transaction, not the `existing` fetched
+                // before it opened -- a concurrent write landing in between would
+                // otherwise compare against a stale figure and silently skip a
+                // genuine change.
                 if (employee.reference_salary !== undefined) {
-                    const beforeValue = existing.reference_salary?.toString() ?? null;
+                    const before = await tx.employees.findUnique({
+                        where: { id },
+                        select: { reference_salary: true },
+                    });
+                    const beforeValue = before?.reference_salary?.toString() ?? null;
                     const afterValue = String(employee.reference_salary);
                     if (beforeValue !== afterValue) {
                         await tx.auditLog.create({

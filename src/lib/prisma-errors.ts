@@ -7,6 +7,9 @@ import { AppError } from "./app-error";
  *  - P2002 (unique constraint) -> 409 conflict
  *  - P2003 (foreign key constraint) -> 400 bad request, the referenced id
  *    doesn't exist (e.g. a client-supplied purchase_item_id/stock_unit_id)
+ *  - P2025 (required relation record not found) -> 400 bad request, same
+ *    shape as P2003 -- a `connect` (e.g. roleRef) raises this instead of
+ *    P2003 when the related row is missing, but it's the same client mistake
  * Rethrows anything else unchanged. Call from a service's catch block
  * instead of pre-checking existence/uniqueness -- pre-checking races
  * concurrent writes; the DB constraint is the actual source of truth.
@@ -21,6 +24,9 @@ export const handlePrismaWriteError = (err: unknown): never => {
             throw AppError.badRequest(
                 `${foreignKeyField(err.meta)} does not reference an existing record`,
             );
+        }
+        if (err.code === "P2025") {
+            throw AppError.badRequest("A related record referenced in this request does not exist");
         }
     }
     throw err;

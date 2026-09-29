@@ -201,6 +201,15 @@ describe("EmployeeService", () => {
         ).rejects.toMatchObject({ status: 400 });
     });
 
+    test("updating to a role code with no row behind it is rejected", async () => {
+        const employee = await EmployeeService.create(hire({ name: "Bad Role Update" }));
+        track(employee!);
+
+        await expect(
+            EmployeeService.update(employee!.id, { role: "NO_SUCH_ROLE" }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
     test("listing filters by role", async () => {
         const employee = await EmployeeService.create(hire({ name: "FilterMe", role: "INTERN", reference_salary: 4000 }));
         track(employee!);
