@@ -3,21 +3,30 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
-import type { CreatePaymentInput, ListPaymentsQuery } from "@validators/payment.validator";
+import type {
+    CreatePaymentInput,
+    ListPaymentsQuery,
+    PaymentRefType,
+} from "@validators/payment.validator";
 
-type RefType = CreatePaymentInput["ref_type"];
+// Every ref a stored row can carry, not just the ones a client may author --
+// PAYROLL rows are emitted by PayrollPayout.markPaid and still have to be
+// readable here.
+type RefType = PaymentRefType;
 
 const REF_LABEL: Record<RefType, string> = {
     SALE: "Sale",
     BIRD_SALE: "BirdSale",
     PURCHASE: "Purchase",
     EXPENSE: "Expense",
+    PAYROLL: "Payout",
 };
 
 /** What a referenced record owes before any Payment rows are netted off.
  * Sale/BirdSale/Purchase carry a create-time `due_amount` snapshot; Expense
- * and PayrollRecord have none, so the whole amount is owed. Throws if the
- * ref doesn't exist -- ref_id is polymorphic with no FK behind it, so this
+ * and PayrollPayout have none, so the whole amount is owed -- and for a payout
+ * that whole amount includes the transfer fee, because the fee left the wallet
+ * in the same transfer. Throws if the ref doesn't exist -- ref_id is polymorphic with no FK behind it, so this
  * is the only thing standing between a typo and an orphaned payment. */
 async function owedForRef(
     tx: Prisma.TransactionClient,
@@ -48,6 +57,13 @@ async function owedForRef(
                 return (
                     await tx.expense.findUnique({ where: { id: ref_id }, select: { amount: true } })
                 )?.amount;
+            case "PAYROLL": {
+                const payout = await tx.payrollPayout.findUnique({
+                    where: { id: ref_id },
+                    select: { amount: true, fee_paid_by_farm: true },
+                });
+                return payout?.amount.plus(payout.fee_paid_by_farm);
+            }
         }
     })();
 
@@ -167,7 +183,7 @@ export const PaymentService = {
 
     /** Sum of Payment.amount for a given (ref_type, ref_id) -- the read-time
      * substitute for mutating the referenced record's due_amount. */
-    async getTotalPaidForRef(ref_type: CreatePaymentInput["ref_type"], ref_id: string) {
+    async getTotalPaidForRef(ref_type: RefType, ref_id: string) {
         const result = await prisma.payment.aggregate({
             where: { ref_type, ref_id },
             _sum: { amount: true },

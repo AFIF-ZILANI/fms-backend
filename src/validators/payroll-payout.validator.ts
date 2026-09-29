@@ -22,6 +22,10 @@ export const createPayrollPayoutSchema = z.object({
  */
 export const markPaidSchema = z.object({
     transaction_ref: z.string().min(1, "A transaction reference is required"),
+    // Which farm wallet the money left. Required, and not defaulted: a default
+    // that is silently wrong puts real outflow on the wrong instrument's
+    // balance, and there is no way to tell afterwards.
+    from_instrument_id: z.string().uuid("Choose the account this was paid from"),
     paid_at: z.coerce.date().optional(),
 });
 

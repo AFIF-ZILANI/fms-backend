@@ -219,9 +219,11 @@ enum PaymentRefType {
   BIRD_SALE
   PURCHASE
   EXPENSE
-  // PAYROLL is deliberately absent: salary payments live in PayrollPayout, which
-  // can require proof of transfer. Existing rows were backfilled and the enum
-  // value dropped -- see docs/employee-payroll-design.md.
+  /// The cash-book shadow of a confirmed PayrollPayout, emitted by markPaid and
+  /// pointing at the payout. Not accepted by POST /payments: a salary payment
+  /// still cannot be authored here, because Payment cannot require proof of
+  /// transfer. See docs/payroll-ledger-bridge.md.
+  PAYROLL
 }
 
 enum PerformanceCriterion {
