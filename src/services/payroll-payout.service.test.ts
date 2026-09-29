@@ -2,6 +2,10 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EmployeePayoutAccountService } from "./employee-payout-account.service";
 import { PayrollPayoutService } from "./payroll-payout.service";
+import {
+    createPayrollPayoutSchema,
+    markPaidSchema,
+} from "@validators/payroll-payout.validator";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 let employeeId: string;
@@ -9,6 +13,8 @@ let profileId: string;
 // Stands in for the session actor the controller stamps on.
 let approverId: string;
 const recordIds: string[] = [];
+const bareEmployeeIds: string[] = [];
+const bareIds: string[] = [];
 
 async function newPayrollRecord(month: Date) {
     const record = await prisma.payrollRecord.create({
@@ -53,8 +59,12 @@ describe("Payout APIs", () => {
         await prisma.payrollPayout.deleteMany({ where: { payroll_record_id: { in: recordIds } } });
         await prisma.payrollRecord.deleteMany({ where: { id: { in: recordIds } } });
         await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: employeeId } });
-        await prisma.employees.delete({ where: { id: employeeId } });
-        await prisma.profiles.deleteMany({ where: { id: { in: [profileId, approverId] } } });
+        await prisma.employees.deleteMany({
+            where: { id: { in: [employeeId, ...bareEmployeeIds] } },
+        });
+        await prisma.profiles.deleteMany({
+            where: { id: { in: [profileId, approverId, ...bareIds] } },
+        });
     });
 
     test("adding an account closes the one it replaces, rather than editing it", async () => {
@@ -105,13 +115,11 @@ describe("Payout APIs", () => {
         ).rejects.toMatchObject({ status: 409 });
     });
 
-    test("an electronic payout can't be marked paid without a transaction reference", async () => {
+    test("a payout can't be marked paid without a transaction reference", async () => {
         const record = await newPayrollRecord(new Date(Date.UTC(2026, 2, 1)));
         const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
 
-        await expect(
-            PayrollPayoutService.markPaid(payout!.id, { receipt_doc_url: "https://x.test/r.pdf" }),
-        ).rejects.toMatchObject({ status: 400 });
+        expect(markPaidSchema.safeParse({ transaction_ref: "" }).success).toBe(false);
 
         const paid = await PayrollPayoutService.markPaid(payout!.id, {
             transaction_ref: "BKA7X9QZ12",
@@ -120,22 +128,46 @@ describe("Payout APIs", () => {
         expect(paid.paid_at).not.toBeNull();
     });
 
-    test("a cash payout needs a signed receipt, and a reference won't do", async () => {
-        const record = await newPayrollRecord(new Date(Date.UTC(2026, 3, 1)));
-        const payout = await PayrollPayoutService.create({
-            payroll_record_id: record.id,
-            method: "CASH",
-            account_number: "CASH",
+    test("cash is not a payout method, and a payout with no account is refused", async () => {
+        expect(
+            createPayrollPayoutSchema.safeParse({
+                payroll_record_id: crypto.randomUUID(),
+                method: "CASH",
+                account_number: "CASH",
+            }).success,
+        ).toBe(false);
+
+        // An employee with nothing on file can't be paid at all now.
+        const bareProfile = await prisma.profiles.create({
+            data: { name: "No Account Worker", mobile: mobile(), role: "EMPLOYEE" },
         });
+        bareIds.push(bareProfile.id);
+        const bare = await prisma.employees.create({
+            data: {
+                profile_id: bareProfile.id,
+                role: "WORKER",
+                reference_salary: 9000,
+                fixed_wage: 8100,
+            },
+        });
+        bareEmployeeIds.push(bare.id);
+        const record = await prisma.payrollRecord.create({
+            data: {
+                employee_id: bare.id,
+                month: new Date(Date.UTC(2026, 3, 1)),
+                reference_salary: 9000,
+                fixed_wage: 8100,
+                score_sum: 0,
+                adjustment_percent: 0,
+                allowance: 900,
+                total_pay: 9000,
+            },
+        });
+        recordIds.push(record.id);
 
         await expect(
-            PayrollPayoutService.markPaid(payout!.id, { transaction_ref: "handed over" }),
+            PayrollPayoutService.create({ payroll_record_id: record.id }),
         ).rejects.toMatchObject({ status: 400 });
-
-        const paid = await PayrollPayoutService.markPaid(payout!.id, {
-            receipt_doc_url: "https://docs.zerodfarms.test/receipt.pdf",
-        });
-        expect(paid.status).toBe("CONFIRMED");
     });
 
     test("a third-party account records whose it is", async () => {

@@ -63,22 +63,27 @@ export const PayrollPayoutService = {
             throw AppError.conflict("This payroll record already has a payout");
         }
 
+        // The fallback is only for a caller that named no destination at all.
+        // A caller that named a method means it -- linking their active bank
+        // account to a CASH payout would misstate where the money went.
         const account = data.payout_account_id
             ? await prisma.employeePayoutAccount.findUnique({
                   where: { id: data.payout_account_id },
               })
-            : await prisma.employeePayoutAccount.findFirst({
-                  where: { employee_id: record.employee_id, active_to: null },
-                  orderBy: { active_from: "desc" },
-              });
+            : data.method
+              ? null
+              : await prisma.employeePayoutAccount.findFirst({
+                    where: { employee_id: record.employee_id, active_to: null },
+                    orderBy: { active_from: "desc" },
+                });
 
-        // A method and account number have to come from somewhere: the account on
-        // file, or explicitly on the request for the CASH exception.
+        // A method and account number have to come from somewhere, and with cash
+        // gone that somewhere is an account on file.
         const method = data.method ?? account?.method;
         const account_number = data.account_number ?? account?.account_number;
         if (!method || !account_number) {
             throw AppError.badRequest(
-                "No payout account on file for this employee -- add one, or supply method and account number",
+                "No payout account on file for this employee -- add one before paying this payroll",
             );
         }
         if (account && account.employee_id !== record.employee_id) {
@@ -105,9 +110,8 @@ export const PayrollPayoutService = {
     },
 
     /**
-     * The rule the whole model exists for: no payout is marked paid without
-     * proof. Electronic methods need a transaction reference; CASH needs an
-     * uploaded signed receipt, and a reference doesn't substitute for it.
+     * The rule the whole model exists for: no payout is marked paid without the
+     * transaction reference from the transfer.
      */
     async markPaid(id: string, data: MarkPaidInput) {
         const payout = await prisma.payrollPayout.findUnique({ where: { id } });
@@ -116,26 +120,12 @@ export const PayrollPayoutService = {
             throw AppError.badRequest("Payout is already confirmed");
         }
 
-        if (payout.method === "CASH" && !data.receipt_doc_url) {
-            throw AppError.badRequest("A cash payout needs an uploaded signed receipt");
-        }
-        if (payout.method !== "CASH" && !data.transaction_ref) {
-            throw AppError.badRequest(
-                "A transaction reference is required (bKash TrxID, bank reference)",
-            );
-        }
-
         return prisma.payrollPayout.update({
             where: { id },
             data: {
                 status: "CONFIRMED",
                 paid_at: data.paid_at ?? new Date(),
-                ...(data.transaction_ref !== undefined && {
-                    transaction_ref: data.transaction_ref,
-                }),
-                ...(data.receipt_doc_url !== undefined && {
-                    receipt_doc_url: data.receipt_doc_url,
-                }),
+                transaction_ref: data.transaction_ref,
                 ...(data.paid_by_id !== undefined && { paid_by_id: data.paid_by_id }),
             },
             include,
