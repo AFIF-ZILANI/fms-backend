@@ -4,6 +4,7 @@ import { EmployeeService } from "./employee.service";
 import { AppError } from "@lib/app-error";
 import { createEmployeeSchema } from "@validators/employee.validator";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
+import { fixedWageFor } from "@lib/payroll-math";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 const createdIds: string[] = [];
@@ -81,7 +82,7 @@ describe("EmployeeService", () => {
         expect(found.profile.role).toBe("EMPLOYEE");
         expect(found.role).toBe("WORKER");
         expect(found.reference_salary.toNumber()).toBe(15000);
-        expect(found.fixed_wage.toNumber()).toBe(13500); // 0.9 × R, derived by the service
+        expect(fixedWageFor(found.reference_salary!).toNumber()).toBe(13500); // 0.9 × R, derived by the service
         expect(found.profile.is_active).toBe(true);
     });
 
@@ -122,7 +123,7 @@ describe("EmployeeService", () => {
         expect(promoted!.role).toBe("MANAGER");
         expect(promoted!.reference_salary.toNumber()).toBe(25000);
         // A changed reference salary must drag the guaranteed wage with it.
-        expect(promoted!.fixed_wage.toNumber()).toBe(22500);
+        expect(fixedWageFor(promoted!.reference_salary!).toNumber()).toBe(22500);
         expect(promoted!.rating).toBe(4.5);
     });
 

@@ -25,7 +25,6 @@ async function newEmployee(salary: number) {
             profile_id: profile.id,
             role: "WORKER",
             reference_salary: salary,
-            fixed_wage: Math.round(salary * 0.9),
         },
     });
     createdEmployeeIds.push(employee.id);

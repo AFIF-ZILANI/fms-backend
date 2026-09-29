@@ -3,7 +3,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
-import { computePay, fixedWageFor } from "@lib/payroll-math";
+import { computePay } from "@lib/payroll-math";
 import type {
     CreateEmployeeInput,
     UpdateEmployeeInput,
@@ -187,7 +187,6 @@ export const EmployeeService = {
                             probation_end_date: null,
                         }),
                         reference_salary: employee.reference_salary,
-                        fixed_wage: fixedWageFor(employee.reference_salary),
                         profile_id: profileRow.id,
                     },
                     include,
@@ -238,11 +237,6 @@ export const EmployeeService = {
                         ...defined(employee),
                         ...(leavingProbation(employee.employment_status) && {
                             probation_end_date: null,
-                        }),
-                        // Keep the guaranteed wage in step with a changed reference
-                        // salary -- they are one decision, not two fields to remember.
-                        ...(employee.reference_salary !== undefined && {
-                            fixed_wage: fixedWageFor(employee.reference_salary),
                         }),
                         // Nested writes put this update on Prisma's relation-shaped
                         // input, where the reference is connected rather than set as
