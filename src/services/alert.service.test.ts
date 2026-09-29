@@ -200,13 +200,17 @@ describe("AlertService", () => {
         });
 
         await AlertService.runScan();
-        const { alerts } = await AlertService.getAll({
-            page: 1,
-            limit: 50,
-            type: "EMPLOYEE",
-            status: "ACTIVE",
+        // Queried directly rather than via AlertService.getAll: the dev database
+        // can hold far more than one page of stale ACTIVE EMPLOYEE alerts, and this
+        // assertion must hold regardless of how many alerts already exist.
+        const match = await prisma.alerts.findFirst({
+            where: {
+                related_id: employee.id,
+                type: "EMPLOYEE",
+                status: "ACTIVE",
+                level: "WARNING",
+            },
         });
-        const match = alerts.find((a) => a.related_id === employee.id && a.level === "WARNING");
         expect(match).toBeDefined();
         createdAlertIds.push(match!.id);
     });
