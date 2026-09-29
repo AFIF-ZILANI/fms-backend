@@ -260,10 +260,10 @@ It never inflates `total_pay`: the gross is the signed contract figure, and
 letting a transfer fee into it would corrupt both the payslip and the
 performance-pay arithmetic built on top of it.
 
-Known gap: **salaries themselves reach neither the cost book nor the cash book**,
-so the P&L sees the transfer fee but not the wage it carried, and `cash_position`
-never drops when wages go out. Designed in `docs/payroll-ledger-bridge.md`, which
-is waiting on three decisions; not papered over by expensing wages from here.
+Confirming a payout also writes the wage itself as a `SALARY` expense and one
+`OUTGOING` `Payment` for the cash that left the wallet — see
+`docs/payroll-ledger-bridge.md`. That is why `mark-paid` requires
+`from_instrument_id`: the cash book has to name the wallet that paid.
 
 ### Payout Accounts Are Append-Only
 

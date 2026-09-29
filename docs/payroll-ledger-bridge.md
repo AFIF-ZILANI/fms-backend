@@ -1,6 +1,7 @@
 # Payroll → Ledger Bridge
 
-Status: **design, not built.** Three decisions at the bottom need answering first.
+Status: **built.** All three decisions were taken as recommended — a required
+"Paid from" select, cost-side backfill only, and `SHARED_PERIOD` for wages.
 
 ## The hole
 
@@ -89,43 +90,56 @@ No double-counting: no query sums the cost and cash books together
 (`analytics.service.ts` aggregates `Expense` and `Payment` separately, for
 different fields).
 
-### What has to change
+### What changed
 
-- **Migration** — `ALTER TYPE "PaymentRefType" ADD VALUE 'PAYROLL';` Additive.
-- **`owedForRef`** (`payment.service.ts`) — a `PAYROLL` case returning
-  `amount + fee_paid_by_farm`, so the existing over-payment guard covers it.
-- **`markPaid`** — writes the two rows; needs `from_instrument_id`.
-- **Payout modal** — a second select, "Paid from", listing active instruments.
-  Six already exist.
-- **`system-design-arc.md` §4** is stale either way: it still says "a `Payment`
-  row pays it out, `ref_type` pointing back at the `PayrollRecord`", which is
-  wrong on both counts today.
+- **Migration** `20260929120000_payroll_ledger_bridge` — `ALTER TYPE ... ADD
+  VALUE 'PAYROLL'`, the `SALARY` category, and the cost-side backfill.
+- **`payment.validator.ts`** — the ref-type list splits in two. Reads accept
+  `PAYROLL`; `createPaymentSchema` does not, so a salary payment still cannot be
+  authored through `POST /payments`. That split *is* the original decision, now
+  enforced rather than achieved by the value's absence.
+- **`owedForRef`** — a `PAYROLL` case returning `amount + fee_paid_by_farm`, so
+  the over-payment guard and the outstanding/total-paid endpoints cover payouts.
+- **`markPaid`** — emits the two expenses and the payment, and validates that the
+  chosen instrument exists and is active.
+- **Payout modal** — the "Paid from" select; Confirm stays disabled without it.
 
 `markPaid` will write `tx.payment.create` directly rather than calling
 `PaymentService.create`, which opens a transaction of its own. The guard that
 call would add is redundant here — a payout can only be confirmed once, so it
 cannot be over-paid.
 
-## Decisions needed
+## Decisions taken
 
-**1. Where does the source instrument come from?** A required "Paid from" select
-on the modal is honest and it is information the farm has — but it is one more
-field every month. The alternative is one configured payroll wallet, defaulted
-and overridable. Recommend the select: with six instruments, which wallet paid
-wages is worth recording, and a default that is silently wrong corrupts a
-specific wallet's balance.
+**1. The source instrument is chosen, not defaulted.** `from_instrument_id` is
+required on `mark-paid` and the modal carries a "Paid from" select listing active
+farm instruments (`owner_type = ADMIN`, so customer and supplier wallets are not
+offered). A default that is silently wrong corrupts a specific wallet's balance
+with no way to tell afterwards.
 
-**2. What happens to the 8 existing payouts (৳98,070)?** Their `Expense` rows are
-reconstructable — `paid_at` and `amount` are both on the row. Their `Payment`
-rows are **not**: nobody recorded which wallet those transfers left, and inventing
-one would put ৳98,070 of outflow on a wallet that may never have sent it.
-Recommend backfilling expenses only, and correcting cash with one dated opening
-adjustment against whichever instrument actually paid — a number a human confirms,
-not one the migration guesses.
+**2. Cost-side backfill only.** The migration writes a `SALARY` expense for each
+of the 8 historical confirmed payouts, dated `paid_at`, attributed to
+`paid_by_id` where one exists and otherwise the oldest admin — the same fallback
+`getActorId` uses. Verified: expenses went from ৳5,050 to ৳103,120, exactly
+৳98,070 more.
 
-**3. Confirm `SHARED_PERIOD`**, accepting that batch P&L stays labour-free until
-bird-days allocation. The alternative is inventing a batch attribution for wages
-now, which is the thing §7 deliberately deferred.
+Their **cash rows are deliberately absent.** Nobody recorded which wallet those
+transfers left, and inventing one would put ৳98,070 of real outflow on a wallet
+that may never have sent it. `cash_position` is therefore still ৳98,070 optimistic
+for pre-bridge payouts, and closing that is a dated opening adjustment against the
+instrument a human confirms actually paid — outstanding, and the one remaining
+known inaccuracy in the cash book.
+
+**3. `SHARED_PERIOD` confirmed**, so batch P&L stays labour-free until bird-days
+allocation lands. The alternative was inventing a batch attribution for wages,
+which is the thing §7 deliberately deferred.
+
+## Still open
+
+- **The ৳98,070 cash adjustment** described under decision 2.
+- **`system-design-arc.md` §4** still says "a `Payment` row pays it out,
+  `ref_type` pointing back at the `PayrollRecord`" — wrong on both counts: the
+  payout pays it, and the cash row references the payout, not the record.
 
 ## Not in scope
 

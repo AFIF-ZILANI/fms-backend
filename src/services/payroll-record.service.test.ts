@@ -6,6 +6,7 @@ import { PayrollRecordService } from "./payroll-record.service";
 import { EmployeeService } from "./employee.service";
 
 let profileId: string;
+let instrumentId: string;
 const createdEmployeeIds: string[] = [];
 const recordIdsToClean: string[] = [];
 const createdProfileIds: string[] = [];
@@ -41,11 +42,25 @@ describe("PayrollRecordService", () => {
             },
         });
         profileId = giver.id;
+
+        const instrument = await prisma.paymentInstrument.create({
+            data: {
+                owner_type: "ADMIN",
+                owner_id: profileId,
+                type: "MFS",
+                label: "Test payroll wallet",
+                mfs_type: "BKASH",
+                mobile_no: `018${Date.now().toString().slice(-8)}`,
+            },
+        });
+        instrumentId = instrument.id;
     });
 
     afterAll(async () => {
         // Confirming a payout writes a transfer-fee expense against the actor,
         // so it has to go before the profile it points at.
+        await prisma.payment.deleteMany({ where: { from_instrument_id: instrumentId } });
+        await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: profileId } });
         // Payouts reference payroll records, so they go first.
         await prisma.payrollPayout.deleteMany({
@@ -200,6 +215,7 @@ describe("PayrollRecordService", () => {
         await PayrollPayoutService.markPaid(payout!.id, {
             transaction_ref: "BKA9Z1",
             paid_by_id: profileId,
+            from_instrument_id: instrumentId,
         });
 
         const slip = await PayrollRecordService.payslip(record.id);

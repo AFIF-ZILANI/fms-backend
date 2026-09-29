@@ -12,6 +12,7 @@ import type {
 
 /** Created on first use rather than seeded -- nothing else has to be set up
  *  before the first payroll can be paid. */
+const SALARY = "SALARY";
 const SALARY_TRANSFER_FEE = "SALARY_TRANSFER_FEE";
 
 const include = {
@@ -134,12 +135,41 @@ export const PayrollPayoutService = {
             throw AppError.badRequest("Payout is already confirmed");
         }
 
+        const instrument = await prisma.paymentInstrument.findUnique({
+            where: { id: data.from_instrument_id },
+        });
+        if (!instrument) throw AppError.notFound("PaymentInstrument");
+        if (!instrument.is_active) {
+            throw AppError.badRequest("That account is inactive -- pick the one the money left");
+        }
+
         const paid_at = data.paid_at ?? new Date();
 
         return prisma.$transaction(async (tx) => {
-            // The fee the farm absorbed is an operating cost, so it belongs in
-            // the P&L and not only on the payout. Written here rather than on
-            // create: an unpaid payout has cost nothing yet.
+            // Confirming a payout is the moment it becomes real money, so this is
+            // where it enters both books: the wage and the fee as cost, and one
+            // Payment for the cash that actually left the wallet. Neither is
+            // written on create -- an unpaid payout has cost nothing yet.
+            // docs/payroll-ledger-bridge.md
+            await tx.expenseCategoryLookup.upsert({
+                where: { code: SALARY },
+                update: {},
+                create: { code: SALARY, label: "Salary" },
+            });
+            await tx.expense.create({
+                data: {
+                    category: SALARY,
+                    // Farm-wide and recurring. Not DIRECT: a PayrollRecord has no
+                    // batch, and shed labour spans whatever batches are running,
+                    // so batch P&L leaves it unallocated until bird-days (v2).
+                    cost_type: "SHARED_PERIOD",
+                    amount: payout.amount,
+                    date: paid_at,
+                    recorded_by_id: data.paid_by_id,
+                    remarks: `Wage on payout ${payout.id}`,
+                },
+            });
+
             if (payout.fee_paid_by_farm.greaterThan(0)) {
                 await tx.expenseCategoryLookup.upsert({
                     where: { code: SALARY_TRANSFER_FEE },
@@ -149,7 +179,6 @@ export const PayrollPayoutService = {
                 await tx.expense.create({
                     data: {
                         category: SALARY_TRANSFER_FEE,
-                        // Farm-wide and recurring, traceable to no single batch.
                         cost_type: "SHARED_PERIOD",
                         amount: payout.fee_paid_by_farm,
                         date: paid_at,
@@ -158,6 +187,26 @@ export const PayrollPayoutService = {
                     },
                 });
             }
+
+            // One row, not one per expense: the cash left the wallet once, as the
+            // wage plus the fee, and it references the payout that moved it so an
+            // instrument statement lines up with the provider's own.
+            // Written directly rather than through PaymentService.create, which
+            // opens its own transaction -- and whose over-payment guard is moot
+            // here, since a payout can only be confirmed once.
+            await tx.payment.create({
+                data: {
+                    amount: payout.amount.plus(payout.fee_paid_by_farm),
+                    payment_date: paid_at,
+                    direction: "OUTGOING",
+                    ref_type: "PAYROLL",
+                    ref_id: payout.id,
+                    from_instrument_id: data.from_instrument_id,
+                    transaction_ref: data.transaction_ref,
+                    handled_by_id: data.paid_by_id,
+                    note: `Wage + transfer fee, ${payout.method} ${payout.account_number}`,
+                },
+            });
 
             return tx.payrollPayout.update({
                 where: { id },

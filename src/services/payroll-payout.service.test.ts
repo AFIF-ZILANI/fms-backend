@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EmployeePayoutAccountService } from "./employee-payout-account.service";
 import { PayrollPayoutService } from "./payroll-payout.service";
+import { PaymentInstrumentService } from "./payment-instrument.service";
 import {
     createPayrollPayoutSchema,
     markPaidSchema,
@@ -10,6 +11,7 @@ import {
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 let employeeId: string;
 let profileId: string;
+let instrumentId: string;
 // Stands in for the session actor the controller stamps on.
 let approverId: string;
 const recordIds: string[] = [];
@@ -53,9 +55,23 @@ describe("Payout APIs", () => {
             data: { name: "Payout Approver", mobile: mobile(), role: "ADMIN" },
         });
         approverId = approver.id;
+
+        const instrument = await prisma.paymentInstrument.create({
+            data: {
+                owner_type: "ADMIN",
+                owner_id: approverId,
+                type: "MFS",
+                label: "Test payroll wallet",
+                mfs_type: "BKASH",
+                mobile_no: mobile(),
+            },
+        });
+        instrumentId = instrument.id;
     });
 
     afterAll(async () => {
+        await prisma.payment.deleteMany({ where: { from_instrument_id: instrumentId } });
+        await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: approverId } });
         await prisma.payrollPayout.deleteMany({ where: { payroll_record_id: { in: recordIds } } });
         await prisma.payrollRecord.deleteMany({ where: { id: { in: recordIds } } });
@@ -125,6 +141,7 @@ describe("Payout APIs", () => {
         const paid = await PayrollPayoutService.markPaid(payout!.id, {
             transaction_ref: "BKA7X9QZ12",
             paid_by_id: approverId,
+            from_instrument_id: instrumentId,
         });
         expect(paid.status).toBe("CONFIRMED");
         expect(paid.paid_at).not.toBeNull();
@@ -197,23 +214,61 @@ describe("Payout APIs", () => {
         // The employee is still owed the whole contract figure -- the fee is on top.
         expect(payout!.amount.toNumber()).toBe(15000);
 
+        const before = await PaymentInstrumentService.getBalance(instrumentId);
         await PayrollPayoutService.markPaid(payout!.id, {
             transaction_ref: "BKA5F5F5",
             paid_by_id: approverId,
+            from_instrument_id: instrumentId,
         });
 
         const expenses = await prisma.expense.findMany({
-            where: { category: "SALARY_TRANSFER_FEE", remarks: { contains: payout!.id } },
+            where: { remarks: { contains: payout!.id } },
+            orderBy: { category: "asc" },
         });
-        expect(expenses).toHaveLength(1);
-        expect(expenses[0]!.amount.toNumber()).toBe(expected);
-        expect(expenses[0]!.cost_type).toBe("SHARED_PERIOD");
+        // Both books, off one confirm: the wage and the fee as cost...
+        expect(expenses.map((e) => [e.category, e.amount.toNumber()])).toEqual([
+            ["SALARY", 15000],
+            ["SALARY_TRANSFER_FEE", expected],
+        ]);
+        expect(expenses.every((e) => e.cost_type === "SHARED_PERIOD")).toBe(true);
+
+        // ...and one cash row for what actually left the wallet, wage + fee.
+        const payments = await prisma.payment.findMany({ where: { ref_id: payout!.id } });
+        expect(payments).toHaveLength(1);
+        expect(payments[0]!.ref_type).toBe("PAYROLL");
+        expect(payments[0]!.direction).toBe("OUTGOING");
+        expect(payments[0]!.amount.toNumber()).toBe(15000 + expected);
+        expect(payments[0]!.from_instrument_id).toBe(instrumentId);
+
+        // The wallet is poorer by exactly that, which is the hole this closed.
+        const after = await PaymentInstrumentService.getBalance(instrumentId);
+        expect(before.balance.minus(after.balance).toNumber()).toBe(15000 + expected);
+    });
+
+    test("a salary payment can't be authored through the generic Payment endpoint", async () => {
+        const { createPaymentSchema } = await import("@validators/payment.validator");
+        // PayrollPayout stays the only way to pay a wage -- it is the only one
+        // that can refuse to confirm without proof of transfer.
+        expect(
+            createPaymentSchema.safeParse({
+                amount: 15000,
+                payment_date: new Date(),
+                direction: "OUTGOING",
+                ref_type: "PAYROLL",
+                ref_id: crypto.randomUUID(),
+                from_instrument_id: crypto.randomUUID(),
+            }).success,
+        ).toBe(false);
     });
 
     test("a confirmed payout can't then be marked failed", async () => {
         const record = await newPayrollRecord(new Date(Date.UTC(2026, 4, 1)));
         const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
-        await PayrollPayoutService.markPaid(payout!.id, { transaction_ref: "BKA111", paid_by_id: approverId });
+        await PayrollPayoutService.markPaid(payout!.id, {
+            transaction_ref: "BKA111",
+            paid_by_id: approverId,
+            from_instrument_id: instrumentId,
+        });
 
         await expect(
             PayrollPayoutService.markFailed(payout!.id, { reason: "changed my mind" }),
