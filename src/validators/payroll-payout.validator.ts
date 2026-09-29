@@ -11,9 +11,8 @@ export const createPayrollPayoutSchema = z.object({
     method: method.optional(),
     account_number: z.string().optional(),
     amount: z.coerce.number().positive("Amount must be positive").optional(),
-    // What the farm absorbed of the MFS cash-out fee, so the payslip can show
-    // the employee receiving the full figure.
-    fee_paid_by_farm: z.coerce.number().nonnegative().optional(),
+    // fee_paid_by_farm is deliberately absent: it is derived from the
+    // destination and the amount (lib/payout-fees.ts), not quoted by the client.
 });
 
 /**
@@ -23,7 +22,6 @@ export const createPayrollPayoutSchema = z.object({
  */
 export const markPaidSchema = z.object({
     transaction_ref: z.string().min(1, "A transaction reference is required"),
-    paid_by_id: z.string().uuid().optional(),
     paid_at: z.coerce.date().optional(),
 });
 
@@ -37,6 +35,9 @@ export const listPayrollPayoutsQuerySchema = paginationQuerySchema.extend({
 });
 
 export type CreatePayrollPayoutInput = z.infer<typeof createPayrollPayoutSchema>;
-export type MarkPaidInput = z.infer<typeof markPaidSchema>;
+// paid_by_id is stamped by the controller from the session, never accepted from
+// the body -- same rule as verified_by_id on a payout account. It also lands on
+// the SALARY_TRANSFER_FEE expense as recorded_by_id.
+export type MarkPaidInput = z.infer<typeof markPaidSchema> & { paid_by_id: string };
 export type FailPayoutInput = z.infer<typeof failPayoutSchema>;
 export type ListPayrollPayoutsQuery = z.infer<typeof listPayrollPayoutsQuerySchema>;

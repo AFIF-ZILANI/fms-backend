@@ -5,6 +5,7 @@ import { paginationQuerySchema } from "@lib/pagination";
 // historical row: a salary paid in cash leaves no trace anyone can audit, so
 // wages go to a bank account or an MFS wallet and nowhere else.
 export const PAYOUT_METHODS = ["BANK", "BKASH", "NAGAD", "ROCKET"] as const;
+export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
 const method = z.enum(PAYOUT_METHODS);
 
 /** 9-digit BEFTN routing number. */

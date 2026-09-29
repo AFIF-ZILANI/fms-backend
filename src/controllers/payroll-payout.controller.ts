@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
+import { getActorId } from "@lib/current-actor";
 import { PayrollPayoutService } from "@services/payroll-payout.service";
 import type {
     CreatePayrollPayoutInput,
@@ -37,9 +38,20 @@ export const PayrollPayoutController = {
     async markPaid(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<MarkPaidInput>(c, "json");
-            const payout = await PayrollPayoutService.markPaid(c.req.param("id") ?? "", body);
+            const payout = await PayrollPayoutService.markPaid(c.req.param("id") ?? "", {
+                ...body,
+                paid_by_id: await getActorId(c),
+            });
             return sendSuccess(c, payout, "Payout confirmed");
         });
+    },
+
+    /** The published rates, so the app can show what a transfer will cost
+     *  before it is made. */
+    async feeRates(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(c, PayrollPayoutService.feeRates(), "Fee rates"),
+        );
     },
 
     async markFailed(c: Context) {

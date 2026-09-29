@@ -56,6 +56,7 @@ describe("Payout APIs", () => {
     });
 
     afterAll(async () => {
+        await prisma.expense.deleteMany({ where: { recorded_by_id: approverId } });
         await prisma.payrollPayout.deleteMany({ where: { payroll_record_id: { in: recordIds } } });
         await prisma.payrollRecord.deleteMany({ where: { id: { in: recordIds } } });
         await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: employeeId } });
@@ -123,6 +124,7 @@ describe("Payout APIs", () => {
 
         const paid = await PayrollPayoutService.markPaid(payout!.id, {
             transaction_ref: "BKA7X9QZ12",
+            paid_by_id: approverId,
         });
         expect(paid.status).toBe("CONFIRMED");
         expect(paid.paid_at).not.toBeNull();
@@ -184,10 +186,34 @@ describe("Payout APIs", () => {
         expect(parsed.success).toBe(true);
     });
 
+    test("the transfer fee is derived, snapshotted, and expensed on confirm", async () => {
+        const record = await newPayrollRecord(new Date(Date.UTC(2026, 5, 1)));
+        const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
+
+        // BKASH send-money is a flat charge, so it doesn't scale with the wage.
+        const { PAYOUT_FEES } = await import("@lib/payout-fees");
+        const expected = PAYOUT_FEES.BKASH.flat + (15000 * PAYOUT_FEES.BKASH.percent) / 100;
+        expect(payout!.fee_paid_by_farm.toNumber()).toBe(expected);
+        // The employee is still owed the whole contract figure -- the fee is on top.
+        expect(payout!.amount.toNumber()).toBe(15000);
+
+        await PayrollPayoutService.markPaid(payout!.id, {
+            transaction_ref: "BKA5F5F5",
+            paid_by_id: approverId,
+        });
+
+        const expenses = await prisma.expense.findMany({
+            where: { category: "SALARY_TRANSFER_FEE", remarks: { contains: payout!.id } },
+        });
+        expect(expenses).toHaveLength(1);
+        expect(expenses[0]!.amount.toNumber()).toBe(expected);
+        expect(expenses[0]!.cost_type).toBe("SHARED_PERIOD");
+    });
+
     test("a confirmed payout can't then be marked failed", async () => {
         const record = await newPayrollRecord(new Date(Date.UTC(2026, 4, 1)));
         const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
-        await PayrollPayoutService.markPaid(payout!.id, { transaction_ref: "BKA111" });
+        await PayrollPayoutService.markPaid(payout!.id, { transaction_ref: "BKA111", paid_by_id: approverId });
 
         await expect(
             PayrollPayoutService.markFailed(payout!.id, { reason: "changed my mind" }),
