@@ -258,7 +258,12 @@ export const EmployeeService = {
                         select: { reference_salary: true },
                     });
                     const beforeValue = before?.reference_salary?.toString() ?? null;
-                    const afterValue = String(employee.reference_salary);
+                    // A real null (clearing the override) has to stay JSON null in
+                    // the log, not the string "null" -- String(null) would collapse
+                    // "cleared" and "somehow literally the text null" into the same
+                    // value.
+                    const afterValue =
+                        employee.reference_salary === null ? null : String(employee.reference_salary);
                     if (beforeValue !== afterValue) {
                         await tx.auditLog.create({
                             data: {

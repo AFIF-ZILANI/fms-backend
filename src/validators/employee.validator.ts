@@ -58,11 +58,14 @@ const employeeFields = {
 
     // employment
     role: employeeRole,
-    // Optional: omit it and the employee is paid their role's standard. A value
-    // here is an override, and is audited as an exception.
-    reference_salary: z.coerce
-        .number()
-        .positive("Reference salary must be positive")
+    // Omit it and the employee is paid their role's standard; a number here is
+    // an override, audited as an exception. An explicit null clears an
+    // existing override back to the standard -- the only way back through
+    // that one-way door. z.null() has to come before z.coerce.number() in the
+    // union: coerce turns a bare null into 0, which .positive() would then
+    // (wrongly) reject as "not positive" instead of accepting it as a clear.
+    reference_salary: z
+        .union([z.null(), z.coerce.number().positive("Reference salary must be positive")])
         .optional(),
     joining_date: z.coerce.date().optional(),
     employment_status: employmentStatus.optional(),

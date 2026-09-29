@@ -1,6 +1,7 @@
 import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EmployeeService } from "./employee.service";
+import { PayrollRecordService } from "./payroll-record.service";
 import { AppError } from "@lib/app-error";
 import { createEmployeeSchema } from "@validators/employee.validator";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
@@ -193,6 +194,46 @@ describe("EmployeeService", () => {
             where: { table_name: "Employees", record_id: employee!.id },
         });
         expect(logs).toHaveLength(0);
+    });
+
+    test("clearing an override with an explicit null stores null and audits the clearing", async () => {
+        const employee = await EmployeeService.create(
+            hire({ name: "Cleared Worker", role: "WORKER", reference_salary: 12000 }),
+        );
+        track(employee!);
+
+        const cleared = await EmployeeService.update(employee!.id, { reference_salary: null });
+        expect(cleared!.reference_salary).toBeNull();
+
+        const logs = await prisma.auditLog.findMany({
+            where: { table_name: "Employees", record_id: employee!.id, action: "UPDATE" },
+        });
+        expect(logs).toHaveLength(1);
+        const before = logs[0]!.before_data as { reference_salary: string | null };
+        const after = logs[0]!.after_data as { reference_salary: string | null };
+        expect(Number(before.reference_salary)).toBe(12000);
+        // A real null, not the string "null" -- clearing must be distinguishable
+        // from any value that happens to stringify the same way.
+        expect(after.reference_salary).toBeNull();
+    });
+
+    test("after clearing an override, payroll pays the role's standard", async () => {
+        const role = await prisma.employeeRole.findUniqueOrThrow({ where: { code: "WORKER" } });
+        const employee = await EmployeeService.create(
+            hire({ name: "Reverted Worker", role: "WORKER", reference_salary: 12000 }),
+        );
+        track(employee!);
+
+        await EmployeeService.update(employee!.id, { reference_salary: null });
+
+        const month = new Date(Date.UTC(2031, 0, 1));
+        const record = await PayrollRecordService.generate({ employee_id: employee!.id, month });
+        expect(record.reference_salary.toNumber()).toBe(role.reference_salary.toNumber());
+    });
+
+    test("zero and a negative reference salary are still rejected", () => {
+        expect(createEmployeeSchema.safeParse(hire({ reference_salary: 0 })).success).toBe(false);
+        expect(createEmployeeSchema.safeParse(hire({ reference_salary: -1 })).success).toBe(false);
     });
 
     test("a role code with no row behind it is rejected", async () => {
