@@ -8,6 +8,18 @@ import type { CreateEmployeeInput } from "@validators/employee.validator";
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 const createdIds: string[] = [];
 const avatarIds: string[] = [];
+// Captured at creation. Resolving profiles *after* deleting their employees
+// matches nothing, which is how this suite leaked a profile per test for
+// however long it has been running.
+const profileIds: string[] = [];
+
+/** Remembers everything a test created so afterAll can unwind it in FK order. */
+function track(employee: { id: string; profile_id: string; profile: { avatar_id: string | null } }) {
+    createdIds.push(employee.id);
+    profileIds.push(employee.profile_id);
+    if (employee.profile.avatar_id) avatarIds.push(employee.profile.avatar_id);
+    return employee;
+}
 
 /** A complete hire payload -- every field docs/employee_hire.md marks Mandatory. */
 const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => ({
@@ -32,16 +44,37 @@ const hire = (over: Partial<CreateEmployeeInput> = {}): CreateEmployeeInput => (
 
 describe("EmployeeService", () => {
     afterAll(async () => {
-        await prisma.employees.deleteMany({ where: { id: { in: createdIds } } });
-        await prisma.profiles.deleteMany({
-            where: { employees: { id: { in: createdIds } } },
+        // Children first, or the employee delete trips a foreign key and the
+        // whole teardown aborts -- leaving rows behind in the dev database.
+        const records = await prisma.payrollRecord.findMany({
+            where: { employee_id: { in: createdIds } },
+            select: { id: true },
         });
+        await prisma.payrollPayout.deleteMany({
+            where: { payroll_record_id: { in: records.map((r) => r.id) } },
+        });
+        await prisma.payrollRecord.deleteMany({ where: { employee_id: { in: createdIds } } });
+        await prisma.performanceScoreEntry.deleteMany({
+            where: { employee_id: { in: createdIds } },
+        });
+        await prisma.employeePayoutAccount.deleteMany({
+            where: { employee_id: { in: createdIds } },
+        });
+        await prisma.alerts.deleteMany({
+            where: { related_id: { in: [...createdIds, ...records.map((r) => r.id)] } },
+        });
+        await prisma.employees.updateMany({
+            where: { reference_employee_id: { in: createdIds } },
+            data: { reference_employee_id: null },
+        });
+        await prisma.employees.deleteMany({ where: { id: { in: createdIds } } });
+        await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
         await prisma.avatars.deleteMany({ where: { id: { in: avatarIds } } });
     });
 
     test("create then getById round-trips", async () => {
         const employee = await EmployeeService.create(hire({ name: "Test Worker", role: "WORKER", reference_salary: 15000 }));
-        createdIds.push(employee!.id);
+        track(employee!);
 
         const found = await EmployeeService.getById(employee!.id);
         expect(found.profile.name).toBe("Test Worker");
@@ -55,7 +88,7 @@ describe("EmployeeService", () => {
     test("duplicate mobile throws a conflict", async () => {
         const sharedMobile = mobile();
         const first = await EmployeeService.create(hire({ name: "First", role: "WORKER", reference_salary: 10000, mobile: sharedMobile }));
-        createdIds.push(first!.id);
+        track(first!);
 
         await expect(
             EmployeeService.create(hire({ name: "Second", role: "WORKER", reference_salary: 10000, mobile: sharedMobile })),
@@ -70,7 +103,7 @@ describe("EmployeeService", () => {
 
     test("update with no fields throws bad-request", async () => {
         const employee = await EmployeeService.create(hire({ name: "Updatable", role: "INTERN", reference_salary: 5000 }));
-        createdIds.push(employee!.id);
+        track(employee!);
 
         await expect(EmployeeService.update(employee!.id, {})).rejects.toMatchObject({
             status: 400,
@@ -79,7 +112,7 @@ describe("EmployeeService", () => {
 
     test("update can promote role and change salary/rating", async () => {
         const employee = await EmployeeService.create(hire({ name: "Promotable", role: "WORKER", reference_salary: 12000 }));
-        createdIds.push(employee!.id);
+        track(employee!);
 
         const promoted = await EmployeeService.update(employee!.id, {
             role: "MANAGER",
@@ -95,7 +128,7 @@ describe("EmployeeService", () => {
 
     test("setActive(false) then setActive(true) round-trips is_active", async () => {
         const employee = await EmployeeService.create(hire({ name: "Togglable", role: "WORKER", reference_salary: 9000 }));
-        createdIds.push(employee!.id);
+        track(employee!);
 
         const deactivated = await EmployeeService.setActive(employee!.id, false);
         expect(deactivated.profile.is_active).toBe(false);
@@ -106,7 +139,7 @@ describe("EmployeeService", () => {
 
     test("listing filters by role", async () => {
         const employee = await EmployeeService.create(hire({ name: "FilterMe", role: "INTERN", reference_salary: 4000 }));
-        createdIds.push(employee!.id);
+        track(employee!);
 
         const { employees } = await EmployeeService.getAll({ page: 1, limit: 100, role: "INTERN" });
         expect(employees.some((e) => e.id === employee!.id)).toBe(true);
@@ -115,8 +148,7 @@ describe("EmployeeService", () => {
 
     test("create writes the photo as an Avatars row and links it to the profile", async () => {
         const employee = await EmployeeService.create(hire({ name: "Photographed" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         expect(employee!.profile.avatar_id).not.toBeNull();
         expect(employee!.profile.avatar?.public_id).toBe("employees/test");
@@ -124,8 +156,7 @@ describe("EmployeeService", () => {
 
     test("the hire profile round-trips", async () => {
         const employee = await EmployeeService.create(hire({ name: "Detailed" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         const found = await EmployeeService.getById(employee!.id);
         expect(found.marital_status).toBe("SINGLE");
@@ -144,14 +175,12 @@ describe("EmployeeService", () => {
 
     test("a reference can point at another employee", async () => {
         const referrer = await EmployeeService.create(hire({ name: "Referrer" }));
-        createdIds.push(referrer!.id);
-        if (referrer!.profile.avatar_id) avatarIds.push(referrer!.profile.avatar_id);
+        track(referrer!);
 
         const referred = await EmployeeService.create(
             hire({ name: "Referred", reference_employee_id: referrer!.id }),
         );
-        createdIds.push(referred!.id);
-        if (referred!.profile.avatar_id) avatarIds.push(referred!.profile.avatar_id);
+        track(referred!);
 
         expect(referred!.reference_employee?.profile.name).toBe("Referrer");
     });
@@ -179,8 +208,7 @@ describe("EmployeeService", () => {
 
     test("terminate ends the employment and deactivates the profile together", async () => {
         const employee = await EmployeeService.create(hire({ name: "Leaver" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         const terminated = await EmployeeService.terminate(employee!.id);
         expect(terminated.employment_status).toBe("TERMINATED");
@@ -189,8 +217,7 @@ describe("EmployeeService", () => {
 
     test("terminating twice is a bad request", async () => {
         const employee = await EmployeeService.create(hire({ name: "Left Already" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         await EmployeeService.terminate(employee!.id);
         await expect(EmployeeService.terminate(employee!.id)).rejects.toMatchObject({ status: 400 });
@@ -198,8 +225,7 @@ describe("EmployeeService", () => {
 
     test("reinstate brings them back as APPOINTED and active", async () => {
         const employee = await EmployeeService.create(hire({ name: "Rehired" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         await EmployeeService.terminate(employee!.id);
         const back = await EmployeeService.reinstate(employee!.id);
@@ -209,8 +235,7 @@ describe("EmployeeService", () => {
 
     test("reinstating someone who was never terminated is a bad request", async () => {
         const employee = await EmployeeService.create(hire({ name: "Still Here" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         await expect(EmployeeService.reinstate(employee!.id)).rejects.toMatchObject({ status: 400 });
     });
@@ -223,8 +248,7 @@ describe("EmployeeService", () => {
                 probation_end_date: new Date("2026-12-01"),
             }),
         );
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
         expect(employee!.probation_end_date).not.toBeNull();
 
         // The form doesn't send the date when the status isn't PROBATION, so an
@@ -243,8 +267,7 @@ describe("EmployeeService", () => {
                 probation_end_date: new Date("2026-12-01"),
             }),
         );
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         const terminated = await EmployeeService.terminate(employee!.id);
         expect(terminated.probation_end_date).toBeNull();
@@ -258,8 +281,7 @@ describe("EmployeeService", () => {
                 probation_end_date: new Date("2026-12-01"),
             }),
         );
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         const renamed = await EmployeeService.update(employee!.id, { name: "Renamed" });
         expect(renamed!.probation_end_date).not.toBeNull();
@@ -270,8 +292,7 @@ describe("EmployeeService", () => {
         const created: Array<{ id: string; profile: { mobile: string } }> = [];
         for (let i = 0; i < 3; i++) {
             const e = await EmployeeService.create(hire({ name: `${unique} Worker ${i}` }));
-            createdIds.push(e!.id);
-            if (e!.profile.avatar_id) avatarIds.push(e!.profile.avatar_id);
+            track(e!);
             created.push(e!);
         }
 
@@ -304,8 +325,7 @@ describe("EmployeeService", () => {
         const active = await EmployeeService.create(hire({ name: `${unique} Active` }));
         const inactive = await EmployeeService.create(hire({ name: `${unique} Gone` }));
         for (const e of [active, inactive]) {
-            createdIds.push(e!.id);
-            if (e!.profile.avatar_id) avatarIds.push(e!.profile.avatar_id);
+            track(e!);
         }
         await EmployeeService.setActive(inactive!.id, false);
 
@@ -321,8 +341,7 @@ describe("EmployeeService", () => {
 
     test("the stage moves appointed -> probation -> confirmed", async () => {
         const employee = await EmployeeService.create(hire({ name: "Progressing" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
         expect(employee!.employment_status).toBe("APPOINTED");
 
         const onProbation = await EmployeeService.update(employee!.id, {
@@ -342,8 +361,7 @@ describe("EmployeeService", () => {
 
     test("the stage can't be edited around terminate and reinstate", async () => {
         const employee = await EmployeeService.create(hire({ name: "Edge Case" }));
-        createdIds.push(employee!.id);
-        if (employee!.profile.avatar_id) avatarIds.push(employee!.profile.avatar_id);
+        track(employee!);
 
         // Ending employment has to go through terminate, which also deactivates.
         await expect(
@@ -358,5 +376,67 @@ describe("EmployeeService", () => {
 
         const back = await EmployeeService.reinstate(employee!.id);
         expect(back.profile.is_active).toBe(true);
+    });
+
+    test("kpis project the wage bill using the same formula payroll will", async () => {
+        const employee = await EmployeeService.create(
+            hire({ name: "KPI Subject", reference_salary: 15000 }),
+        );
+        track(employee!);
+
+        const before = await EmployeeService.kpis();
+
+        // +3 this month lifts this employee's projection by 3% of R = 450.
+        await prisma.performanceScoreEntry.create({
+            data: {
+                employee_id: employee!.id,
+                given_by_id: employee!.profile_id, // any profile; not a create() call
+                criterion: "ATTENDANCE_PERFECT",
+                points: 3,
+                reason: "kpi test",
+                incident_date: new Date(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+
+        const after = await EmployeeService.kpis();
+        expect(after.wage_bill_projected - before.wage_bill_projected).toBe(450);
+    });
+
+    test("kpis count who can't be paid and who has a negative month", async () => {
+        const employee = await EmployeeService.create(hire({ name: "KPI Risk" }));
+        track(employee!);
+
+        const before = await EmployeeService.kpis();
+        // No payout account was created for them, so they're unpayable.
+        expect(before.no_payout_account).toBeGreaterThan(0);
+
+        await prisma.performanceScoreEntry.create({
+            data: {
+                employee_id: employee!.id,
+                given_by_id: employee!.profile_id,
+                criterion: "UNEXCUSED_ABSENCE",
+                points: -2,
+                reason: "kpi test",
+                incident_date: new Date(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+
+        const after = await EmployeeService.kpis();
+        expect(after.negative_performers).toBe(before.negative_performers + 1);
+    });
+
+    test("a terminated employee drops out of the KPIs entirely", async () => {
+        const employee = await EmployeeService.create(hire({ name: "KPI Leaver" }));
+        track(employee!);
+
+        const before = await EmployeeService.kpis();
+        await EmployeeService.terminate(employee!.id);
+        const after = await EmployeeService.kpis();
+
+        expect(after.active_employees).toBe(before.active_employees - 1);
+        // Their wage is no longer part of what the farm expects to pay.
+        expect(after.wage_bill_projected).toBeLessThan(before.wage_bill_projected);
     });
 });

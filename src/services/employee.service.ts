@@ -3,7 +3,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
-import { fixedWageFor } from "@lib/payroll-math";
+import { computePay, fixedWageFor } from "@lib/payroll-math";
 import type {
     CreateEmployeeInput,
     UpdateEmployeeInput,
@@ -64,6 +64,97 @@ export const EmployeeService = {
             prisma.employees.count({ where }),
         ]);
         return { employees, meta: buildMeta(total, query) };
+    },
+
+    /**
+     * The figures the roster page opens with. Computed here rather than reduced
+     * client-side: several of them (live birds, payout status, per-employee
+     * month-to-date points) can't be derived from one page of employees, and
+     * doing it in the browser would silently be wrong the moment the roster
+     * outgrows a single page.
+     */
+    async kpis() {
+        const now = new Date();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+        const probationHorizon = new Date(now.getTime() + 7 * 86_400_000);
+
+        const [employees, mtdPoints, records, birds, overdue_tasks] = await Promise.all([
+            prisma.employees.findMany({
+                where: { profile: { is_active: true } },
+                select: {
+                    id: true,
+                    reference_salary: true,
+                    employment_status: true,
+                    probation_end_date: true,
+                    payoutAccounts: { where: { active_to: null }, select: { id: true } },
+                },
+            }),
+            // One grouped query, not one per employee.
+            prisma.performanceScoreEntry.groupBy({
+                by: ["employee_id"],
+                where: { status: "ACTIVE", incident_date: { gte: monthStart } },
+                _sum: { points: true },
+            }),
+            prisma.payrollRecord.findMany({
+                select: { employee_id: true, month: true, total_pay: true, payout: true },
+            }),
+            prisma.batchHouseBalance.aggregate({ _sum: { quantity: true } }),
+            prisma.employeeTaskAssignment.count({
+                where: { status: "PENDING", due_at: { lt: now } },
+            }),
+        ]);
+
+        const pointsByEmployee = new Map(
+            mtdPoints.map((row) => [row.employee_id, row._sum.points ?? 0]),
+        );
+
+        let wage_bill_projected = 0;
+        let negative_performers = 0;
+        let no_payout_account = 0;
+        let probation_due = 0;
+
+        for (const e of employees) {
+            const score = pointsByEmployee.get(e.id) ?? 0;
+            // The projection uses the same formula payroll will, so the figure on
+            // the dashboard is the one that will actually be paid.
+            wage_bill_projected += computePay(e.reference_salary, score).total_pay.toNumber();
+            if (score < 0) negative_performers += 1;
+            if (e.payoutAccounts.length === 0) no_payout_account += 1;
+            if (
+                e.employment_status === "PROBATION" &&
+                e.probation_end_date &&
+                e.probation_end_date <= probationHorizon
+            ) {
+                probation_due += 1;
+            }
+        }
+
+        const unpaid = records.filter((r) => r.payout?.status !== "CONFIRMED");
+        const lastMonthRecords = records.filter((r) => r.month.getTime() === lastMonth.getTime());
+        const lastMonthWages = lastMonthRecords.reduce((sum, r) => sum + r.total_pay.toNumber(), 0);
+        const liveBirds = birds._sum.quantity ?? 0;
+
+        return {
+            active_employees: employees.length,
+            wage_bill_projected,
+            unpaid_wages: unpaid.reduce((sum, r) => sum + r.total_pay.toNumber(), 0),
+            unpaid_runs: unpaid.length,
+            // Last month's wages over today's flock: a tracking ratio, not costing.
+            // Properly this would be bird-days across the month.
+            labour_cost_per_bird: liveBirds > 0 ? lastMonthWages / liveBirds : null,
+            last_month_wages: lastMonthWages,
+            live_birds: liveBirds,
+            payroll_missing: employees.filter(
+                (e) => !lastMonthRecords.some((r) => r.employee_id === e.id),
+            ).length,
+            no_payout_account,
+            probation_due,
+            negative_performers,
+            overdue_tasks,
+            // Wages are due by the 7th working day; past that, unpaid is overdue.
+            payout_overdue: now.getUTCDate() > 7 && unpaid.length > 0,
+        };
     },
 
     async getById(id: string) {
