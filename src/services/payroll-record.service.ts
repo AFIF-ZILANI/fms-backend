@@ -1,6 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
-import { computePay } from "@lib/payroll-math";
+import { computePay, referenceSalaryFor } from "@lib/payroll-math";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     GeneratePayrollInput,
@@ -89,7 +89,10 @@ export const PayrollRecordService = {
      * VOIDED and DISPUTED entries are excluded: a disputed entry isn't settled,
      * and paying on it would have to be unwound. */
     async generate(data: GeneratePayrollInput) {
-        const employee = await prisma.employees.findUnique({ where: { id: data.employee_id } });
+        const employee = await prisma.employees.findUnique({
+            where: { id: data.employee_id },
+            include: { roleRef: true },
+        });
         if (!employee) throw AppError.notFound("Employee");
 
         const monthStart = new Date(
@@ -133,8 +136,10 @@ export const PayrollRecordService = {
             },
         });
         const score_sum = entries.reduce((sum, e) => sum + e.points, 0);
+        // The role's standard unless this employee carries an override.
+        const reference_salary = referenceSalaryFor(employee);
         const { adjustment_percent, fixed_wage, allowance, total_pay } = computePay(
-            employee.reference_salary,
+            reference_salary,
             score_sum,
         );
 
@@ -142,7 +147,7 @@ export const PayrollRecordService = {
             data: {
                 employee_id: data.employee_id,
                 month: monthStart,
-                reference_salary: employee.reference_salary,
+                reference_salary,
                 fixed_wage,
                 score_sum,
                 adjustment_percent,

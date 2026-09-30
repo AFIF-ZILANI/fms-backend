@@ -164,7 +164,7 @@ describe("AlertService", () => {
         });
         createdProfileIds.push(profile.id);
         const employee = await prisma.employees.create({
-            data: { profile_id: profile.id, role: "WORKER", reference_salary: 10000, fixed_wage: 9000 },
+            data: { profile_id: profile.id, role: "WORKER", reference_salary: 10000 },
         });
         createdEmployeeIds.push(employee.id);
         const giver = await prisma.profiles.create({
@@ -200,13 +200,17 @@ describe("AlertService", () => {
         });
 
         await AlertService.runScan();
-        const { alerts } = await AlertService.getAll({
-            page: 1,
-            limit: 50,
-            type: "EMPLOYEE",
-            status: "ACTIVE",
+        // Queried directly rather than via AlertService.getAll: the dev database
+        // can hold far more than one page of stale ACTIVE EMPLOYEE alerts, and this
+        // assertion must hold regardless of how many alerts already exist.
+        const match = await prisma.alerts.findFirst({
+            where: {
+                related_id: employee.id,
+                type: "EMPLOYEE",
+                status: "ACTIVE",
+                level: "WARNING",
+            },
         });
-        const match = alerts.find((a) => a.related_id === employee.id && a.level === "WARNING");
         expect(match).toBeDefined();
         createdAlertIds.push(match!.id);
     });
@@ -224,7 +228,7 @@ describe("AlertService", () => {
             data: {
                 profile_id: profile.id,
                 role: "WORKER",
-                reference_salary: 10000, fixed_wage: 9000,
+                reference_salary: 10000,
                 employment_status: "PROBATION",
                 // Yesterday -- past due, so this escalates to WARNING.
                 probation_end_date: new Date(Date.now() - 86_400_000),
@@ -260,7 +264,7 @@ describe("AlertService", () => {
             data: {
                 profile_id: profile.id,
                 role: "WORKER",
-                reference_salary: 10000, fixed_wage: 9000,
+                reference_salary: 10000,
                 employment_status: "PROBATION",
                 probation_end_date: new Date(Date.now() + 60 * 86_400_000),
             },

@@ -1,5 +1,8 @@
 import { describe, test, expect } from "bun:test";
-import { computePay, fixedWageFor } from "./payroll-math";
+import { computePay, fixedWageFor, referenceSalaryFor } from "./payroll-math";
+import { Prisma } from "../../prisma/generated/prisma/client";
+
+const D = (n: number) => new Prisma.Decimal(n);
 
 // The worked-examples table in docs/employee-payroll-design.md, R = 15,000.
 describe("computePay", () => {
@@ -48,5 +51,43 @@ describe("computePay", () => {
         expect(fixedWageFor(15000).toNumber()).toBe(13500);
         expect(fixedWageFor(5000).toNumber()).toBe(4500);
         expect(fixedWageFor(12345).toNumber()).toBe(11111); // 11110.5 rounds up
+    });
+});
+
+describe("referenceSalaryFor", () => {
+    test("an employee's own salary wins over the role standard", () => {
+        const r = referenceSalaryFor({
+            reference_salary: D(12000),
+            roleRef: { reference_salary: D(15000) },
+        });
+        expect(r.toNumber()).toBe(12000);
+    });
+
+    test("no override falls back to the role standard", () => {
+        const r = referenceSalaryFor({
+            reference_salary: null,
+            roleRef: { reference_salary: D(15000) },
+        });
+        expect(r.toNumber()).toBe(15000);
+    });
+
+    test("a zero override is honoured, not treated as absent", () => {
+        // ?? not ||, so an unpaid intern on 0 does not silently inherit 15,000.
+        const r = referenceSalaryFor({
+            reference_salary: D(0),
+            roleRef: { reference_salary: D(15000) },
+        });
+        expect(r.toNumber()).toBe(0);
+    });
+
+    test("the resolved figure drives computePay exactly as a raw salary did", () => {
+        const resolved = referenceSalaryFor({
+            reference_salary: null,
+            roleRef: { reference_salary: D(15000) },
+        });
+        const pay = computePay(resolved, 0);
+        expect(pay.fixed_wage.toNumber()).toBe(13500);
+        expect(pay.allowance.toNumber()).toBe(1500);
+        expect(pay.total_pay.toNumber()).toBe(15000);
     });
 });

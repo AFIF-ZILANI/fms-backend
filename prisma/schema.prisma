@@ -24,12 +24,6 @@ enum UserRole {
   DOCTOR
 }
 
-enum EmployeeRoleNames {
-  MANAGER
-  WORKER
-  INTERN
-}
-
 enum MaritalStatus {
   SINGLE
   MARRIED
@@ -370,6 +364,33 @@ model ExpenseCategoryLookup {
   expenses Expense[]
 }
 
+/// Farm employee roles and the standard salary each one carries. A table rather
+/// than an enum so the owner can add, rename and re-price roles in Settings
+/// without a migration. The salary here is the standard for the role;
+/// Employees.reference_salary overrides it per person.
+model EmployeeRole {
+  id    String @id @default(uuid())
+  /// Derived from the label once at create and never regenerated on rename --
+  /// Employees.role routes on it, so a rename must not break the reference.
+  code  String @unique
+  label String
+  /// R for anyone in this role who carries no override. Required: a role with no
+  /// standard salary cannot be hired into, and making it optional would add an
+  /// impossible-to-reach failure path to every payroll run.
+  ///
+  /// ponytail: one current figure, not an effective-dated history. Back-dating
+  /// payroll for an override-less employee after a change would use today's rate;
+  /// PayrollRecord snapshots everything once generated, so only ungenerated past
+  /// months are exposed. If that bites, this becomes EmployeeRoleSalary with
+  /// active_from/active_to, exactly like EmployeePayoutAccount.
+  reference_salary Decimal  @db.Decimal(10, 2)
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  employees Employees[]
+}
+
 model SupplierSupplyCategory {
   id         String   @id @default(uuid())
   code       String   @unique
@@ -485,13 +506,11 @@ model Employees {
   id           String            @id @default(uuid())
   profile_id   String            @unique
   profile      Profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade)
-  role         EmployeeRoleNames
-  // Performance pay is an allowance on top of a guaranteed wage, never a deduction
-  // from one -- see docs/employee-payroll-design.md. fixed_wage is stored rather
-  // than derived from reference_salary: it is the figure written into a signed
-  // appointment letter, and must survive any later change to the 0.9 ratio.
-  reference_salary Decimal         @db.Decimal(10, 2) // R -- normal-month total pay
-  fixed_wage       Decimal         @db.Decimal(10, 2) // 0.9 × R, guaranteed monthly
+  role     String
+  roleRef  EmployeeRole @relation(fields: [role], references: [code], onUpdate: Cascade)
+  /// An exception to the role's standard salary. Null means "use the role's" --
+  /// resolved by referenceSalaryFor() in lib/payroll-math.ts, never read raw.
+  reference_salary Decimal? @db.Decimal(10, 2)
   joining_date DateTime          @default(now())
   rating       Float?            @default(0)
 

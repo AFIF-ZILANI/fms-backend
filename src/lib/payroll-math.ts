@@ -38,3 +38,19 @@ export function computePay(referenceSalary: Prisma.Decimal | number | string, sc
         total_pay: fixed_wage.plus(allowance),
     };
 }
+
+/**
+ * R for one employee: their own salary if they carry one, otherwise their role's
+ * standard. Null is the only "absent" -- `??` rather than `||`, so an override of
+ * 0 stays 0 instead of silently inheriting the role's figure.
+ *
+ * No failure mode: Employees.role is a required FK and EmployeeRole.reference_salary
+ * is NOT NULL, so the fallback always exists. If that column is ever made
+ * nullable, this has to start throwing.
+ */
+export function referenceSalaryFor(employee: {
+    reference_salary: Prisma.Decimal | null;
+    roleRef: { reference_salary: Prisma.Decimal };
+}): Prisma.Decimal {
+    return employee.reference_salary ?? employee.roleRef.reference_salary;
+}

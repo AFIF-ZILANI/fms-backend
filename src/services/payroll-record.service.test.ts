@@ -25,7 +25,6 @@ async function newEmployee(salary: number) {
             profile_id: profile.id,
             role: "WORKER",
             reference_salary: salary,
-            fixed_wage: Math.round(salary * 0.9),
         },
     });
     createdEmployeeIds.push(employee.id);
@@ -299,5 +298,37 @@ describe("PayrollRecordService", () => {
             recordIdsToClean.push(record.id);
             expect(record.total_pay.toNumber()).toBe(15000);
         }
+    });
+
+    test("an override is what gets paid; the role standard is ignored", async () => {
+        const employee = await newEmployee(12000); // override, role standard is 15,000
+        const month = new Date("2027-01-15T00:00:00Z");
+        const record = await PayrollRecordService.generate({
+            employee_id: employee.id,
+            month,
+        });
+        recordIdsToClean.push(record.id);
+        expect(record.reference_salary.toNumber()).toBe(12000);
+        expect(record.fixed_wage.toNumber()).toBe(10800); // 0.9 x 12,000
+        expect(record.total_pay.toNumber()).toBe(12000);
+    });
+
+    test("an employee with no override is paid their role's standard", async () => {
+        const employee = await newEmployee(12000);
+        // Drop the override so the role's figure has to be the one used.
+        await prisma.employees.update({
+            where: { id: employee.id },
+            data: { reference_salary: null },
+        });
+        const role = await prisma.employeeRole.findUniqueOrThrow({
+            where: { code: "WORKER" },
+        });
+        const month = new Date("2027-02-15T00:00:00Z");
+        const record = await PayrollRecordService.generate({
+            employee_id: employee.id,
+            month,
+        });
+        recordIdsToClean.push(record.id);
+        expect(record.reference_salary.toNumber()).toBe(role.reference_salary.toNumber());
     });
 });

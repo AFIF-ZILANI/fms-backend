@@ -46,7 +46,6 @@ describe("Payout APIs", () => {
                 profile_id: profile.id,
                 role: "WORKER",
                 reference_salary: 15000,
-                fixed_wage: 13500,
             },
         });
         employeeId = employee.id;
@@ -166,7 +165,6 @@ describe("Payout APIs", () => {
                 profile_id: bareProfile.id,
                 role: "WORKER",
                 reference_salary: 9000,
-                fixed_wage: 8100,
             },
         });
         bareEmployeeIds.push(bare.id);

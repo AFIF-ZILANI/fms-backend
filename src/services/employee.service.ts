@@ -1,9 +1,10 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
+import { getDefaultActorId } from "@lib/current-actor";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
-import { computePay, fixedWageFor } from "@lib/payroll-math";
+import { computePay, referenceSalaryFor } from "@lib/payroll-math";
 import type {
     CreateEmployeeInput,
     UpdateEmployeeInput,
@@ -85,6 +86,7 @@ export const EmployeeService = {
                 select: {
                     id: true,
                     reference_salary: true,
+                    roleRef: { select: { reference_salary: true } },
                     employment_status: true,
                     probation_end_date: true,
                     payoutAccounts: { where: { active_to: null }, select: { id: true } },
@@ -118,7 +120,7 @@ export const EmployeeService = {
             const score = pointsByEmployee.get(e.id) ?? 0;
             // The projection uses the same formula payroll will, so the figure on
             // the dashboard is the one that will actually be paid.
-            wage_bill_projected += computePay(e.reference_salary, score).total_pay.toNumber();
+            wage_bill_projected += computePay(referenceSalaryFor(e), score).total_pay.toNumber();
             if (score < 0) negative_performers += 1;
             if (e.payoutAccounts.length === 0) no_payout_account += 1;
             if (
@@ -186,8 +188,8 @@ export const EmployeeService = {
                         ...(leavingProbation(employee.employment_status) && {
                             probation_end_date: null,
                         }),
-                        reference_salary: employee.reference_salary,
-                        fixed_wage: fixedWageFor(employee.reference_salary),
+                        // Null when omitted: pay them the role's standard.
+                        reference_salary: employee.reference_salary ?? null,
                         profile_id: profileRow.id,
                     },
                     include,
@@ -221,7 +223,17 @@ export const EmployeeService = {
             }
         }
 
-        const { name, mobile, email, address, avatar, reference_employee_id, ...employee } = data;
+        const {
+            name,
+            mobile,
+            email,
+            address,
+            avatar,
+            reference_employee_id,
+            actor_id,
+            role,
+            ...employee
+        } = data;
         try {
             return await prisma.$transaction(async (tx) => {
                 // A replaced photo writes a new Avatars row rather than mutating the
@@ -232,17 +244,47 @@ export const EmployeeService = {
                     ...defined({ name, mobile, email, address }),
                     ...(avatarRow && { avatar_id: avatarRow.id }),
                 };
+
+                // AuditLog's first writer. Redirecting someone's pay is the one
+                // employee edit worth a permanent record, and an override is
+                // meant to be visible as an exception rather than a silent edit.
+                // Read fresh inside the transaction, not the `existing` fetched
+                // before it opened -- a concurrent write landing in between would
+                // otherwise compare against a stale figure and silently skip a
+                // genuine change.
+                if (employee.reference_salary !== undefined) {
+                    const before = await tx.employees.findUnique({
+                        where: { id },
+                        select: { reference_salary: true },
+                    });
+                    const beforeValue = before?.reference_salary?.toString() ?? null;
+                    // A real null (clearing the override) has to stay JSON null in
+                    // the log, not the string "null" -- String(null) would collapse
+                    // "cleared" and "somehow literally the text null" into the same
+                    // value.
+                    const afterValue =
+                        employee.reference_salary === null ? null : String(employee.reference_salary);
+                    if (beforeValue !== afterValue) {
+                        await tx.auditLog.create({
+                            data: {
+                                table_name: "Employees",
+                                record_id: id,
+                                action: "UPDATE",
+                                changed_by_id: actor_id ?? (await getDefaultActorId()),
+                                before_data: { reference_salary: beforeValue },
+                                after_data: { reference_salary: afterValue },
+                                note: "Salary override changed",
+                            },
+                        });
+                    }
+                }
+
                 return tx.employees.update({
                     where: { id },
                     data: {
                         ...defined(employee),
                         ...(leavingProbation(employee.employment_status) && {
                             probation_end_date: null,
-                        }),
-                        // Keep the guaranteed wage in step with a changed reference
-                        // salary -- they are one decision, not two fields to remember.
-                        ...(employee.reference_salary !== undefined && {
-                            fixed_wage: fixedWageFor(employee.reference_salary),
                         }),
                         // Nested writes put this update on Prisma's relation-shaped
                         // input, where the reference is connected rather than set as
@@ -253,6 +295,11 @@ export const EmployeeService = {
                                 ? { connect: { id: reference_employee_id } }
                                 : { disconnect: true },
                         }),
+                        // Same reason role can't be a plain scalar here: profile's
+                        // nested update above already puts this write on the
+                        // relation-shaped (checked) input, where role only exists
+                        // via roleRef.
+                        ...(role !== undefined && { roleRef: { connect: { code: role } } }),
                         ...(Object.keys(profileUpdate).length > 0 && {
                             profile: { update: profileUpdate },
                         }),
