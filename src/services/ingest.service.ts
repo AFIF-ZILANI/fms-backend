@@ -20,7 +20,7 @@ export const IngestService = {
             throw AppError.badRequest("sale_date is too far in the future");
         }
 
-        const portions: string[] = ["main"];
+        const portions: ("main" | "cull")[] = ["main"];
         if (input.has_cull && input.cull?.is_sold) portions.push("cull");
 
         try {
@@ -52,7 +52,7 @@ export const IngestService = {
         }
     },
 
-    async list(status?: string) {
+    async list(status?: "PENDING" | "CONFIRMED" | "DISMISSED") {
         return prisma.ingestedSale.findMany({
             where: { ...(status !== undefined && { status }) },
             orderBy: { received_at: "desc" },

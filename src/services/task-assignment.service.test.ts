@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { TaskAssignmentService } from "./task-assignment.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdAssignmentIds: string[] = [];
 let employeeId: string;
@@ -42,7 +43,7 @@ describe("TaskAssignmentService", () => {
                     role: "EMPLOYEE",
                 },
             }),
-            prisma.houses.create({ data: { name: "Task House", type: "BROODER", number: 901 } }),
+            prisma.houses.create({ data: { name: "Task House", type: "BROODER", number: houseNumber() } }),
             prisma.taskType.create({
                 data: { code: `ENVIRONMENT_${suffix}`, label: "Environment" },
             }),

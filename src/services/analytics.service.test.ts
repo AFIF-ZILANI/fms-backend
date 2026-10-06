@@ -5,6 +5,7 @@ import { BirdSaleService } from "./bird-sale.service";
 import { ConsumptionService } from "./consumption.service";
 import { AnalyticsService } from "./analytics.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -15,7 +16,7 @@ let saleId: string;
 describe("AnalyticsService", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "Analytics House", type: "BROODER", number: 9101 },
+            data: { name: "Analytics House", type: "BROODER", number: houseNumber() },
         });
         houseId = house.id;
         const profile = await prisma.profiles.create({
@@ -253,6 +254,7 @@ describe("AnalyticsService", () => {
         });
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 1000,
                 paid_amount: 0,
@@ -425,6 +427,7 @@ describe("AnalyticsService", () => {
         });
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 supplier_id: supplier.id,
                 purchase_date: new Date(),
                 total_amount: 500,
@@ -472,6 +475,7 @@ describe("AnalyticsService", () => {
         });
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 supplier_id: supplier.id,
                 purchase_date: new Date(),
                 total_amount: 750,

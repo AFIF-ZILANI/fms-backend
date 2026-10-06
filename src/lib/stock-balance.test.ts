@@ -1,6 +1,7 @@
 import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { getItemBalances, getLocationStock, getItemLocationBalance, getStockByLocation } from "./stock-balance";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdItemIds: string[] = [];
 
@@ -187,7 +188,7 @@ describe("getStockByLocation", () => {
         createdItemIds.push(item.id);
         const warehouse = await prisma.warehouses.create({ data: { name: `WH ${crypto.randomUUID()}` } });
         createdWarehouseIds.push(warehouse.id);
-        const house = await prisma.houses.create({ data: { name: `H ${crypto.randomUUID()}`, type: "GROWER", number: 99 } });
+        const house = await prisma.houses.create({ data: { name: `H ${crypto.randomUUID()}`, type: "GROWER", number: houseNumber() } });
         createdHouseIds.push(house.id);
 
         await prisma.stockLedger.createMany({

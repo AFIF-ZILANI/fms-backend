@@ -440,6 +440,8 @@ on create.
 | GET | `/api/houses` | 200 | query: `type?`, `is_active?`, `is_available?`, `phase?`; each row carries `occupants[] { batch_id, batch_code, batch_status, alive, placed, since, expected_selling_date }` and `last_vacated_at` |
 | GET | `/api/houses/:id` | 200 | — |
 | POST | `/api/houses` | 201 | `{ name, type, number, capacity? }` |
+
+A house `number` is unique **within a `type`** (Brooder 1 and Grower 1 can coexist); a clash is a **409**.
 | PATCH | `/api/houses/:id` | 200 | any subset of create fields, plus `phase` (`READY`/`CLEANING`/`DISINFECTING`/`RESTING`/`MAINTENANCE`). A house whose last bird leaves by sale, transfer or batch close flips `READY` → `CLEANING` on its own; any other phase is left alone |
 | POST | `/api/houses/:id/deactivate` | 200 | — |
 | POST | `/api/houses/:id/reactivate` | 200 | — |
@@ -984,6 +986,8 @@ Append-only (§1.10).
 | GET | `/api/expenses` | 200 | query: `batch_id?`, `category?`, `cost_type?`, `date_from?`, `date_to?` |
 | GET | `/api/expenses/:id` | 200 | — |
 | POST | `/api/expenses` | 201 | `{ batch_id?, category: string (a code matching an active ExpenseCategoryLookup.code, §6.8), cost_type: CostType, amount, date, remarks?, recorded_by_id }` |
+
+A `DIRECT` cost must carry a `batch_id` (**400** otherwise); costs that belong to no batch are `SHARED_PERIOD` or `SHARED_CAPITAL`.
 
 `cost_type = SHARED_PERIOD` expenses currently show as **unallocated** in
 batch P&L (§14.3) — the bird-days formula that would distribute them across

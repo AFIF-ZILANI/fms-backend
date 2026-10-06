@@ -3,9 +3,9 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 
 /**
  * Weighted-average cost per base unit, derived from purchase history --
- * StockLedger.unit_cost is never populated by any write path (see
- * consumption.service.ts / inventory-adjustment.service.ts), so PurchaseItem
- * is the only real cost basis in this system. sum(total_price)/sum(base_quantity)
+ * StockLedger.unit_cost is written only on a purchase's own IN rows (purchase.service.ts), not on
+ * consumption, transfer or adjustment rows, so it can't be averaged across the ledger; PurchaseItem
+ * is the cost basis. sum(total_price)/sum(base_quantity)
  * across every purchase line for that item -- base_quantity (not the raw
  * entered quantity) so a mix of units across purchases (e.g. one line in BAG,
  * another in KG) still averages correctly. Items never purchased are absent

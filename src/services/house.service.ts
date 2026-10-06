@@ -1,5 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { getLocationStock } from "@lib/stock-balance";
 import type {
@@ -134,17 +135,21 @@ export const HouseService = {
         }));
     },
 
-    // No uniqueness constraint on Houses (no @@unique in schema) -- create
-    // can't collide, so no error mapping needed here.
+    // (type, number) is unique: Brooder 1 and Grower 1 are different sheds, two Brooder 1s are not.
+    // A clash is a 409 from the database's own unique, not a pre-check that two requests could race.
     async create(data: CreateHouseInput) {
-        return prisma.houses.create({
-            data: {
-                name: data.name,
-                type: data.type,
-                number: data.number,
-                ...(data.capacity !== undefined && { capacity: data.capacity }),
-            },
-        });
+        try {
+            return await prisma.houses.create({
+                data: {
+                    name: data.name,
+                    type: data.type,
+                    number: data.number,
+                    ...(data.capacity !== undefined && { capacity: data.capacity }),
+                },
+            });
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
     },
 
     async update(id: string, data: UpdateHouseInput) {
@@ -156,16 +161,20 @@ export const HouseService = {
             throw AppError.badRequest("No update fields provided");
         }
 
-        return prisma.houses.update({
-            where: { id },
-            data: {
-                ...(name && { name }),
-                ...(type && { type }),
-                ...(number !== undefined && { number }),
-                ...(capacity !== undefined && { capacity }),
-                ...(phase && { phase }),
-            },
-        });
+        try {
+            return await prisma.houses.update({
+                where: { id },
+                data: {
+                    ...(name && { name }),
+                    ...(type && { type }),
+                    ...(number !== undefined && { number }),
+                    ...(capacity !== undefined && { capacity }),
+                    ...(phase && { phase }),
+                },
+            });
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
     },
 
     async setActive(id: string, is_active: boolean) {

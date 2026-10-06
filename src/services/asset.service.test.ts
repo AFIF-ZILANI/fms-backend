@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { AssetService } from "./asset.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdAssetIds: string[] = [];
 const createdUnitIds: string[] = [];
@@ -39,7 +40,7 @@ describe("AssetService", () => {
 
     test("stock unit relocation is recorded as a house allocation", async () => {
         const house = await prisma.houses.create({
-            data: { name: "Test House", type: "BROODER", number: 1 },
+            data: { name: "Test House", type: "BROODER", number: houseNumber() },
         });
         createdHouseIds.push(house.id);
 

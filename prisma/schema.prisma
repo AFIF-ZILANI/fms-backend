@@ -270,6 +270,17 @@ enum Religion {
   OTHER
 }
 
+enum IngestStatus {
+  PENDING
+  CONFIRMED
+  DISMISSED
+}
+
+enum IngestPortion {
+  main
+  cull
+}
+
 enum PayoutStatus {
   PENDING
   SENT
@@ -666,7 +677,9 @@ model Houses {
   birdSales             BirdSale[]
   taskAssignments       EmployeeTaskAssignment[]
 
-  @@index([type])
+  // Numbers repeat across types on this farm (Brooder 1 and Grower 1 are different sheds) but never
+  // within one. Also serves lookups by type, so no separate index on it.
+  @@unique([type, number])
 }
 
 model Batches {
@@ -821,8 +834,10 @@ model Purchase {
   id             String        @id @default(uuid())
   supplier_id    String?
   supplier       Suppliers?    @relation(fields: [supplier_id], references: [id])
-  warehouse_id   String?
-  warehouse      Warehouses?   @relation(fields: [warehouse_id], references: [id])
+  // Every purchase lands in a warehouse (the validator has always required it, and the stock-ledger
+  // rows it writes are tagged with it).
+  warehouse_id   String
+  warehouse      Warehouses    @relation(fields: [warehouse_id], references: [id])
   invoice_no     String?
   purchase_date  DateTime
   // Global discount, applied to the sum of the (already net-of-their-own-discount) line totals.
@@ -1100,7 +1115,7 @@ model StockLedger {
   quantity        Decimal        @db.Decimal(13, 4)
   direction       StockDirection
   reason          StockReason
-  unit_cost       Decimal?       @db.Decimal(10, 2)
+  unit_cost       Decimal?       @db.Decimal(14, 4) // per-unit cost: a dose or a gram costs fractions of a taka
   location_type   LocationType?
   location_id     String?
   ref_type        RefType
@@ -1542,8 +1557,8 @@ model Alerts {
   status          AlertStatus       @default(ACTIVE)
   related_id      String?
   action_type     AlertActionTypes?
-  issued_at       DateTime?         @db.Date
-  resolved_at     DateTime?         @db.Date
+  issued_at       DateTime?
+  resolved_at     DateTime?
   created_at      DateTime          @default(now())
   // A Manager flagging low stock from the field is an offline-capable write.
   // No actor column here yet -- until one exists the app prefixes description
@@ -1605,11 +1620,11 @@ model IngestedSale {
   recorded_by     Profiles @relation(fields: [recorded_by_id], references: [id])
 
   payload          Json
-  portion          String // "main" | "cull"
+  portion          IngestPortion
   device_sale_date DateTime
   received_at      DateTime @default(now())
 
-  status           String    @default("PENDING") // PENDING | CONFIRMED | DISMISSED
+  status           IngestStatus @default(PENDING)
   bird_sale_id     String?   @unique
   birdSale         BirdSale? @relation(fields: [bird_sale_id], references: [id])
   dismissed_reason String?

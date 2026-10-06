@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { PaymentService } from "./payment.service";
 import { PaymentInstrumentService } from "./payment-instrument.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
 
 let fromInstrumentId: string;
 let toInstrumentId: string;
@@ -67,6 +68,7 @@ describe("PaymentService", () => {
 
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: longAgo,
                 total_amount: 100000,
                 paid_amount: 0,
@@ -77,7 +79,7 @@ describe("PaymentService", () => {
         purchaseId = purchase.id;
 
         const house = await prisma.houses.create({
-            data: { name: "Payment House", type: "BROODER", number: 9301 },
+            data: { name: "Payment House", type: "BROODER", number: houseNumber() },
         });
         houseId = house.id;
         const batch = await prisma.batches.create({

@@ -2,6 +2,7 @@ import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { AlertService } from "./alert.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdAlertIds: string[] = [];
 const createdItemIds: string[] = [];
@@ -107,7 +108,7 @@ describe("AlertService", () => {
 
     test("scan raises a critical mortality alert when the 24h rate exceeds 1%", async () => {
         const house = await prisma.houses.create({
-            data: { name: "Scan House", type: "BROODER", number: 9001 },
+            data: { name: "Scan House", type: "BROODER", number: houseNumber() },
         });
         createdHouseIds.push(house.id);
         const profile = await prisma.profiles.create({

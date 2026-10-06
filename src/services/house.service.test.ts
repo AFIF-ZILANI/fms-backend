@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { HouseService } from "./house.service";
 import { BatchService } from "./batch.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdIds: string[] = [];
 const createdBatchIds: string[] = [];
@@ -21,7 +22,7 @@ describe("HouseService", () => {
         const house = await HouseService.create({
             name: "Shed A",
             type: "BROODER",
-            number: 1,
+            number: houseNumber(),
             capacity: 5000,
         });
         createdIds.push(house.id);
@@ -34,7 +35,7 @@ describe("HouseService", () => {
     });
 
     test("create without capacity leaves it null", async () => {
-        const house = await HouseService.create({ name: "Shed B", type: "GROWER", number: 2 });
+        const house = await HouseService.create({ name: "Shed B", type: "GROWER", number: houseNumber() });
         createdIds.push(house.id);
         expect(house.capacity).toBeNull();
     });
@@ -46,14 +47,14 @@ describe("HouseService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const house = await HouseService.create({ name: "Shed C", type: "LAYER", number: 3 });
+        const house = await HouseService.create({ name: "Shed C", type: "LAYER", number: houseNumber() });
         createdIds.push(house.id);
 
         await expect(HouseService.update(house.id, {})).rejects.toMatchObject({ status: 400 });
     });
 
     test("update changes fields", async () => {
-        const house = await HouseService.create({ name: "Shed D", type: "BROODER", number: 4 });
+        const house = await HouseService.create({ name: "Shed D", type: "BROODER", number: houseNumber() });
         createdIds.push(house.id);
 
         const updated = await HouseService.update(house.id, { capacity: 3000 });
@@ -62,7 +63,7 @@ describe("HouseService", () => {
     });
 
     test("setActive toggles is_active", async () => {
-        const house = await HouseService.create({ name: "Shed E", type: "GROWER", number: 5 });
+        const house = await HouseService.create({ name: "Shed E", type: "GROWER", number: houseNumber() });
         createdIds.push(house.id);
 
         const deactivated = await HouseService.setActive(house.id, false);
@@ -73,7 +74,7 @@ describe("HouseService", () => {
     });
 
     test("listing filters by type", async () => {
-        const house = await HouseService.create({ name: "Shed F", type: "LAYER", number: 6 });
+        const house = await HouseService.create({ name: "Shed F", type: "LAYER", number: houseNumber() });
         createdIds.push(house.id);
 
         const { houses } = await HouseService.getAll({ page: 1, limit: 100, type: "LAYER" });
@@ -82,8 +83,8 @@ describe("HouseService", () => {
     });
 
     test("listing filters by is_available", async () => {
-        const empty = await HouseService.create({ name: "Shed G", type: "BROODER", number: 7 });
-        const occupied = await HouseService.create({ name: "Shed H", type: "BROODER", number: 8 });
+        const empty = await HouseService.create({ name: "Shed G", type: "BROODER", number: houseNumber() });
+        const occupied = await HouseService.create({ name: "Shed H", type: "BROODER", number: houseNumber() });
         createdIds.push(empty.id, occupied.id);
 
         const profile = await prisma.profiles.create({
@@ -111,8 +112,8 @@ describe("HouseService", () => {
     });
 
     test("listing carries occupants: placed vs alive, since, and expected free date", async () => {
-        const house = await HouseService.create({ name: "Shed Occ", type: "BROODER", number: 80 });
-        const empty = await HouseService.create({ name: "Shed Empty", type: "BROODER", number: 81 });
+        const house = await HouseService.create({ name: "Shed Occ", type: "BROODER", number: houseNumber() });
+        const empty = await HouseService.create({ name: "Shed Empty", type: "BROODER", number: houseNumber() });
         createdIds.push(house.id, empty.id);
 
         const profile = await prisma.profiles.create({
@@ -153,7 +154,7 @@ describe("HouseService", () => {
     });
 
     test("phase defaults to READY and update sets it", async () => {
-        const house = await HouseService.create({ name: "Shed Phase", type: "BROODER", number: 82 });
+        const house = await HouseService.create({ name: "Shed Phase", type: "BROODER", number: houseNumber() });
         createdIds.push(house.id);
         expect(house.phase).toBe("READY");
 
@@ -166,7 +167,7 @@ describe("HouseService", () => {
     });
 
     test("remove deletes an untouched house but refuses one with history", async () => {
-        const clean = await HouseService.create({ name: "Shed Del", type: "GROWER", number: 90 });
+        const clean = await HouseService.create({ name: "Shed Del", type: "GROWER", number: houseNumber() });
         await HouseService.remove(clean.id);
         await expect(HouseService.getById(clean.id)).rejects.toMatchObject({ status: 404 });
 
@@ -175,7 +176,7 @@ describe("HouseService", () => {
             data: { name: "House Delete Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
         });
         createdProfileIds.push(profile.id);
-        const weighed = await HouseService.create({ name: "Shed Weighed", type: "GROWER", number: 91 });
+        const weighed = await HouseService.create({ name: "Shed Weighed", type: "GROWER", number: houseNumber() });
         createdIds.push(weighed.id);
         await prisma.weightRecords.create({
             data: {
@@ -187,7 +188,7 @@ describe("HouseService", () => {
         await prisma.weightRecords.deleteMany({ where: { house_id: weighed.id } });
 
         // Attached only through the polymorphic stock ledger -- no FK at all.
-        const stocked = await HouseService.create({ name: "Shed Stocked", type: "GROWER", number: 92 });
+        const stocked = await HouseService.create({ name: "Shed Stocked", type: "GROWER", number: houseNumber() });
         createdIds.push(stocked.id);
         const item = await prisma.item.create({
             data: {

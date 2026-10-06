@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EnvironmentRecordService } from "./environment-record.service";
+import { houseNumber } from "@lib/test-fixtures";
 
 let batchId: string;
 let houseId: string;
@@ -10,7 +11,7 @@ const createdIds: string[] = [];
 describe("EnvironmentRecordService", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "Env House", type: "BROODER", number: 601 },
+            data: { name: "Env House", type: "BROODER", number: houseNumber() },
         });
         houseId = house.id;
         const profile = await prisma.profiles.create({

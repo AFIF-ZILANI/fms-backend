@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdBatchIds: string[] = [];
 let houseId: string;
@@ -12,7 +13,7 @@ const batchCode = () => `BATCH-${crypto.randomUUID()}`;
 describe("BatchService", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "Batch Test House", type: "BROODER", number: 101 },
+            data: { name: "Batch Test House", type: "BROODER", number: houseNumber() },
         });
         houseId = house.id;
         const profile = await prisma.profiles.create({

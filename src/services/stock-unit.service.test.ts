@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
+import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
 
 const createdUnitIds: string[] = [];
 const createdTransferIds: string[] = [];
@@ -42,6 +43,7 @@ describe("StockUnitService", () => {
 
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 100,
                 paid_amount: 100,
@@ -65,7 +67,7 @@ describe("StockUnitService", () => {
         purchaseItemId = purchaseItem.id;
 
         const house = await prisma.houses.create({
-            data: { name: "Seed House", type: "BROODER", number: 99 },
+            data: { name: "Seed House", type: "BROODER", number: houseNumber() },
         });
         houseId = house.id;
     });
@@ -140,6 +142,7 @@ describe("StockUnitService", () => {
         });
         const untrackedPurchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 10,
                 paid_amount: 10,
@@ -216,7 +219,7 @@ describe("StockUnitService", () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);
         const houseTwo = await prisma.houses.create({
-            data: { name: "Seed House Two", type: "BROODER", number: 98 },
+            data: { name: "Seed House Two", type: "BROODER", number: houseNumber() },
         });
 
         const allocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
@@ -367,6 +370,7 @@ describe("StockUnitService", () => {
         equipmentItemId = equipmentItem.id;
         const equipmentPurchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 200,
                 paid_amount: 200,

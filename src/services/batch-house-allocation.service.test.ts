@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { BatchHouseAllocationService } from "./batch-house-allocation.service";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdBatchIds: string[] = [];
 let houseAId: string;
@@ -33,8 +34,8 @@ async function balance(batchId: string, houseId: string) {
 describe("BatchHouseAllocationService", () => {
     beforeAll(async () => {
         const [a, b, profile] = await Promise.all([
-            prisma.houses.create({ data: { name: "Alloc House A", type: "BROODER", number: 201 } }),
-            prisma.houses.create({ data: { name: "Alloc House B", type: "GROWER", number: 202 } }),
+            prisma.houses.create({ data: { name: "Alloc House A", type: "BROODER", number: houseNumber() } }),
+            prisma.houses.create({ data: { name: "Alloc House B", type: "GROWER", number: houseNumber() } }),
             prisma.profiles.create({
                 data: {
                     name: "Alloc Recorder",

@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { ConsumptionService } from "./consumption.service";
 import { StockUnitService } from "./stock-unit.service";
 import { ItemService } from "./item.service";
+import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
 
 let houseId: string;
 let feedItemId: string;
@@ -20,7 +21,7 @@ const createdPurchaseIds: string[] = [];
 describe("ConsumptionService", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "Consumption House", type: "GROWER", number: 401 },
+            data: { name: "Consumption House", type: "GROWER", number: houseNumber() },
         });
         houseId = house.id;
 
@@ -56,6 +57,7 @@ describe("ConsumptionService", () => {
 
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 50,
                 paid_amount: 50,
@@ -349,6 +351,7 @@ describe("ConsumptionService", () => {
         createdItemUnitIds.push(itemUnit.id);
         const mlPurchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 0,
                 paid_amount: 0,

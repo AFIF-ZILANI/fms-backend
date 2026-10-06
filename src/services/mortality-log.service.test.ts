@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { MortalityLogService } from "./mortality-log.service";
+import { houseNumber } from "@lib/test-fixtures";
 
 const createdBatchIds: string[] = [];
 let houseId: string;
@@ -27,7 +28,7 @@ describe("MortalityLogService", () => {
     beforeAll(async () => {
         const [house, profile] = await Promise.all([
             prisma.houses.create({
-                data: { name: "Mortality House", type: "BROODER", number: 301 },
+                data: { name: "Mortality House", type: "BROODER", number: houseNumber() },
             }),
             prisma.profiles.create({
                 data: {

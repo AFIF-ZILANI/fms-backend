@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { getItemAvgCosts } from "./stock-value";
+import { sharedWarehouseId } from "@lib/test-fixtures";
 
 let itemId: string;
 let purchaseId: string;
@@ -30,6 +31,7 @@ describe("getItemAvgCosts", () => {
 
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 1150,
                 paid_amount: 1150,

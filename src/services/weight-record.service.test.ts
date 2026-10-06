@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { WeightRecordService } from "./weight-record.service";
+import { houseNumber } from "@lib/test-fixtures";
 
 let batchId: string;
 let houseId: string;
@@ -10,7 +11,7 @@ const createdIds: string[] = [];
 describe("WeightRecordService", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "Weight House", type: "GROWER", number: 701 },
+            data: { name: "Weight House", type: "GROWER", number: houseNumber() },
         });
         houseId = house.id;
         const profile = await prisma.profiles.create({

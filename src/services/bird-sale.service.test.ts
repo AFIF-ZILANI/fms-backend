@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { BirdSaleService } from "./bird-sale.service";
 import { createBirdSaleSchema } from "@validators/bird-sale.validator";
+import { houseNumber } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -28,7 +29,7 @@ async function newRunningBatch(count: number) {
 describe("BirdSaleService", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "BirdSale House", type: "GROWER", number: 801 },
+            data: { name: "BirdSale House", type: "GROWER", number: houseNumber() },
         });
         houseId = house.id;
         const profile = await prisma.profiles.create({

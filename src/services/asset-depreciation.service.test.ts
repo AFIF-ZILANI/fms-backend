@@ -4,6 +4,7 @@ import { BatchService } from "./batch.service";
 import { StockUnitService } from "./stock-unit.service";
 import { ConsumptionService } from "./consumption.service";
 import { AssetDepreciationService } from "./asset-depreciation.service";
+import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -17,7 +18,7 @@ const createdBatchIds: string[] = [];
 describe("AssetDepreciation trigger (Batches.close)", () => {
     beforeAll(async () => {
         const house = await prisma.houses.create({
-            data: { name: "Depreciation House", type: "BROODER", number: 1101 },
+            data: { name: "Depreciation House", type: "BROODER", number: houseNumber() },
         });
         houseId = house.id;
         const profile = await prisma.profiles.create({
@@ -42,6 +43,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
 
         const purchase = await prisma.purchase.create({
             data: {
+                warehouse_id: await sharedWarehouseId(),
                 purchase_date: new Date(),
                 total_amount: 10000,
                 paid_amount: 10000,

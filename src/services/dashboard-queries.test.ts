@@ -5,6 +5,7 @@ import { AnalyticsService } from "./analytics.service";
 import { PaymentService } from "./payment.service";
 import { SaleService } from "./sale.service";
 import { BirdSaleService } from "./bird-sale.service";
+import { sharedWarehouseId } from "@lib/test-fixtures";
 
 // The dashboard and summary figures, checked against plain aggregates and against what payments change.
 
@@ -54,7 +55,7 @@ describe("dashboard and summary queries", () => {
         });
         saleIds.push(sale.id);
         const purchase = await prisma.purchase.create({
-            data: { purchase_date: longAgo, total_amount: 300, paid_amount: 0, due_amount: 300, recorded_by_id: actorId },
+            data: { warehouse_id: await sharedWarehouseId(), purchase_date: longAgo, total_amount: 300, paid_amount: 0, due_amount: 300, recorded_by_id: actorId },
         });
         purchaseIds.push(purchase.id);
 

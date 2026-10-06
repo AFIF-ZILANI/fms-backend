@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { DeviceService } from "./device.service";
 import { IngestService } from "./ingest.service";
 import type { IngestSaleInput } from "@validators/ingest.validator";
+import { houseNumber } from "@lib/test-fixtures";
 
 let profileId: string;
 let deviceId: string;
@@ -133,7 +134,7 @@ describe("IngestService", () => {
     });
     test("confirming creates a BirdSale with the discount applied", async () => {
         const house = await prisma.houses.create({
-            data: { name: "Ingest House", type: "GROWER", number: 9401 },
+            data: { name: "Ingest House", type: "GROWER", number: houseNumber() },
         });
         const batch = await prisma.batches.create({
             data: {
