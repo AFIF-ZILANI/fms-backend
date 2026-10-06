@@ -48,11 +48,12 @@ if (!isDev && env.CSRF_ENABLED) {
 app.use(
     "*",
     cors({
-        origin: isDev ? "*" : allowedOrigins,
+        // Explicit origins even in dev: a credentialed request (the session cookie) is refused with "*".
+        origin: allowedOrigins,
         allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
         allowHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
         exposeHeaders: ["X-Request-Id"],
-        credentials: env.CORS_CREDENTIALS && !isDev,
+        credentials: env.CORS_CREDENTIALS,
         maxAge: 86400,
     }),
 );
