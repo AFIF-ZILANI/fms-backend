@@ -160,6 +160,63 @@ describe("BatchService", () => {
         });
     });
 
+    test("a refused close leaves the batch RUNNING", async () => {
+        const batch = await BatchService.create({
+            batch_code: batchCode(),
+            breed: "CLASSIC",
+            expected_selling_date: new Date(Date.now() + 30 * 86400_000),
+            initial_chick_count: 50,
+            init_chicks_avg_wt: 40,
+            house_id: houseId,
+            recorded_by_id: profileId,
+        });
+        createdBatchIds.push(batch!.id);
+
+        // Birds remain and there is no force: refused -- and the claim that flips the status
+        // happens first inside the transaction, so it must roll back with the refusal.
+        await expect(
+            BatchService.close(batch!.id, { status: "CLOSED", recorded_by_id: profileId }),
+        ).rejects.toMatchObject({ status: 409 });
+        const after = await prisma.batches.findUniqueOrThrow({ where: { id: batch!.id } });
+        expect(after.status).toBe("RUNNING");
+        expect(after.actual_end_date).toBeNull();
+    });
+
+    test("closing an unknown batch is a 404", async () => {
+        await expect(
+            BatchService.close("00000000-0000-0000-0000-000000000000", {
+                status: "CLOSED",
+                recorded_by_id: profileId,
+            }),
+        ).rejects.toMatchObject({ status: 404 });
+    });
+
+    test("two simultaneous closes: one wins, the other is told it's no longer RUNNING", async () => {
+        const batch = await BatchService.create({
+            batch_code: batchCode(),
+            breed: "HIBREED",
+            expected_selling_date: new Date(Date.now() + 30 * 86400_000),
+            initial_chick_count: 40,
+            init_chicks_avg_wt: 40,
+            house_id: houseId,
+            recorded_by_id: profileId,
+        });
+        createdBatchIds.push(batch!.id);
+        const close = () =>
+            BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+
+        const results = await Promise.allSettled([close(), close()]);
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        const loser = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+        expect(loser.reason).toMatchObject({ status: 409 });
+        // One force-close, one adjustment -- not two.
+        expect(
+            await prisma.batchHouseAllocation.count({
+                where: { batch_id: batch!.id, reason: "ADJUSTMENT" },
+            }),
+        ).toBe(1);
+    });
+
     test("cannot edit a batch that isn't RUNNING", async () => {
         const batch = await BatchService.create({
             batch_code: batchCode(),

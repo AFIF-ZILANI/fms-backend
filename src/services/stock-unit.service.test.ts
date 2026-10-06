@@ -179,6 +179,39 @@ describe("StockUnitService", () => {
         expect(relocated.stock_unit_id).toBe(unit!.id);
     });
 
+    test("ten relocations of one unit to the same house racing: one lands, the rest are conflicts", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        const move = () => StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+        const results = await Promise.allSettled(Array.from({ length: 10 }, move));
+
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        for (const r of results) {
+            if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
+        }
+        expect(await prisma.stockHouseAllocation.count({ where: { stock_unit_id: unit!.id } })).toBe(1);
+    });
+
+    test("relocate waits for the unit's lock, so a racing move reads the real current house", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+
+        // Another writer holds this unit's lock for a moment.
+        let released = false;
+        const holder = prisma.$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${unit!.id}, 0))`;
+            await Bun.sleep(300);
+            released = true;
+        });
+        await Bun.sleep(60); // let the holder take it
+
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+        // Without the lock relocate returns at once, long before the holder lets go.
+        expect(released).toBe(true);
+        await holder;
+    });
+
     test("relocate infers ALLOCATION on first move, REALLOCATION on a house->house move, RETURN to warehouse", async () => {
         const [unit] = await StockUnitService.provision(1);
         createdUnitIds.push(unit!.id);

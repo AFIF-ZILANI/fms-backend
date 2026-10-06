@@ -1,5 +1,6 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { computePay, referenceSalaryFor } from "@lib/payroll-math";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
@@ -143,17 +144,23 @@ export const PayrollRecordService = {
             score_sum,
         );
 
-        return prisma.payrollRecord.create({
-            data: {
-                employee_id: data.employee_id,
-                month: monthStart,
-                reference_salary,
-                fixed_wage,
-                score_sum,
-                adjustment_percent,
-                allowance,
-                total_pay,
-            },
-        });
+        // The unique (employee, month) is the real guard; the check above is just a friendly
+        // message. A racing second run lands here as a P2002, which becomes a 409, not a 500.
+        try {
+            return await prisma.payrollRecord.create({
+                data: {
+                    employee_id: data.employee_id,
+                    month: monthStart,
+                    reference_salary,
+                    fixed_wage,
+                    score_sum,
+                    adjustment_percent,
+                    allowance,
+                    total_pay,
+                },
+            });
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
     },
 };

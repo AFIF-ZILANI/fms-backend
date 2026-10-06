@@ -43,16 +43,21 @@ export const BirdSaleService = {
      * KPI tile, and summing it over a capped list fetch was the bug. */
     async summary(query: BirdSalesSummaryQuery) {
         const where = buildWhere(query);
+        // Unfiltered: every BIRD_SALE payment belongs to some bird sale (see SaleService.summary).
+        const unfiltered = Object.keys(where).length === 0;
         const [aggregate, ids] = await Promise.all([
             prisma.birdSale.aggregate({
                 where,
                 _count: { _all: true },
                 _sum: { due_amount: true, total_amount: true, birds_count: true },
             }),
-            prisma.birdSale.findMany({ where, select: { id: true } }),
+            unfiltered ? [] : prisma.birdSale.findMany({ where, select: { id: true } }),
         ]);
         const paid = await prisma.payment.aggregate({
-            where: { ref_type: "BIRD_SALE", ref_id: { in: ids.map((row) => row.id) } },
+            where: {
+                ref_type: "BIRD_SALE",
+                ...(!unfiltered && { ref_id: { in: ids.map((row) => row.id) } }),
+            },
             _sum: { amount: true },
         });
         const due = (aggregate._sum.due_amount ?? new Prisma.Decimal(0)).minus(

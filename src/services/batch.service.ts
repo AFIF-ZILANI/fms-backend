@@ -125,27 +125,33 @@ export const BatchService = {
      * (the formula named in inventory-tracking-design.md), written via
      * upsert so closing is safe to retry without double-computing. */
     async close(id: string, data: CloseBatchInput) {
-        const batch = await prisma.batches.findUnique({
-            where: { id },
-            include: { houseBalances: true },
-        });
-        if (!batch) throw AppError.notFound("Batch");
-        if (batch.status !== "RUNNING") throw AppError.conflict("Batch is not RUNNING");
-
-        const remaining = batch.houseBalances.reduce((sum, b) => sum + b.quantity, 0);
-        if (remaining !== 0 && !data.force) {
-            throw AppError.conflict(
-                `Batch still has ${remaining} live birds allocated -- pass force:true to close anyway`,
-            );
-        }
-
         return prisma.$transaction(async (tx) => {
+            // Claim the batch first: of two concurrent closes only one flips it from RUNNING,
+            // the other matches nothing. The balance check below throws inside the same
+            // transaction, so a refused close rolls the claim back.
+            const claimed = await tx.batches.updateMany({
+                where: { id, status: "RUNNING" },
+                data: { status: data.status, actual_end_date: new Date() },
+            });
+            if (claimed.count === 0) {
+                const exists = await tx.batches.findUnique({ where: { id }, select: { id: true } });
+                throw exists ? AppError.conflict("Batch is not RUNNING") : AppError.notFound("Batch");
+            }
+
+            const balances = await tx.batchHouseBalance.findMany({ where: { batch_id: id } });
+            const remaining = balances.reduce((sum, b) => sum + b.quantity, 0);
+            if (remaining !== 0 && !data.force) {
+                throw AppError.conflict(
+                    `Batch still has ${remaining} live birds allocated -- pass force:true to close anyway`,
+                );
+            }
+
             // force:true can close with birds still on the books -- a CLOSED batch has none live,
             // so take them off the books or its houses stay "occupied" forever (see model
             // comment). Each house gets an ADJUSTMENT allocation (no destination = birds
             // removed), so the movement history still adds up to the balance instead of the
             // balance being zeroed out from under it. The key makes a retry a no-op.
-            for (const b of batch.houseBalances.filter((b) => b.quantity > 0)) {
+            for (const b of balances.filter((b) => b.quantity > 0)) {
                 await tx.batchHouseAllocation.upsert({
                     where: { idempotency_key: `force-close:${id}:${b.house_id}` },
                     update: {},
@@ -160,17 +166,9 @@ export const BatchService = {
                 });
                 await tx.batchHouseBalance.update({ where: { id: b.id }, data: { quantity: 0 } });
             }
-            const vacated = await tx.batchHouseBalance.findMany({
-                where: { batch_id: id },
-                select: { house_id: true },
-            });
-            await markEmptiedHousesCleaning(tx, vacated.map((b) => b.house_id));
+            await markEmptiedHousesCleaning(tx, balances.map((b) => b.house_id));
 
-            const closed = await tx.batches.update({
-                where: { id },
-                data: { status: data.status, actual_end_date: new Date() },
-                include,
-            });
+            const closed = await tx.batches.findUniqueOrThrow({ where: { id }, include });
 
             const usedStockUnits = await tx.consumption.findMany({
                 where: { batch_id: id, stock_unit_id: { not: null } },

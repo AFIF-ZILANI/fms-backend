@@ -189,6 +189,20 @@ describe("PayrollRecordService", () => {
         ).rejects.toMatchObject({ status: 409 });
     });
 
+    test("two simultaneous generates for one employee+month: one record, the other a clean 409", async () => {
+        const employee = await newEmployee(10000);
+        const month = new Date("2026-05-15T00:00:00Z");
+        const run = () => PayrollRecordService.generate({ employee_id: employee.id, month });
+
+        const results = await Promise.allSettled([run(), run(), run()]);
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        // A raw unique-violation would be a 500; the losers must be told it already exists.
+        for (const r of results) {
+            if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
+        }
+        expect(await prisma.payrollRecord.count({ where: { employee_id: employee.id } })).toBe(1);
+    });
+
     test("a month with no score entries generates at 0% adjustment", async () => {
         const employee = await newEmployee(12000);
         const month = new Date("2026-07-15T00:00:00Z");

@@ -140,31 +140,40 @@ export const StockUnitService = {
             }
         }
 
-        const latest = await prisma.stockHouseAllocation.findFirst({
-            where: { stock_unit_id: id },
-            orderBy: { occurred_at: "desc" },
-        });
-        const currentHouseId = latest?.house_id ?? null;
-
-        if (house_id === currentHouseId) {
-            throw AppError.conflict(
-                house_id === null
-                    ? "Unit is already at the warehouse"
-                    : "Unit is already at that house",
-            );
-        }
-        const type: "ALLOCATION" | "REALLOCATION" | "RETURN" =
-            house_id === null ? "RETURN" : currentHouseId === null ? "ALLOCATION" : "REALLOCATION";
-
         try {
-            return await prisma.stockHouseAllocation.create({
-                data: {
-                    stock_unit_id: id,
-                    house_id,
-                    type,
-                    idempotency_key,
-                    ...(stock_transfer_id !== undefined && { stock_transfer_id }),
-                },
+            return await prisma.$transaction(async (tx) => {
+                // The unit's current house is "its latest allocation", so two relocations racing
+                // would both read the same latest row. One lock per unit makes the second wait.
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+                const latest = await tx.stockHouseAllocation.findFirst({
+                    where: { stock_unit_id: id },
+                    orderBy: { occurred_at: "desc" },
+                });
+                const currentHouseId = latest?.house_id ?? null;
+
+                if (house_id === currentHouseId) {
+                    throw AppError.conflict(
+                        house_id === null
+                            ? "Unit is already at the warehouse"
+                            : "Unit is already at that house",
+                    );
+                }
+                const type: "ALLOCATION" | "REALLOCATION" | "RETURN" =
+                    house_id === null
+                        ? "RETURN"
+                        : currentHouseId === null
+                          ? "ALLOCATION"
+                          : "REALLOCATION";
+
+                return tx.stockHouseAllocation.create({
+                    data: {
+                        stock_unit_id: id,
+                        house_id,
+                        type,
+                        idempotency_key,
+                        ...(stock_transfer_id !== undefined && { stock_transfer_id }),
+                    },
+                });
             });
         } catch (err) {
             return handlePrismaWriteError(err);

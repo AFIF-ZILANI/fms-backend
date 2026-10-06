@@ -18,9 +18,12 @@ export const AnalyticsService = {
                     where: { batch: { status: "RUNNING" } },
                     _sum: { quantity: true },
                 }),
+                // Only the count of occupied balances per house, not every balance row.
                 prisma.houses.findMany({
                     where: { is_active: true },
-                    include: { batchHouseBalances: true },
+                    select: {
+                        _count: { select: { batchHouseBalances: { where: { quantity: { gt: 0 } } } } },
+                    },
                 }),
                 prisma.employees.count({ where: { profile: { is_active: true } } }),
                 prisma.alerts.groupBy({
@@ -30,9 +33,7 @@ export const AnalyticsService = {
                 }),
             ]);
 
-        const housesOccupied = houses.filter((h) =>
-            h.batchHouseBalances.some((b) => b.quantity > 0),
-        ).length;
+        const housesOccupied = houses.filter((h) => h._count.batchHouseBalances > 0).length;
 
         return {
             active_batch_count: activeBatchCount,
@@ -104,6 +105,7 @@ export const AnalyticsService = {
             prisma.weightRecords.findMany({
                 where: { batch_id: { in: batchIds } },
                 orderBy: { date: "desc" },
+                select: { batch_id: true, average_wt_grams: true, date: true },
             }),
         ]);
 
@@ -194,7 +196,16 @@ export const AnalyticsService = {
         const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
         const monthEnd = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
 
-        const [saleRevenue, birdSaleRevenue, expenses, purchasesDue, salesDue, birdSalesDue, instruments] =
+        const [
+            saleRevenue,
+            birdSaleRevenue,
+            expenses,
+            purchasesDue,
+            salesDue,
+            birdSalesDue,
+            paidByType,
+            instruments,
+        ] =
             await Promise.all([
                 prisma.sale.aggregate({
                     where: { sale_date: { gte: monthStart, lt: monthEnd } },
@@ -211,16 +222,26 @@ export const AnalyticsService = {
                 prisma.purchase.aggregate({ _sum: { due_amount: true } }),
                 prisma.sale.aggregate({ _sum: { due_amount: true } }),
                 prisma.birdSale.aggregate({ _sum: { due_amount: true } }),
+                // due_amount is the create-time snapshot; what has been paid since lives in Payment.
+                prisma.payment.groupBy({
+                    by: ["ref_type"],
+                    where: { ref_type: { in: ["PURCHASE", "SALE", "BIRD_SALE"] } },
+                    _sum: { amount: true },
+                }),
                 prisma.paymentInstrument.findMany({ where: { is_active: true } }),
             ]);
+        const zeroDec = new Prisma.Decimal(0);
+        const paid = (t: string) => paidByType.find((r) => r.ref_type === t)?._sum.amount ?? zeroDec;
 
         const revenue = (saleRevenue._sum.total ?? new Prisma.Decimal(0)).plus(
             birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0),
         );
         const expenseTotal = expenses._sum.amount ?? new Prisma.Decimal(0);
-        const outstandingReceivables = (salesDue._sum.due_amount ?? new Prisma.Decimal(0)).plus(
-            birdSalesDue._sum.due_amount ?? new Prisma.Decimal(0),
-        ); // raw Prisma.Decimal, not .toString()'d -- matches every sibling
+        // Net of payments, the same identity SaleService.summary uses -- exact, because a payment
+        // that would overpay a record is refused.
+        const outstandingReceivables = (salesDue._sum.due_amount ?? zeroDec)
+            .minus(paid("SALE"))
+            .plus((birdSalesDue._sum.due_amount ?? zeroDec).minus(paid("BIRD_SALE"))); // raw Prisma.Decimal, not .toString()'d -- matches every sibling
 
         // Two grouped queries for every instrument at once, not three queries per instrument.
         const ids = instruments.map((i) => i.id);
@@ -252,7 +273,7 @@ export const AnalyticsService = {
             revenue,
             expenses: expenseTotal,
             gross_profit: revenue.minus(expenseTotal),
-            outstanding_payables: purchasesDue._sum.due_amount ?? new Prisma.Decimal(0),
+            outstanding_payables: (purchasesDue._sum.due_amount ?? zeroDec).minus(paid("PURCHASE")),
             outstanding_receivables: outstandingReceivables,
             cash_position: cashPosition,
             cash_by_instrument: instruments.map((inst, i) => ({
@@ -538,32 +559,44 @@ export const AnalyticsService = {
             return { label: monthStart.toISOString().slice(0, 7), monthStart, monthEnd };
         });
 
-        const rows = await Promise.all(
-            windows.map(async ({ label, monthStart, monthEnd }) => {
-                const [saleRevenue, birdSaleRevenue, expenses] = await Promise.all([
-                    prisma.sale.aggregate({
-                        where: { sale_date: { gte: monthStart, lt: monthEnd } },
-                        _sum: { total: true },
-                    }),
-                    prisma.birdSale.aggregate({
-                        where: { sale_date: { gte: monthStart, lt: monthEnd } },
-                        _sum: { total_amount: true },
-                    }),
-                    prisma.expense.aggregate({
-                        where: { date: { gte: monthStart, lt: monthEnd } },
-                        _sum: { amount: true },
-                    }),
-                ]);
-                const revenue = (saleRevenue._sum.total ?? new Prisma.Decimal(0)).plus(
-                    birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0),
-                );
-                return {
-                    month: label,
-                    revenue: revenue.toString(),
-                    expenses: (expenses._sum.amount ?? new Prisma.Decimal(0)).toString(),
-                };
+        // Three range reads over the whole window, bucketed by month here (the pattern every
+        // trend in this file uses), instead of three aggregates per month.
+        const from = windows[windows.length - 1]!.monthStart;
+        const to = windows[0]!.monthEnd;
+        const [sales, birdSales, expenses] = await Promise.all([
+            prisma.sale.findMany({
+                where: { sale_date: { gte: from, lt: to } },
+                select: { sale_date: true, total: true },
             }),
-        );
+            prisma.birdSale.findMany({
+                where: { sale_date: { gte: from, lt: to } },
+                select: { sale_date: true, total_amount: true },
+            }),
+            prisma.expense.findMany({
+                where: { date: { gte: from, lt: to } },
+                select: { date: true, amount: true },
+            }),
+        ]);
+        const zero = new Prisma.Decimal(0);
+        const byMonth = new Map(windows.map((w) => [w.label, { revenue: zero, expenses: zero }]));
+        const bucket = (d: Date) => byMonth.get(d.toISOString().slice(0, 7));
+        for (const s of sales) {
+            const m = bucket(s.sale_date);
+            if (m) m.revenue = m.revenue.plus(s.total);
+        }
+        for (const s of birdSales) {
+            const m = bucket(s.sale_date);
+            if (m) m.revenue = m.revenue.plus(s.total_amount);
+        }
+        for (const e of expenses) {
+            const m = bucket(e.date);
+            if (m) m.expenses = m.expenses.plus(e.amount);
+        }
+        const rows = windows.map((w) => ({
+            month: w.label,
+            revenue: byMonth.get(w.label)!.revenue.toString(),
+            expenses: byMonth.get(w.label)!.expenses.toString(),
+        }));
 
         return rows.sort((a, b) => a.month.localeCompare(b.month));
     },

@@ -49,19 +49,24 @@ export const SaleService = {
      * no row's outstanding can be negative and skew the sum. */
     async summary(query: SalesSummaryQuery) {
         const where = buildWhere(query);
+        // Unfiltered (the common Sales-page load): every SALE payment belongs to some sale, so
+        // there is no need to ship every sale id into an IN list.
+        const unfiltered = Object.keys(where).length === 0;
         const [aggregate, ids] = await Promise.all([
             prisma.sale.aggregate({
                 where,
                 _count: { _all: true },
                 _sum: { due_amount: true, total: true },
             }),
-            // ponytail: id list feeds the payment aggregate so a filtered
-            // summary nets off only its own sales. Swap for a raw JOIN if the
-            // sale count ever makes this list expensive to ship around.
-            prisma.sale.findMany({ where, select: { id: true } }),
+            // ponytail: for a filtered summary the id list feeds the payment aggregate so it nets
+            // off only its own sales. Swap for a raw JOIN if a filter ever matches thousands.
+            unfiltered ? [] : prisma.sale.findMany({ where, select: { id: true } }),
         ]);
         const paid = await prisma.payment.aggregate({
-            where: { ref_type: "SALE", ref_id: { in: ids.map((row) => row.id) } },
+            where: {
+                ref_type: "SALE",
+                ...(!unfiltered && { ref_id: { in: ids.map((row) => row.id) } }),
+            },
             _sum: { amount: true },
         });
         const due = (aggregate._sum.due_amount ?? new Prisma.Decimal(0)).minus(
