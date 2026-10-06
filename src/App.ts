@@ -9,6 +9,7 @@ import { HTTPException } from "hono/http-exception";
 
 import { appRoutes } from "./routes/index";
 import { authenticate } from "./middlewares/authenticate";
+import { authorize } from "./middlewares/authorize";
 import type { AppEnv } from "./types/app";
 import { sendError, sendErrorRaw } from "./lib/response";
 import { AppError } from "./lib/app-error";
@@ -78,8 +79,9 @@ app.use("*", logger());
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
 // --- Routes ---
-// Default-deny: every /api route needs a session unless authenticate lists it as public.
-app.use("/api/*", authenticate);
+// Default-deny: every /api route needs a session unless authenticate lists it as public,
+// and an employee only reaches what lib/permissions.ts allows.
+app.use("/api/*", authenticate, authorize);
 app.route("/api", appRoutes);
 
 // ─── RFC 7807 Error Handling ──────────────────────────────────────────────────

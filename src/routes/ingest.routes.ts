@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
 import { requireDevice } from "../middlewares/require-device";
-import { requireAdmin } from "../middlewares/require-admin";
 import { DeviceController } from "@controllers/device.controller";
 import { IngestController } from "@controllers/ingest.controller";
 import { redeemPairingSchema } from "@validators/device.validator";
@@ -31,23 +30,20 @@ ingestRoutes.post(
     IngestController.create,
 );
 
-// Dashboard-facing read of the staging queue: a logged-in admin, not a device.
+// Dashboard-facing read of the staging queue: a logged-in admin (employees are denied by lib/permissions.ts).
 ingestRoutes.get(
     "/v1/sales",
-    requireAdmin,
     zValidatorRfc7807("query", listIngestedQuerySchema),
     IngestController.getAll,
 );
 
 ingestRoutes.post(
     "/v1/sales/:id/confirm",
-    requireAdmin,
     zValidatorRfc7807("json", confirmIngestedSchema),
     IngestController.confirm,
 );
 ingestRoutes.post(
     "/v1/sales/:id/dismiss",
-    requireAdmin,
     zValidatorRfc7807("json", dismissIngestedSchema),
     IngestController.dismiss,
 );

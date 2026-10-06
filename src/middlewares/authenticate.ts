@@ -45,7 +45,7 @@ export async function authenticate(c: Context, next: Next) {
             is_active: true,
             must_change_password: true,
             password_changed_at: true,
-            employees: { select: { role: true } },
+            employees: { select: { id: true, role: true } },
         },
     });
     if (
@@ -68,6 +68,7 @@ export async function authenticate(c: Context, next: Next) {
         profile_id: profile.id,
         role: profile.role,
         employee_role: profile.employees?.role ?? null,
+        employee_id: profile.employees?.id ?? null,
     };
     c.set("auth", auth);
     await next();

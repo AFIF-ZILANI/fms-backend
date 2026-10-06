@@ -162,9 +162,14 @@ Deactivating or terminating a person, or changing their password, cuts off their
 existing tokens on the next request. Sessions last 7 days on web and 30 on mobile.
 
 **The actor is never in the request body.** `recorded_by_id`, `given_by_id` and
-the like are stamped from the session. A 403 means the route needs an admin
-(`/admins`, `/devices`, and the ingest review routes today; more as the role
-matrix lands).
+the like are stamped from the session.
+
+**Roles.** Admins may call every route. An EMPLOYEE may call only what
+`src/lib/permissions.ts` allows (default-deny, **403** otherwise): the
+farm reads and log forms for WORKER and MANAGER, the manager actions for MANAGER
+only, and a worker's own employee, payroll and performance records. That file
+mirrors the mobile permission matrix (`mobile/docs/PRD.md` §4). An employee
+role code not named there gets nothing.
 
 ### 1.7 Bad foreign ids are 400, not 404
 

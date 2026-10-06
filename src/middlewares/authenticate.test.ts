@@ -103,6 +103,13 @@ describe("authenticate", () => {
         expect((await app.request("/api/admins", { headers: bearer(admToken) })).status).toBe(200);
     });
 
+    test("an employee with no role in the matrix is refused everything but their own account", async () => {
+        const { email } = await makePerson("EMPLOYEE"); // no Employees row -> no role
+        const { token } = await mobileLogin(email);
+        expect((await app.request("/api/houses", { headers: bearer(token) })).status).toBe(403);
+        expect((await app.request("/api/auth/me", { headers: bearer(token) })).status).toBe(200);
+    });
+
     test("a deactivated profile is cut off with its existing token", async () => {
         const { id, email } = await makePerson("ADMIN");
         const { token } = await mobileLogin(email);

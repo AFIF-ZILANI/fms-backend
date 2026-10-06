@@ -21,7 +21,7 @@ mobile (Expo) clients.
 
 | Item | State |
 | --- | --- |
-| Auth and permission enforcement | Login, sessions and default-deny are built (`middlewares/authenticate.ts`, `docs/api.md` §1.6). Only `/admins`, `/devices` and the ingest review routes are admin-only so far. Still to do: the employee permission matrix, web login page, mobile login. |
+| Auth and permission enforcement | Login, sessions and default-deny are built (`middlewares/authenticate.ts`, `docs/api.md` §1.6). Employees are default-deny with the WORKER/MANAGER matrix in `lib/permissions.ts`; the web login is built. Still to do: mobile login. |
 | Audit log writes | Only `employee.service.ts` writes `AuditLog`. Needs auth for a real actor. |
 | Festival bonus | Approved spec, no code: `superpowers/specs/2026-09-30-festival-bonus-design.md`. |
 | Bird-days shared-cost allocation | v2. Needs 2–3 overlapping batches of real data. |
