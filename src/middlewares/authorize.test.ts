@@ -4,6 +4,7 @@ import { EmployeeService } from "@services/employee.service";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
 import { hashPassword } from "@lib/password";
 import { app } from "../App";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 // The phone's whole flow against the real app: hired with a temp password ->
 // mobile login -> forced change -> own employee record -> the role matrix.
@@ -68,7 +69,7 @@ async function readyPhone(role: "WORKER" | "MANAGER") {
 
 describe("the phone flow and role matrix", () => {
     afterAll(async () => {
-        await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
+        await purgeAuditLog({ where: { changed_by_id: { in: profileIds } } });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
         await prisma.admins.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });

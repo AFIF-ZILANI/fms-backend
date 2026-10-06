@@ -7,6 +7,7 @@ import { AppError } from "@lib/app-error";
 import { createEmployeeSchema } from "@validators/employee.validator";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
 import { fixedWageFor, referenceSalaryFor } from "@lib/payroll-math";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 const createdIds: string[] = [];
@@ -75,7 +76,7 @@ describe("EmployeeService", () => {
         });
         // changed_by_id is a FK to Profiles, so audit rows must go before the
         // employees (and their profiles) they reference.
-        await prisma.auditLog.deleteMany({
+        await purgeAuditLog({
             where: { table_name: "Employees", record_id: { in: createdIds } },
         });
         await prisma.employees.deleteMany({ where: { id: { in: createdIds } } });

@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { AuditLogService } from "./audit-log.service";
 import { AppError } from "@lib/app-error";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 let profileId: string;
 const createdIds: string[] = [];
@@ -52,7 +53,7 @@ describe("AuditLogService", () => {
     });
 
     afterAll(async () => {
-        await prisma.auditLog.deleteMany({ where: { id: { in: createdIds } } });
+        await purgeAuditLog({ where: { id: { in: createdIds } } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 

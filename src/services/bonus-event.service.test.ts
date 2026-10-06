@@ -6,6 +6,7 @@ import { EmployeePayoutAccountService } from "./employee-payout-account.service"
 import { EmployeeService } from "./employee.service";
 import { PayrollRecordService } from "./payroll-record.service";
 import { markPaidSchema } from "@validators/payroll-payout.validator";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 // Event date fixed so service months are deterministic.
 const EVENT_DATE = new Date("2026-07-15T00:00:00Z");
@@ -95,7 +96,7 @@ describe("festival bonus", () => {
         await prisma.payment.deleteMany({ where: { ref_id: { in: payouts.map((p) => p.id) } } });
         await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: actorId } });
-        await prisma.auditLog.deleteMany({ where: { changed_by_id: actorId } });
+        await purgeAuditLog({ where: { changed_by_id: actorId } });
         await prisma.employeePayout.deleteMany({ where: { id: { in: payouts.map((p) => p.id) } } });
         await prisma.bonus.deleteMany({ where: { event_id: { in: eventIds } } });
         await prisma.bonusEvent.deleteMany({ where: { id: { in: eventIds } } });

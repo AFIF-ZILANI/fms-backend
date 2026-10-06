@@ -7,6 +7,7 @@ import { EmployeePayoutAccountService } from "./employee-payout-account.service"
 import { PerformanceScoreEntryService } from "./performance-score-entry.service";
 import { DeviceService } from "./device.service";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 // The sensitive actions leave a permanent "who did it" row -- and never a secret.
 
@@ -57,7 +58,7 @@ describe("audit writes", () => {
     });
 
     afterAll(async () => {
-        await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
+        await purgeAuditLog({ where: { changed_by_id: { in: profileIds } } });
         await prisma.performanceScoreEntry.deleteMany({ where: { employee_id: { in: employeeIds } } });
         await prisma.device.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.pairingCode.deleteMany({ where: { profile_id: { in: profileIds } } });
@@ -206,5 +207,30 @@ describe("audit writes", () => {
         const paired = await DeviceService.redeemPairingCode(code, "Who revoked", "android");
         await DeviceService.revoke(paired.device_id, actorId);
         expect((await prisma.device.findUniqueOrThrow({ where: { id: paired.device_id } })).revoked_by_id).toBe(actorId);
+    });
+
+    test("the audit log is append-only at the database: no edits, and deletes only by explicit opt-in", async () => {
+        const e = await hire();
+        const row = (await rowsFor("Employees", e.id))[0]!;
+
+        // A buggy service or a manual fix can't rewrite who did what...
+        await expect(
+            (async () => prisma.auditLog.update({ where: { id: row.id }, data: { note: "rewritten" } }))(),
+        ).rejects.toThrow(/append-only/);
+        // ...or remove it.
+        await expect((async () => prisma.auditLog.deleteMany({ where: { id: row.id } }))()).rejects.toThrow(/append-only/);
+        expect(await prisma.auditLog.count({ where: { id: row.id } })).toBe(1);
+        expect((await prisma.auditLog.findUniqueOrThrow({ where: { id: row.id } })).note).toBe(row.note);
+
+        // Only a session that sets the flag for its own transaction can delete (test cleanup does).
+        expect((await purgeAuditLog({ where: { id: row.id } })).count).toBe(1);
+        expect(await prisma.auditLog.count({ where: { id: row.id } })).toBe(0);
+    });
+
+    test("truncating the audit log is also blocked (checked in the catalog; not attempted on the real table)", async () => {
+        const rows = await prisma.$queryRaw<{ tgname: string }[]>`
+            SELECT tgname::text AS tgname FROM pg_trigger
+            WHERE tgrelid = '"AuditLog"'::regclass AND NOT tgisinternal ORDER BY tgname`;
+        expect(rows.map((r) => r.tgname)).toEqual(["audit_log_append_only", "audit_log_no_truncate"]);
     });
 });

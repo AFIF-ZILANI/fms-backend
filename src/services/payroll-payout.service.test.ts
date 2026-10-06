@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { EmployeePayoutAccountService } from "./employee-payout-account.service";
 import { PayrollPayoutService } from "./payroll-payout.service";
 import { PaymentInstrumentService } from "./payment-instrument.service";
+import { purgeAuditLog } from "@lib/test-fixtures";
 import {
     createPayrollPayoutSchema,
     markPaidSchema,
@@ -69,7 +70,7 @@ describe("Payout APIs", () => {
     });
 
     afterAll(async () => {
-        await prisma.auditLog.deleteMany({ where: { changed_by_id: approverId } });
+        await purgeAuditLog({ where: { changed_by_id: approverId } });
         await prisma.payment.deleteMany({ where: { from_instrument_id: instrumentId } });
         await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: approverId } });

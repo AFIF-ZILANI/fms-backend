@@ -2,6 +2,7 @@ import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { hashPassword } from "@lib/password";
 import { app } from "../App";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 // Drives the real app end to end: login -> cookie/bearer -> default-deny -> role guard.
 
@@ -43,7 +44,7 @@ const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 describe("authenticate", () => {
     afterAll(async () => {
-        await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
+        await purgeAuditLog({ where: { changed_by_id: { in: profileIds } } });
         await prisma.admins.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
     });

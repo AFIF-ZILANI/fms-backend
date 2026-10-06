@@ -137,14 +137,19 @@ duplicate mortality entry is discovered in production.
   are never edited — a correction is a new offsetting row. This needs to be enforced
   at the application layer (no `UPDATE`/`DELETE` code path exposed for these tables),
   since Postgres/Prisma won't stop a service function from doing it.
-- `AuditLog` covers the mutable tables (`Item`, `Batches`, `Employees`, `StockUnit`
-  status/location changes, etc.) where edits are legitimate and history still matters.
-  **Recommend a Prisma middleware** (`$use` / extension) that writes `AuditLog`
-  automatically on every update to a registered model, rather than scattering manual
-  audit-write calls through service code — a forgotten call is a silent gap, a
-  middleware can't be skipped by accident.
-- Nothing gets hard-deleted. `is_active` flags exist specifically so deactivating a
-  Profile/Item/Supplier/Customer never breaks a foreign key or destroys history.
+- `AuditLog` is the record of who did the sensitive things: password resets and changes,
+  hiring / termination, admin changes, payout confirmation, payout-account changes, salary
+  overrides and bonus grants. Rows are written inline by the service that performs the action
+  (`lib/audit.ts`), in the same transaction where there is one -- not by a Prisma middleware, which
+  would need request-scoped actor context that doesn't exist. A forgotten call is therefore a gap:
+  add an `audit()` call wherever a change needs to answer "who did that". The table is **append-only
+  at the database** (a trigger refuses UPDATE and TRUNCATE, and DELETE unless a session opts in --
+  only test cleanup does). That stops bugs and casual edits; against someone with database ownership
+  the real control is revoking UPDATE/DELETE from the role the app connects as.
+- Hard delete is for mistakes only. Every foreign key that points at history is `ON DELETE RESTRICT`,
+  so the database refuses to delete an item, house, warehouse, batch or profile that has history
+  attached; services also count first, to give a readable error. A thing that has been used is
+  deactivated instead (`is_active`).
 
 ## 7. What's still genuinely undecided
 

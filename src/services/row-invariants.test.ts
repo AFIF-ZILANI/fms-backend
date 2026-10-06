@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { EmployeePayoutAccountService } from "./employee-payout-account.service";
 import { EmployeeService } from "./employee.service";
 import { confirmIngestedSchema } from "@validators/ingest.validator";
+import { purgeAuditLog } from "@lib/test-fixtures";
 
 // Rules the database itself enforces, so a script, a manual fix or a future service can't write
 // the impossible row the current services happen to avoid.
@@ -49,7 +50,7 @@ describe("row invariants", () => {
 
     afterAll(async () => {
         // Payout accounts are audit-logged against the admin, and a profile with audit rows can't go.
-        await prisma.auditLog.deleteMany({ where: { changed_by_id: adminId } });
+        await purgeAuditLog({ where: { changed_by_id: adminId } });
         await prisma.performanceScoreEntry.deleteMany({ where: { employee_id: { in: employeeIds } } });
         await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: { in: employeeIds } } });
         await prisma.inventoryAdjustment.deleteMany({ where: { item_id: itemId } });

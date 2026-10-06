@@ -1,5 +1,6 @@
 // Helpers for tests that write to the shared dev database. Not imported by app code.
 import prisma from "@lib/db";
+import type { Prisma } from "../../prisma/generated/prisma/client";
 
 /** A house number that won't collide with a real house or another test's: numbers are unique per type. */
 export const houseNumber = () => 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
@@ -17,4 +18,16 @@ export async function sharedWarehouseId(): Promise<string> {
         // Two test files raced to create it; take the winner's.
         return (await prisma.warehouses.findFirstOrThrow({ where: { name: SHARED_WAREHOUSE }, select: { id: true } })).id;
     }
+}
+
+/**
+ * Deletes audit rows. The log is append-only at the database (a trigger), so test cleanup has to opt in:
+ * the flag is set for this one transaction only, never by app code.
+ */
+export async function purgeAuditLog(args: Prisma.AuditLogDeleteManyArgs) {
+    const [, result] = await prisma.$transaction([
+        prisma.$executeRaw`SELECT set_config('app.allow_audit_purge', 'on', true)`,
+        prisma.auditLog.deleteMany(args),
+    ]);
+    return result;
 }
