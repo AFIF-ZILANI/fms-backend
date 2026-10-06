@@ -638,6 +638,14 @@ recorded at that location (use a count correction); **400** if
 `item_id`/`warehouse_id`/`house_id` don't reference real rows (§1.7); **400** if
 neither `warehouse_id` nor `house_id` is given.
 
+### Deactivated items and houses
+
+Deactivating is how something that has been used is retired, and it has teeth: a **deactivated item**
+is refused (**400**) on consumption, transfers and sales, but can still be purchased. A **deactivated
+house** is refused on consumption, mortality logs, bird sales, and as the *destination* of a stock
+transfer or a bird move; stock and birds can still be moved **out** of it, which is how it is emptied.
+Hard delete is for mistakes only: the database refuses to delete anything with history attached.
+
 ### 6.8 Lookup tables — categories & units (formerly fixed enums)
 
 `Item.category`, `Item.unit`/`PurchaseItem.unit`/`SaleItem.unit`,

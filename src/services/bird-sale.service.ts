@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertHouseActive } from "@lib/active-guards";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -94,6 +95,7 @@ export const BirdSaleService = {
      * creates the sale as one unit, so a crash or a double-confirm can't leave a sale with no row
      * linked to it, or two sales for one weighing. */
     async createIn(tx: Prisma.TransactionClient, data: CreateBirdSaleInput) {
+        await assertHouseActive(tx, data.house_id);
         const total_amount = new Prisma.Decimal(data.net_weight).times(data.price_per_kg);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         // Discount is money knocked off at the point of sale, not money owed --

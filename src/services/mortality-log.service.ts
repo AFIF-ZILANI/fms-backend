@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -29,6 +30,7 @@ export const MortalityLogService = {
     async create(data: CreateMortalityLogInput) {
         try {
             return await prisma.$transaction(async (tx) => {
+                await assertHouseActive(tx, data.house_id);
                 // Guard and decrement are one statement: two concurrent logs can't both pass a
                 // check against the same stale balance, and a conflict writes nothing.
                 const { count } = await tx.batchHouseBalance.updateMany({

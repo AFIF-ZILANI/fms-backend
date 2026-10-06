@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toBaseQuantity } from "@lib/unit-conversion";
@@ -47,6 +48,8 @@ export const TransferService = {
                 // Stock sent to a location that doesn't exist is stock lost: it leaves the source
                 // and lands where nothing can ever read it.
                 await assertLocationExists(tx, data.to_location_type, data.to_location_id);
+                // Stock can leave a deactivated house (that is how it is emptied) but not go into one.
+                if (data.to_location_type === "HOUSE") await assertHouseActive(tx, data.to_location_id);
 
                 const available = await getItemLocationBalance(
                     tx,

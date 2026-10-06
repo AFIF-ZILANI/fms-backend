@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -49,6 +50,7 @@ export const ConsumptionService = {
     async create(data: CreateConsumptionInput) {
         try {
             return await prisma.$transaction(async (tx) => {
+                await assertHouseActive(tx, data.house_id);
                 const base_quantity = await toBaseQuantity(
                     tx,
                     data.item_id,

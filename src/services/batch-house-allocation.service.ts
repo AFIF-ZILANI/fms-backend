@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -28,6 +29,8 @@ export const BatchHouseAllocationService = {
     async create(data: CreateAllocationInput) {
         try {
             return await prisma.$transaction(async (tx) => {
+                // Birds can leave a deactivated house (that is how it gets emptied) but not move into one.
+                if (data.to_house_id !== undefined) await assertHouseActive(tx, data.to_house_id);
                 const batch = await tx.batches.findUnique({ where: { id: data.batch_id } });
                 if (!batch) throw AppError.notFound("Batch");
                 if (batch.status !== "RUNNING") throw AppError.conflict("Batch is not RUNNING");

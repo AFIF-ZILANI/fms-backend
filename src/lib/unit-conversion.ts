@@ -16,8 +16,16 @@ export async function toBaseQuantity(
     quantity: Prisma.Decimal | number,
     purpose: "PURCHASE" | "USABLE",
 ): Promise<Prisma.Decimal> {
-    const item = await tx.item.findUnique({ where: { id: item_id }, select: { unit: true } });
+    const item = await tx.item.findUnique({
+        where: { id: item_id },
+        select: { unit: true, is_active: true, name: true },
+    });
     if (!item) throw AppError.badRequest("item_id does not reference an existing record");
+    // A deactivated item can still be *purchased* (to settle or restock before reactivating) but takes no
+    // new use: consumption, transfers and sales all call this with USABLE.
+    if (purpose === "USABLE" && !item.is_active) {
+        throw AppError.badRequest(`${item.name} is deactivated -- reactivate it before using it`);
+    }
 
     const qty = new Prisma.Decimal(quantity);
     if (unit === item.unit) return qty;
