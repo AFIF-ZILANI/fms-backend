@@ -130,6 +130,27 @@ describe("authenticate", () => {
         expect(rows[0]!.changed_by_id).toBe(adm.id);
     });
 
+    test("the upload signature is always for the employees folder, whatever the caller asks", async () => {
+        const adm = await makePerson("ADMIN");
+        const token = (await mobileLogin(adm.email)).token;
+        const res = await app.request("/api/uploads/signature?folder=somewhere-else", {
+            headers: bearer(token),
+        });
+        expect(res.status).toBe(200);
+        expect(((await res.json()) as { data: { folder: string } }).data.folder).toBe("employees");
+    });
+
+    test("employees can only be (de)activated through terminate and reinstate", async () => {
+        const adm = await makePerson("ADMIN");
+        const token = (await mobileLogin(adm.email)).token;
+        const id = crypto.randomUUID();
+        for (const path of [`/api/employees/${id}/deactivate`, `/api/employees/${id}/reactivate`]) {
+            // JSON content type: CSRF (on outside dev) treats a bare POST as a form submission.
+            const res = await post(path, {}, bearer(token));
+            expect(res.status).toBe(404);
+        }
+    });
+
     test("a deactivated profile is cut off with its existing token", async () => {
         const { id, email } = await makePerson("ADMIN");
         const { token } = await mobileLogin(email);

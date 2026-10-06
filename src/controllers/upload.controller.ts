@@ -10,8 +10,9 @@ export const UploadController = {
      */
     async signature(c: Context) {
         return withHandler(c, async () => {
-            const folder = c.req.query("folder") || "employees";
-            return sendSuccess(c, buildUploadSignature(folder), "Upload signature issued");
+            // ponytail: one folder today. A caller-chosen folder would let anyone with a signature
+            // write anywhere in the Cloudinary account; add an allow-list when a second kind exists.
+            return sendSuccess(c, buildUploadSignature("employees"), "Upload signature issued");
         });
     },
 };

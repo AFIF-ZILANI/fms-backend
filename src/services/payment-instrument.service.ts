@@ -48,12 +48,27 @@ export const PaymentInstrumentService = {
     },
 
     async update(id: string, data: UpdatePaymentInstrumentInput) {
-        const instrument = await prisma.paymentInstrument.findUnique({ where: { id } });
+        const instrument = await prisma.paymentInstrument.findUnique({
+            where: { id },
+            include: { _count: { select: { payments_from: true, payments_to: true } } },
+        });
         if (!instrument) throw AppError.notFound("PaymentInstrument");
 
         const { type, label, bank_name, account_no, mobile_no, mfs_type } = data;
         if (!type && !label && !bank_name && !account_no && !mobile_no && !mfs_type) {
             throw AppError.badRequest("No update fields provided");
+        }
+
+        // Where the money goes is part of the money trail: once a payment has moved through
+        // this instrument, repointing it would rewrite history. Compared with the stored value
+        // because the web's edit form re-sends both fields on every save.
+        const changesIdentity =
+            (account_no !== undefined && account_no !== instrument.account_no) ||
+            (mobile_no !== undefined && mobile_no !== instrument.mobile_no);
+        if (changesIdentity && instrument._count.payments_from + instrument._count.payments_to > 0) {
+            throw AppError.conflict(
+                "This account has payment history -- create a new instrument and deactivate this one",
+            );
         }
 
         return prisma.paymentInstrument.update({

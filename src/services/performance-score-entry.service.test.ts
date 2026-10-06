@@ -28,12 +28,15 @@ describe("PerformanceScoreEntryService", () => {
             },
         });
         profileId = giverProfile.id;
+        // The giver doubles as the approver, and an approver has to be an admin.
+        await prisma.admins.create({ data: { profile_id: giverProfile.id } });
     });
 
     afterAll(async () => {
         await prisma.performanceScoreEntry.deleteMany({ where: { id: { in: createdIds } } });
         const employee = await prisma.employees.findUnique({ where: { id: employeeId } });
         await prisma.employees.delete({ where: { id: employeeId } });
+        await prisma.admins.deleteMany({ where: { profile_id: profileId } });
         await prisma.profiles.deleteMany({
             where: { id: { in: [employee!.profile_id, profileId] } },
         });
@@ -138,6 +141,20 @@ describe("PerformanceScoreEntryService", () => {
                 reason: "second other",
                 incident_date: month,
                 approved_by_id: profileId,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("an approver who isn't an admin is refused", async () => {
+        await expect(
+            PerformanceScoreEntryService.create({
+                employee_id: employeeId,
+                given_by_id: profileId,
+                criterion: "OTHER",
+                points: 1,
+                reason: "approved by a non-admin",
+                incident_date: new Date("2026-04-10T00:00:00Z"),
+                approved_by_id: (await prisma.employees.findUniqueOrThrow({ where: { id: employeeId } })).profile_id,
             }),
         ).rejects.toMatchObject({ status: 400 });
     });

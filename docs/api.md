@@ -355,8 +355,11 @@ fields.
 | GET | `/api/employees/:id` | 200 | — |
 | POST | `/api/employees` | 201 | `{ name, mobile, email?, address?, role, salary, joining_date? }` |
 | PATCH | `/api/employees/:id` | 200 | `{ name?, mobile?, email?, address?, role?, salary?, rating? }` |
-| POST | `/api/employees/:id/deactivate` | 200 | — |
-| POST | `/api/employees/:id/reactivate` | 200 | — |
+| POST | `/api/employees/:id/terminate`, `/api/employees/:id/reinstate` | 200 | — — the only way to end or restore employment: they move `employment_status` and the profile's `is_active` together (there is no separate deactivate) |
+| POST | `/api/employees/:id/reset-password` | 200 | — — admin only; returns a new one-time `temp_password` |
+
+`GET /api/employees` is the roster: it omits the personal file (NID, date of birth,
+emergency and reference contacts, religion). `GET /api/employees/:id` returns all of it.
 
 `role` is `EmployeeRoleNames`. `salary` is the baseline used by payroll
 (§12) — changing it here only affects *future* `PayrollRecord.generate`

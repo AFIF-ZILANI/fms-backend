@@ -18,6 +18,18 @@ function hashToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
 }
 
+/** Everything a client may see of a device. Never token_hash. */
+const deviceSelect = {
+    id: true,
+    profile_id: true,
+    label: true,
+    platform: true,
+    last_seen_at: true,
+    revoked_at: true,
+    created_at: true,
+    profile: { select: { id: true, name: true } },
+} as const;
+
 export const DeviceService = {
     async createPairingCode(profile_id: string) {
         try {
@@ -90,15 +102,16 @@ export const DeviceService = {
     },
 
     async listDevices() {
-        return prisma.device.findMany({
-            orderBy: { created_at: "desc" },
-            include: { profile: { select: { id: true, name: true } } },
-        });
+        return prisma.device.findMany({ orderBy: { created_at: "desc" }, select: deviceSelect });
     },
 
     async revoke(id: string) {
         const device = await prisma.device.findUnique({ where: { id } });
         if (!device) throw AppError.notFound("Device");
-        return prisma.device.update({ where: { id }, data: { revoked_at: new Date() } });
+        return prisma.device.update({
+            where: { id },
+            data: { revoked_at: new Date() },
+            select: deviceSelect,
+        });
     },
 };

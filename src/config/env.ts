@@ -26,6 +26,12 @@ const envSchema = z.object({
 
     // ── Security ────────────────────────────────────────────────────────────
     TIMEOUT_MS: z.coerce.number().default(30_000),
+    // Set true only behind a reverse proxy that overwrites X-Forwarded-For. Otherwise the header
+    // is client-supplied, and trusting it lets anyone pick their own rate-limit bucket.
+    TRUST_PROXY: z
+        .string()
+        .default("false")
+        .transform((v) => v === "true"),
     // Signs session tokens. Rotating it signs everyone out.
     SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
     CSRF_ENABLED: z

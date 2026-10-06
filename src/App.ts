@@ -6,6 +6,8 @@ import { timeout } from "hono/timeout";
 import { rateLimiter } from "hono-rate-limiter";
 import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
+import { getConnInfo } from "hono/bun";
+import type { Context } from "hono";
 
 import { appRoutes } from "./routes/index";
 import { authenticate } from "./middlewares/authenticate";
@@ -63,12 +65,24 @@ app.use(
 app.use("*", timeout(env.TIMEOUT_MS));
 
 // --- Rate Limiting ---
+// Keyed on the socket address. X-Forwarded-For is the client's to set, so it is only believed
+// behind a proxy that rewrites it (TRUST_PROXY). With no socket (tests, the node fallback) every
+// caller shares one bucket, which is the conservative failure.
+const clientKey = (c: Context): string => {
+    if (env.TRUST_PROXY) return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    try {
+        return getConnInfo(c).remote.address ?? "unknown";
+    } catch {
+        return "unknown";
+    }
+};
+
 app.use(
     "*",
     rateLimiter({
         windowMs: env.RATE_LIMIT_WINDOW_MS,
         limit: env.RATE_LIMIT_MAX,
-        keyGenerator: (c) => c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown",
+        keyGenerator: clientKey,
     }),
 );
 

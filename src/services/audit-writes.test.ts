@@ -93,11 +93,9 @@ describe("audit writes", () => {
         expect(JSON.stringify(await rowsFor("Admins", a!.id))).not.toContain(temp_password);
     });
 
-    test("hiring, resetting, deactivating and terminating an employee are recorded", async () => {
+    test("hiring, resetting, terminating and reinstating an employee are recorded", async () => {
         const e = await hire();
         const reset = await EmployeeService.resetPassword(e.id, actorId);
-        await EmployeeService.setActive(e.id, false, actorId);
-        await EmployeeService.setActive(e.id, true, actorId);
         await EmployeeService.terminate(e.id, actorId);
         await EmployeeService.reinstate(e.id, actorId);
 
@@ -105,8 +103,6 @@ describe("audit writes", () => {
         expect(rows.map((r) => r.note)).toEqual([
             "Employee hired, login created",
             "Password reset",
-            "Login deactivated",
-            "Login reactivated",
             "Employment terminated",
             "Employee reinstated",
         ]);

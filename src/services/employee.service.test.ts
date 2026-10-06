@@ -161,15 +161,37 @@ describe("EmployeeService", () => {
         expect(promoted!.rating).toBe(4.5);
     });
 
-    test("setActive(false) then setActive(true) round-trips is_active", async () => {
+    test("the roster leaves out the personal file; the single record keeps it", async () => {
+        const unique = `Pii${Math.floor(Math.random() * 1e6)}`;
+        const employee = await EmployeeService.create(hire({ name: `${unique} Worker` }));
+        track(employee!);
+
+        const { employees } = await EmployeeService.getAll({ page: 1, limit: 50, q: unique });
+        const row = employees.find((e) => e.id === employee!.id)!;
+        for (const secret of ["nid_number", "date_of_birth", "emergency_phone", "emergency_name", "reference_phone"]) {
+            expect(secret in row).toBe(false);
+        }
+        // What the roster and pickers do read is still there.
+        expect(row.profile.name).toBe(`${unique} Worker`);
+        expect(row.role).toBe("WORKER");
+        expect(row.employment_status).toBeDefined();
+
+        const full = await EmployeeService.getById(employee!.id);
+        expect(full.nid_number).toBe("1990123456789");
+        expect(full.emergency_phone).toBe("+8801710000000");
+    });
+
+    test("terminate and reinstate move employment and the login together", async () => {
         const employee = await EmployeeService.create(hire({ name: "Togglable", role: "WORKER", reference_salary: 9000 }));
         track(employee!);
 
-        const deactivated = await EmployeeService.setActive(employee!.id, false);
-        expect(deactivated.profile.is_active).toBe(false);
+        const gone = await EmployeeService.terminate(employee!.id);
+        expect(gone.employment_status).toBe("TERMINATED");
+        expect(gone.profile.is_active).toBe(false);
 
-        const reactivated = await EmployeeService.setActive(employee!.id, true);
-        expect(reactivated.profile.is_active).toBe(true);
+        const back = await EmployeeService.reinstate(employee!.id);
+        expect(back.employment_status).toBe("APPOINTED");
+        expect(back.profile.is_active).toBe(true);
     });
 
     test("an employee created without a salary uses their role's standard", async () => {
@@ -466,7 +488,9 @@ describe("EmployeeService", () => {
         for (const e of [active, inactive]) {
             track(e!);
         }
-        await EmployeeService.setActive(inactive!.id, false);
+        // An inactive profile with no employment change is what the filter is about; set it directly
+        // (the API only moves the two together, via terminate).
+        await prisma.profiles.update({ where: { id: inactive!.profile_id }, data: { is_active: false } });
 
         const { employees } = await EmployeeService.getAll({
             page: 1,

@@ -75,18 +75,4 @@ export const EmployeeController = {
             return sendSuccess(c, employee, "Employee reinstated");
         });
     },
-
-    async deactivate(c: Context) {
-        return withHandler(c, async () => {
-            const employee = await EmployeeService.setActive(c.req.param("id") ?? "", false, await getActorId(c));
-            return sendSuccess(c, employee, "Employee deactivated");
-        });
-    },
-
-    async reactivate(c: Context) {
-        return withHandler(c, async () => {
-            const employee = await EmployeeService.setActive(c.req.param("id") ?? "", true, await getActorId(c));
-            return sendSuccess(c, employee, "Employee reactivated");
-        });
-    },
 };

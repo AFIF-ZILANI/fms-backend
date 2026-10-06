@@ -64,6 +64,44 @@ describe("PaymentInstrumentService", () => {
         await prisma.payment.delete({ where: { id: payment.id } });
     });
 
+    test("once money has moved through an instrument its account can't be repointed", async () => {
+        const instrument = await PaymentInstrumentService.create({
+            owner_type: "ADMIN",
+            owner_id: crypto.randomUUID(),
+            type: "BANK_TRANSFER",
+            label: `Locked Bank ${crypto.randomUUID()}`,
+            account_no: "1111111111",
+        });
+        createdIds.push(instrument.id);
+
+        // No history yet: the number can still be corrected.
+        await PaymentInstrumentService.update(instrument.id, { account_no: "2222222222" });
+
+        const payment = await prisma.payment.create({
+            data: {
+                amount: 100,
+                payment_date: new Date(),
+                direction: "OUTGOING",
+                ref_type: "EXPENSE",
+                ref_id: crypto.randomUUID(),
+                from_instrument_id: instrument.id,
+            },
+        });
+
+        await expect(
+            PaymentInstrumentService.update(instrument.id, { account_no: "9999999999" }),
+        ).rejects.toMatchObject({ status: 409 });
+        // The web re-sends the unchanged number on every save, and a rename is harmless.
+        const saved = await PaymentInstrumentService.update(instrument.id, {
+            account_no: "2222222222",
+            label: "Renamed Bank",
+        });
+        expect(saved.label).toBe("Renamed Bank");
+        expect(saved.account_no).toBe("2222222222");
+
+        await prisma.payment.delete({ where: { id: payment.id } });
+    });
+
     test("getById on unknown id throws not-found", async () => {
         await expect(
             PaymentInstrumentService.getById("00000000-0000-0000-0000-000000000000"),

@@ -13,6 +13,23 @@ import type {
     ListEmployeesQuery,
 } from "@validators/employee.validator";
 
+/** What the roster and the pickers read. The list is the broadest read of employee data, so it
+ * leaves out the personal file (NID, date of birth, emergency and reference contacts); the single
+ * employee endpoint still returns all of it. */
+const listSelect = {
+    id: true,
+    profile_id: true,
+    role: true,
+    employment_status: true,
+    probation_end_date: true,
+    joining_date: true,
+    terminated_at: true,
+    rating: true,
+    reference_salary: true,
+    created_at: true,
+    profile: { select: { id: true, name: true, mobile: true, is_active: true, avatar: true } },
+} as const;
+
 const include = {
     profile: { include: { avatar: true } },
     // Just enough to name an in-house reference on the detail page -- the full
@@ -60,7 +77,7 @@ export const EmployeeService = {
         const [employees, total] = await Promise.all([
             prisma.employees.findMany({
                 where,
-                include,
+                select: listSelect,
                 orderBy: { created_at: "desc" },
                 ...toSkipTake(query),
             }),
@@ -438,22 +455,6 @@ export const EmployeeService = {
                   ]
                 : []),
         ]);
-        return this.getById(id);
-    },
-
-    async setActive(id: string, is_active: boolean, actor_id?: string) {
-        const employee = await prisma.employees.findUnique({ where: { id } });
-        if (!employee) throw AppError.notFound("Employee");
-        await prisma.profiles.update({ where: { id: employee.profile_id }, data: { is_active } });
-        if (actor_id) {
-            await audit(prisma, {
-                table: "Employees",
-                record_id: id,
-                action: "UPDATE",
-                actor_id,
-                note: is_active ? "Login reactivated" : "Login deactivated",
-            });
-        }
         return this.getById(id);
     },
 };

@@ -115,6 +115,15 @@ export const PerformanceScoreEntryService = {
             }
         }
 
+        // Approval is an admin's act. Until it is stamped from the session, at least refuse a
+        // profile that isn't one.
+        if (data.approved_by_id !== undefined) {
+            const approver = await prisma.admins.findUnique({
+                where: { profile_id: data.approved_by_id },
+            });
+            if (!approver) throw AppError.badRequest("approved_by_id must be an admin");
+        }
+
         try {
             return await prisma.performanceScoreEntry.create({
                 data: {

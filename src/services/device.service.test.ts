@@ -60,6 +60,20 @@ describe("DeviceService", () => {
         expect(await DeviceService.resolveToken(paired.token)).toBeNull();
     });
 
+    test("listing and revoking never expose the token hash", async () => {
+        const { code } = await DeviceService.createPairingCode(profileId);
+        const paired = await DeviceService.redeemPairingCode(code, "Hash phone", "android");
+
+        const listed = (await DeviceService.listDevices()).find((d) => d.id === paired.device_id);
+        expect(listed).toBeDefined();
+        expect("token_hash" in listed!).toBe(false);
+        expect(listed!.profile.name).toBe("Device Test Operator");
+
+        const revoked = await DeviceService.revoke(paired.device_id);
+        expect("token_hash" in revoked).toBe(false);
+        expect(revoked.revoked_at).not.toBeNull();
+    });
+
     test("resolveToken refuses a token that was never issued", async () => {
         expect(await DeviceService.resolveToken("not-a-real-token")).toBeNull();
     });
