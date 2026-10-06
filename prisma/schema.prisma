@@ -1061,13 +1061,18 @@ model WeightRecords {
   house            Houses   @relation(fields: [house_id], references: [id])
   average_wt_grams Decimal  @db.Decimal(10, 2)
   sample_size      Int
-  date             DateTime
+  // The farm-local day of the weighing (Asia/Dhaka, set by the service). A day, not a timestamp: the
+  // unique below only means "one sample per day" if the same day is the same key.
+  date             DateTime @db.Date
   measured_by_id   String
   measured_by      Profiles @relation(fields: [measured_by_id], references: [id])
   created_at       DateTime @default(now())
   idempotency_key  String   @unique // client-generated; prevents double-insert on offline sync retry
 
   @@unique([batch_id, house_id, date])
+  // A composite unique can't see NULLs (each NULL batch_id is "different"), so an empty-house weighing
+  // needs its own: one per house per day when there is no batch.
+  @@unique([house_id, date], where: raw("batch_id IS NULL"), map: "WeightRecords_house_date_nobatch_key")
 }
 
 model BatchFeedingProgram {

@@ -884,6 +884,8 @@ reference real rows (§1.7). No 409s — no unique constraint.
 | GET | `/api/weight-records` | 200 | query: `batch_id?`, `house_id?` |
 | POST | `/api/weight-records` | 201 | `{ batch_id?, house_id, average_wt_grams, sample_size: positive int, date, measured_by_id, idempotency_key? }` |
 
+`date` is stored as the farm-local day (Asia/Dhaka): send any instant (or `YYYY-MM-DD`) and the server files it under that day. One sample per batch + house per day, and one per house per day when there is no batch; a second is a **409**.
+
 `(batch_id, house_id, date)` is unique — a second sample logged for the same
 batch+house+day 409s instead of silently overwriting. If retrying a failed
 submission, don't just resend the same date; surface the 409 as "already

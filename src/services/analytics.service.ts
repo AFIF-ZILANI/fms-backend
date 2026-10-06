@@ -68,7 +68,7 @@ export const AnalyticsService = {
         const died = totalDied._sum.count_died ?? 0;
         const latestWeight = await prisma.weightRecords.findFirst({
             where: { batch_id: batchId },
-            orderBy: { date: "desc" },
+            orderBy: [{ date: "desc" }, { created_at: "desc" }],
         });
 
         return {
@@ -104,7 +104,9 @@ export const AnalyticsService = {
             }),
             prisma.weightRecords.findMany({
                 where: { batch_id: { in: batchIds } },
-                orderBy: { date: "desc" },
+                // Several houses can be weighed on one day now that date is a day, not a timestamp;
+                // the most recently entered sample wins the tie.
+                orderBy: [{ date: "desc" }, { created_at: "desc" }],
                 select: { batch_id: true, average_wt_grams: true, date: true },
             }),
         ]);
