@@ -4,7 +4,6 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemBalances } from "@lib/stock-balance";
 import { getItemAvgCosts } from "@lib/stock-value";
-import { PaymentInstrumentService } from "@services/payment-instrument.service";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
 // Reporting is deliberately read-only against every other module's tables
@@ -223,9 +222,26 @@ export const AnalyticsService = {
             birdSalesDue._sum.due_amount ?? new Prisma.Decimal(0),
         ); // raw Prisma.Decimal, not .toString()'d -- matches every sibling
 
-        const balances = await Promise.all(
-            instruments.map((inst) => PaymentInstrumentService.getBalance(inst.id)),
-        );
+        // Two grouped queries for every instrument at once, not three queries per instrument.
+        const ids = instruments.map((i) => i.id);
+        const [inRows, outRows] = await Promise.all([
+            prisma.payment.groupBy({
+                by: ["to_instrument_id"],
+                where: { to_instrument_id: { in: ids } },
+                _sum: { amount: true },
+            }),
+            prisma.payment.groupBy({
+                by: ["from_instrument_id"],
+                where: { from_instrument_id: { in: ids } },
+                _sum: { amount: true },
+            }),
+        ]);
+        const zero = new Prisma.Decimal(0);
+        const inBy = new Map(inRows.map((r) => [r.to_instrument_id, r._sum.amount ?? zero]));
+        const outBy = new Map(outRows.map((r) => [r.from_instrument_id, r._sum.amount ?? zero]));
+        const balances = ids.map((id) => ({
+            balance: (inBy.get(id) ?? zero).minus(outBy.get(id) ?? zero),
+        }));
         const cashPosition = balances.reduce(
             (sum, b) => sum.plus(b.balance),
             new Prisma.Decimal(0),

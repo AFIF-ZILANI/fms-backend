@@ -36,7 +36,7 @@ export const StockLedgerService = {
         const [entries, total] = await Promise.all([
             prisma.stockLedger.findMany({
                 where,
-                include: { item: true },
+                include: { item: { select: { id: true, name: true, unit: true } } },
                 orderBy: { occurred_at: "desc" },
                 ...toSkipTake(query),
             }),

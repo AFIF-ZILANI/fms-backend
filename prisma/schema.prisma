@@ -501,8 +501,6 @@ model Profiles {
   pairingCodes            PairingCode[]
   ingestedSales           IngestedSale[]
   ingestedSalesReviewed   IngestedSale[]         @relation("IngestedSaleReviewer")
-
-  @@index([role])
 }
 
 model Employees {
@@ -854,6 +852,7 @@ model PurchaseItem {
 
   stockUnits StockUnit[]
 
+  @@index([purchase_id])
   @@index([item_id])
   @@index([batch_id])
 }
@@ -969,6 +968,8 @@ model Consumption {
 
   @@index([batch_id])
   @@index([house_id, date])
+  @@index([item_id, date])
+  @@index([date])
   @@index([stock_unit_id])
 }
 
@@ -1088,7 +1089,10 @@ model StockLedger {
   occurred_at     DateTime       @default(now())
 
   @@index([item_id, occurred_at])
+  // kept for traceability: "the ledger rows for this purchase line / transfer / adjustment"
   @@index([ref_type, ref_id])
+  @@index([location_type, location_id, item_id])
+  @@index([occurred_at])
 }
 
 model InventoryAdjustment {
@@ -1136,7 +1140,6 @@ model StockTransfer {
   stockHouseAllocations StockHouseAllocation[]
 
   @@index([item_id])
-  @@index([to_location_type, to_location_id])
 }
 
 model Warehouses {
@@ -1259,7 +1262,6 @@ model Expense {
   created_at     DateTime              @default(now())
 
   @@index([batch_id, date])
-  @@index([cost_type])
 }
 
 model Payment {
@@ -1280,6 +1282,8 @@ model Payment {
   created_at         DateTime           @default(now())
 
   @@index([ref_type, ref_id])
+  @@index([from_instrument_id])
+  @@index([to_instrument_id])
 }
 
 model PaymentInstrument {
