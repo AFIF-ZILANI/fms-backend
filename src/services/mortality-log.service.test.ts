@@ -70,6 +70,43 @@ describe("MortalityLogService", () => {
         expect(balance?.quantity).toBe(985);
     });
 
+    test("ten concurrent logs against a balance that fits six: exactly six land, none overdraw", async () => {
+        const batch = await newRunningBatch(100);
+        const log = () =>
+            MortalityLogService.create({
+                batch_id: batch.id,
+                house_id: houseId,
+                count_died: 15,
+                date: new Date(),
+                recorded_by_id: profileId,
+            });
+
+        const results = await Promise.allSettled(Array.from({ length: 10 }, log));
+        // A read-then-check lets several pass against the same stale balance.
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(6);
+        // The losers get the clean conflict, not a raw constraint violation from the database.
+        for (const r of results) {
+            if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
+        }
+
+        const balance = await prisma.batchHouseBalance.findUnique({
+            where: { batch_id_house_id: { batch_id: batch.id, house_id: houseId } },
+        });
+        expect(balance?.quantity).toBe(10);
+        expect(await prisma.mortalityLog.count({ where: { batch_id: batch.id } })).toBe(6);
+    });
+
+    test("the database itself refuses a negative house balance", async () => {
+        const batch = await newRunningBatch(10);
+        await expect(
+            (async () =>
+                prisma.batchHouseBalance.update({
+                    where: { batch_id_house_id: { batch_id: batch.id, house_id: houseId } },
+                    data: { quantity: -1 },
+                }))(),
+        ).rejects.toThrow();
+    });
+
     test("mortality exceeding live balance throws a conflict and doesn't write a log row", async () => {
         const batch = await newRunningBatch(10);
 

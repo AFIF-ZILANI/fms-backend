@@ -49,7 +49,10 @@ export const BatchController = {
     async close(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CloseBatchInput>(c, "json");
-            const batch = await BatchService.close(c.req.param("id") ?? "", body);
+            const batch = await BatchService.close(c.req.param("id") ?? "", {
+                ...body,
+                recorded_by_id: await getActorId(c),
+            });
             return sendSuccess(c, batch, "Batch closed");
         });
     },

@@ -122,7 +122,7 @@ describe("markEmptiedHousesCleaning", () => {
         const house = await newHouse("Turnaround Closed", 305);
         const batch = await newBatchIn(house.id, 80);
 
-        await BatchService.close(batch.id, { status: "SOLD", force: true });
+        await BatchService.close(batch.id, { status: "SOLD", force: true, recorded_by_id: profileId });
 
         expect(await phaseOf(house.id)).toBe("CLEANING");
     });

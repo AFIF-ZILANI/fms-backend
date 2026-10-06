@@ -38,5 +38,7 @@ export const listBatchesQuerySchema = paginationQuerySchema.extend({
 
 export type CreateBatchInput = z.infer<typeof createBatchSchema> & { recorded_by_id: string };
 export type UpdateBatchInput = z.infer<typeof updateBatchSchema>;
-export type CloseBatchInput = z.infer<typeof closeBatchSchema>;
+// recorded_by_id is stamped by the controller from the session -- a force-close writes
+// adjustment events, which need an actor.
+export type CloseBatchInput = z.infer<typeof closeBatchSchema> & { recorded_by_id: string };
 export type ListBatchesQuery = z.infer<typeof listBatchesQuerySchema>;

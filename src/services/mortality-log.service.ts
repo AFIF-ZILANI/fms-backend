@@ -29,12 +29,17 @@ export const MortalityLogService = {
     async create(data: CreateMortalityLogInput) {
         try {
             return await prisma.$transaction(async (tx) => {
-                const balance = await tx.batchHouseBalance.findUnique({
+                // Guard and decrement are one statement: two concurrent logs can't both pass a
+                // check against the same stale balance, and a conflict writes nothing.
+                const { count } = await tx.batchHouseBalance.updateMany({
                     where: {
-                        batch_id_house_id: { batch_id: data.batch_id, house_id: data.house_id },
+                        batch_id: data.batch_id,
+                        house_id: data.house_id,
+                        quantity: { gte: data.count_died },
                     },
+                    data: { quantity: { decrement: data.count_died } },
                 });
-                if (!balance || balance.quantity < data.count_died) {
+                if (count === 0) {
                     throw AppError.conflict("Mortality count exceeds live birds in this house");
                 }
 
@@ -48,11 +53,6 @@ export const MortalityLogService = {
                         idempotency_key: data.idempotency_key ?? crypto.randomUUID(),
                         ...(data.cause_note !== undefined && { cause_note: data.cause_note }),
                     },
-                });
-
-                await tx.batchHouseBalance.update({
-                    where: { id: balance.id },
-                    data: { quantity: { decrement: data.count_died } },
                 });
 
                 return log;

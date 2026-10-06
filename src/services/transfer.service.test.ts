@@ -52,6 +52,40 @@ describe("TransferService", () => {
         return { item, warehouse, house, houseTwo, profile };
     }
 
+    test("two concurrent transfers that together exceed warehouse stock: one lands, none overdraw", async () => {
+        const { item, warehouse, house, profile } = await makeFixtures();
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
+                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE", location_id: warehouse.id,
+            },
+        });
+        const move = () =>
+            TransferService.create({
+                item_id: item.id,
+                from_location_type: "WAREHOUSE",
+                from_location_id: warehouse.id,
+                to_location_type: "HOUSE",
+                to_location_id: house.id,
+                quantity: 70,
+                unit: "G",
+                recorded_by_id: profile.id,
+            });
+
+        const results = await Promise.allSettled([move(), move()]);
+        for (const r of results) if (r.status === "fulfilled") createdTransferIds.push(r.value!.id);
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+
+        // 100 - 70 = 30 left; without the lock both would pass the check and leave -40.
+        const out = await prisma.stockLedger.aggregate({
+            where: { item_id: item.id, location_type: "WAREHOUSE", direction: "OUT" },
+            _sum: { quantity: true },
+        });
+        expect(out._sum.quantity?.toNumber()).toBe(70);
+    });
+
     test("posts a WAREHOUSE OUT and a HOUSE IN entry, both tagged TRANSFER, sharing one ref_id", async () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.stockLedger.create({

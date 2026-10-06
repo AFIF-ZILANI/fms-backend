@@ -127,13 +127,15 @@ export const PaymentService = {
         return payment;
     },
 
-    /** Refuses to overpay a record, inside a transaction so two concurrent
-     * payments can't both pass the check. This is what keeps every row's
+    /** Refuses to overpay a record. The outstanding balance is a sum with no row to lock, so
+     * the transaction takes an advisory lock on the record first: a concurrent payment waits,
+     * then sees what this one paid. This is what keeps every row's
      * outstanding balance >= 0, which in turn is what lets the list summaries
      * compute total due as two scalar sums instead of per-row clamped math. */
     async create(data: CreatePaymentInput) {
         try {
             return await prisma.$transaction(async (tx) => {
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${data.ref_id}, 0))`;
                 if (data.ref_type === "EXPENSE") {
                     // Wage and fee expenses are settled by their payout's own PAYROLL Payment;
                     // paying them here as well would send the money out twice.

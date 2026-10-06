@@ -94,12 +94,16 @@ export const BirdSaleService = {
 
         try {
             return await prisma.$transaction(async (tx) => {
-                const balance = await tx.batchHouseBalance.findUnique({
+                // One conditional UPDATE is the guard and the decrement (see MortalityLog).
+                const { count } = await tx.batchHouseBalance.updateMany({
                     where: {
-                        batch_id_house_id: { batch_id: data.batch_id, house_id: data.house_id },
+                        batch_id: data.batch_id,
+                        house_id: data.house_id,
+                        quantity: { gte: data.birds_count },
                     },
+                    data: { quantity: { decrement: data.birds_count } },
                 });
-                if (!balance || balance.quantity < data.birds_count) {
+                if (count === 0) {
                     throw AppError.conflict("Sale quantity exceeds live birds in this house");
                 }
 
@@ -130,10 +134,6 @@ export const BirdSaleService = {
                     },
                 });
 
-                await tx.batchHouseBalance.update({
-                    where: { id: balance.id },
-                    data: { quantity: { decrement: data.birds_count } },
-                });
                 await markEmptiedHousesCleaning(tx, [data.house_id]);
 
                 return birdSale;

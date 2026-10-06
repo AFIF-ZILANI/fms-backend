@@ -275,6 +275,22 @@ describe("PaymentService", () => {
         ).rejects.toThrow("exceeds the outstanding balance");
     });
 
+    test("ten concurrent payments against a balance that fits six: exactly six land", async () => {
+        const id = await makeSale(100);
+        const pay = () =>
+            PaymentService.create({
+                amount: 15,
+                payment_date: new Date(),
+                ref_type: "SALE",
+                ref_id: id,
+                from_instrument_id: fromInstrumentId,
+            });
+
+        const results = await Promise.allSettled(Array.from({ length: 10 }, pay));
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(6);
+        expect((await PaymentService.outstandingForRef("SALE", id)).toString()).toBe("10");
+    });
+
     test("rejects a payment against a ref_id that does not exist", async () => {
         await expect(
             PaymentService.create({

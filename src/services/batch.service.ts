@@ -141,9 +141,24 @@ export const BatchService = {
 
         return prisma.$transaction(async (tx) => {
             // force:true can close with birds still on the books -- a CLOSED batch has none live,
-            // so zero the balances too or its houses stay "occupied" forever (see model comment).
-            if (remaining !== 0) {
-                await tx.batchHouseBalance.updateMany({ where: { batch_id: id }, data: { quantity: 0 } });
+            // so take them off the books or its houses stay "occupied" forever (see model
+            // comment). Each house gets an ADJUSTMENT allocation (no destination = birds
+            // removed), so the movement history still adds up to the balance instead of the
+            // balance being zeroed out from under it. The key makes a retry a no-op.
+            for (const b of batch.houseBalances.filter((b) => b.quantity > 0)) {
+                await tx.batchHouseAllocation.upsert({
+                    where: { idempotency_key: `force-close:${id}:${b.house_id}` },
+                    update: {},
+                    create: {
+                        batch_id: id,
+                        from_house_id: b.house_id,
+                        quantity: b.quantity,
+                        reason: "ADJUSTMENT",
+                        recorded_by_id: data.recorded_by_id,
+                        idempotency_key: `force-close:${id}:${b.house_id}`,
+                    },
+                });
+                await tx.batchHouseBalance.update({ where: { id: b.id }, data: { quantity: 0 } });
             }
             const vacated = await tx.batchHouseBalance.findMany({
                 where: { batch_id: id },

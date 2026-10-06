@@ -107,17 +107,19 @@ export async function getStockByLocation(): Promise<
 
 /** Same balance as getLocationStock, for one item at one location, inside an in-flight
  * transaction -- for a write that needs to validate against the current balance before
- * posting (Transfer checking warehouse stock, Consumption checking house stock). Reading
- * inside the same transaction as the write narrows the window vs. a pre-transaction read;
- * it is not serializable under Postgres READ COMMITTED (Prisma's interactive transaction
- * default), so a concurrent write can still oversubscribe in principle -- same accepted
- * risk as the existing coded StockUnit draw path. */
+ * posting (Transfer checking warehouse stock, Consumption checking house stock).
+ *
+ * The balance is a sum with no row to lock, and READ COMMITTED lets two transactions both
+ * read the same sum. So this takes a transaction-scoped advisory lock keyed on the
+ * item and place first: a second writer waits here until the first commits, then reads the
+ * balance the first one left. Callers must read and then write in the same `tx`. */
 export async function getItemLocationBalance(
     tx: Prisma.TransactionClient,
     item_id: string,
     location_type: "WAREHOUSE" | "HOUSE",
     location_id: string,
 ): Promise<Prisma.Decimal> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${item_id}:${location_type}:${location_id}`}, 0))`;
     const sums = await tx.stockLedger.groupBy({
         by: ["direction"],
         where: { item_id, location_type, location_id },

@@ -133,7 +133,7 @@ describe("BatchHouseAllocationService", () => {
 
     test("allocation on a non-RUNNING batch throws a conflict", async () => {
         const batch = await newRunningBatch(150);
-        await BatchService.close(batch.id, { status: "CLOSED", force: true });
+        await BatchService.close(batch.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
 
         await expect(
             BatchHouseAllocationService.create({

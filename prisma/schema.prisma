@@ -718,8 +718,12 @@ model BatchHouseBalance {
   updated_at DateTime @updatedAt
   // Cached count. MUST be updated in the same transaction as any BatchHouseAllocation,
   // MortalityLog, or BirdSale insert that touches this batch+house — those are the only
-  // three things that can change it now that generic house events are gone. If it's ever
-  // updated out of band, it will drift and nobody will notice until the numbers are wrong.
+  // three things that can change it now that generic house events are gone (a force-close
+  // writes ADJUSTMENT allocations for the same reason). If it's ever updated out of band,
+  // it will drift and nobody will notice until the numbers are wrong.
+  // Decrement with `updateMany where quantity >= n` so the check and the write are one
+  // statement. A CHECK (quantity >= 0), added in a hand-written migration because Prisma
+  // can't express it, is the backstop.
 
   @@unique([batch_id, house_id])
   @@index([house_id])

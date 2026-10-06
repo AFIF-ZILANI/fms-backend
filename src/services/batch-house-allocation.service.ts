@@ -48,18 +48,17 @@ export const BatchHouseAllocationService = {
 
                 if (data.from_house_id !== undefined) {
                     const fromHouseId = data.from_house_id;
-                    const balance = await tx.batchHouseBalance.findUnique({
+                    const { count } = await tx.batchHouseBalance.updateMany({
                         where: {
-                            batch_id_house_id: { batch_id: data.batch_id, house_id: fromHouseId },
+                            batch_id: data.batch_id,
+                            house_id: fromHouseId,
+                            quantity: { gte: data.quantity },
                         },
-                    });
-                    if (!balance || balance.quantity < data.quantity) {
-                        throw AppError.conflict("Insufficient birds in source house for this move");
-                    }
-                    await tx.batchHouseBalance.update({
-                        where: { id: balance.id },
                         data: { quantity: { decrement: data.quantity } },
                     });
+                    if (count === 0) {
+                        throw AppError.conflict("Insufficient birds in source house for this move");
+                    }
                     await markEmptiedHousesCleaning(tx, [fromHouseId]);
                 }
 

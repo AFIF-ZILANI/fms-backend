@@ -118,7 +118,7 @@ describe("BatchService", () => {
         });
         createdBatchIds.push(batch!.id);
 
-        await expect(BatchService.close(batch!.id, { status: "CLOSED" })).rejects.toMatchObject({
+        await expect(BatchService.close(batch!.id, { status: "CLOSED", recorded_by_id: profileId })).rejects.toMatchObject({
             status: 409,
         });
     });
@@ -135,7 +135,7 @@ describe("BatchService", () => {
         });
         createdBatchIds.push(batch!.id);
 
-        const closed = await BatchService.close(batch!.id, { status: "CLOSED", force: true });
+        const closed = await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
         expect(closed.status).toBe("CLOSED");
         expect(closed.actual_end_date).not.toBeNull();
 
@@ -145,6 +145,19 @@ describe("BatchService", () => {
             where: { batch_id_house_id: { batch_id: batch!.id, house_id: houseId } },
         });
         expect(balance!.quantity).toBe(0);
+
+        // ...and not out of band: an ADJUSTMENT allocation takes the birds off the books, so
+        // placed (+300) and removed (-300) still reconcile to the zero balance.
+        const adjustments = await prisma.batchHouseAllocation.findMany({
+            where: { batch_id: batch!.id, reason: "ADJUSTMENT" },
+        });
+        expect(adjustments).toHaveLength(1);
+        expect(adjustments[0]).toMatchObject({
+            from_house_id: houseId,
+            to_house_id: null,
+            quantity: 300,
+            recorded_by_id: profileId,
+        });
     });
 
     test("cannot edit a batch that isn't RUNNING", async () => {
@@ -158,7 +171,7 @@ describe("BatchService", () => {
             recorded_by_id: profileId,
         });
         createdBatchIds.push(batch!.id);
-        await BatchService.close(batch!.id, { status: "CLOSED", force: true });
+        await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
 
         await expect(BatchService.update(batch!.id, { breed: "TIGER" })).rejects.toMatchObject({
             status: 409,
