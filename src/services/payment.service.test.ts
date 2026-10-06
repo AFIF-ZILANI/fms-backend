@@ -137,7 +137,6 @@ describe("PaymentService", () => {
         const payment = await PaymentService.create({
             amount: 5000,
             payment_date: new Date(),
-            direction: "INCOMING",
             ref_type: "SALE",
             ref_id: saleId,
             from_instrument_id: fromInstrumentId,
@@ -157,7 +156,6 @@ describe("PaymentService", () => {
             PaymentService.create({
                 amount: 100,
                 payment_date: new Date(),
-                direction: "OUTGOING",
                 ref_type: "SALE",
                 ref_id: saleId,
                 from_instrument_id: "00000000-0000-0000-0000-000000000000",
@@ -176,7 +174,6 @@ describe("PaymentService", () => {
         const p1 = await PaymentService.create({
             amount: 300,
             payment_date: new Date(),
-            direction: "OUTGOING",
             ref_type: "PURCHASE",
             ref_id: refId,
             from_instrument_id: fromInstrumentId,
@@ -184,7 +181,6 @@ describe("PaymentService", () => {
         const p2 = await PaymentService.create({
             amount: 200,
             payment_date: new Date(),
-            direction: "OUTGOING",
             ref_type: "PURCHASE",
             ref_id: refId,
             from_instrument_id: fromInstrumentId,
@@ -200,7 +196,6 @@ describe("PaymentService", () => {
         const payment = await PaymentService.create({
             amount: 1000,
             payment_date: new Date(),
-            direction: "INCOMING",
             ref_type: "BIRD_SALE",
             ref_id: refId,
             from_instrument_id: fromInstrumentId,
@@ -237,7 +232,6 @@ describe("PaymentService", () => {
             PaymentService.create({
                 amount: 150,
                 payment_date: new Date(),
-                direction: "INCOMING",
                 ref_type: "SALE",
                 ref_id: id,
                 from_instrument_id: fromInstrumentId,
@@ -251,7 +245,6 @@ describe("PaymentService", () => {
         const first = await PaymentService.create({
             amount: 60,
             payment_date: new Date(),
-            direction: "INCOMING",
             ref_type: "SALE",
             ref_id: id,
             from_instrument_id: fromInstrumentId,
@@ -263,7 +256,6 @@ describe("PaymentService", () => {
         const second = await PaymentService.create({
             amount: 40,
             payment_date: new Date(),
-            direction: "INCOMING",
             ref_type: "SALE",
             ref_id: id,
             from_instrument_id: fromInstrumentId,
@@ -276,7 +268,6 @@ describe("PaymentService", () => {
             PaymentService.create({
                 amount: 1,
                 payment_date: new Date(),
-                direction: "INCOMING",
                 ref_type: "SALE",
                 ref_id: id,
                 from_instrument_id: fromInstrumentId,
@@ -289,7 +280,6 @@ describe("PaymentService", () => {
             PaymentService.create({
                 amount: 10,
                 payment_date: new Date(),
-                direction: "INCOMING",
                 ref_type: "SALE",
                 ref_id: crypto.randomUUID(),
                 from_instrument_id: fromInstrumentId,
@@ -303,7 +293,6 @@ describe("PaymentService", () => {
             const payment = await PaymentService.create({
                 amount,
                 payment_date: new Date(),
-                direction: "INCOMING",
                 ref_type: "SALE",
                 ref_id: id,
                 from_instrument_id: fromInstrumentId,

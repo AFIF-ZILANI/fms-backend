@@ -147,13 +147,16 @@ describe("Payout APIs", () => {
     });
 
     test("cash is not a payout method, and a payout with no account is refused", async () => {
+        // The request can't name a destination or an amount: they are dropped on the way in,
+        // so a client can't redirect a payout or pay a different figure than the record.
         expect(
-            createPayrollPayoutSchema.safeParse({
+            createPayrollPayoutSchema.parse({
                 payroll_record_id: crypto.randomUUID(),
                 method: "CASH",
                 account_number: "CASH",
-            }).success,
-        ).toBe(false);
+                amount: 1,
+            }),
+        ).toEqual({ payroll_record_id: expect.any(String) });
 
         // An employee with nothing on file can't be paid at all now.
         const bareProfile = await prisma.profiles.create({
@@ -243,6 +246,53 @@ describe("Payout APIs", () => {
         expect(before.balance.minus(after.balance).toNumber()).toBe(15000 + expected);
     });
 
+    test("a double-submitted confirm pays once", async () => {
+        const record = await newPayrollRecord(new Date(Date.UTC(2026, 6, 1)));
+        const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
+        const confirm = () =>
+            PayrollPayoutService.markPaid(payout!.id, {
+                transaction_ref: "BKA-DOUBLE",
+                paid_by_id: approverId,
+                from_instrument_id: instrumentId,
+            });
+
+        const results = await Promise.allSettled([confirm(), confirm()]);
+        expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+        expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+
+        // One wage, one fee, one cash row -- not two of each.
+        const payments = await prisma.payment.findMany({ where: { ref_id: payout!.id } });
+        expect(payments).toHaveLength(1);
+        const expenses = await prisma.expense.findMany({
+            where: { remarks: { contains: payout!.id } },
+        });
+        expect(expenses.map((e) => e.category).sort()).toEqual(["SALARY", "SALARY_TRANSFER_FEE"]);
+    });
+
+    test("a wage expense can't also be paid through a generic Payment", async () => {
+        const { PaymentService } = await import("./payment.service");
+        const record = await newPayrollRecord(new Date(Date.UTC(2026, 7, 1)));
+        const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
+        await PayrollPayoutService.markPaid(payout!.id, {
+            transaction_ref: "BKA-WAGE",
+            paid_by_id: approverId,
+            from_instrument_id: instrumentId,
+        });
+        const wage = await prisma.expense.findFirstOrThrow({
+            where: { remarks: { contains: payout!.id }, category: "SALARY" },
+        });
+
+        await expect(
+            PaymentService.create({
+                amount: 100,
+                payment_date: new Date(),
+                ref_type: "EXPENSE",
+                ref_id: wage.id,
+                from_instrument_id: instrumentId,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
     test("a salary payment can't be authored through the generic Payment endpoint", async () => {
         const { createPaymentSchema } = await import("@validators/payment.validator");
         // PayrollPayout stays the only way to pay a wage -- it is the only one
@@ -251,7 +301,6 @@ describe("Payout APIs", () => {
             createPaymentSchema.safeParse({
                 amount: 15000,
                 payment_date: new Date(),
-                direction: "OUTGOING",
                 ref_type: "PAYROLL",
                 ref_id: crypto.randomUUID(),
                 from_instrument_id: crypto.randomUUID(),

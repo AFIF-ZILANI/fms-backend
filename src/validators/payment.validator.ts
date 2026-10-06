@@ -16,7 +16,6 @@ const refType = z.enum(PAYMENT_REF_TYPES);
 export const createPaymentSchema = z.object({
     amount: z.coerce.number().positive("Amount must be positive"),
     payment_date: z.coerce.date(),
-    direction: z.enum(["INCOMING", "OUTGOING"]),
     // ref_id is a polymorphic reference (resolved via ref_type), not a real
     // FK -- same pattern as StockLedger.ref_type/ref_id. Not validated
     // against the target table.

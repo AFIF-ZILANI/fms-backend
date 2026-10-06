@@ -28,6 +28,15 @@ const REF_LABEL: Record<RefType, string> = {
  * that whole amount includes the transfer fee, because the fee left the wallet
  * in the same transfer. Throws if the ref doesn't exist -- ref_id is polymorphic with no FK behind it, so this
  * is the only thing standing between a typo and an orphaned payment. */
+/** Money in or out follows from what the payment settles -- never from the client. */
+const DIRECTION = {
+    SALE: "INCOMING",
+    BIRD_SALE: "INCOMING",
+    PURCHASE: "OUTGOING",
+    EXPENSE: "OUTGOING",
+    PAYROLL: "OUTGOING",
+} as const;
+
 async function owedForRef(
     tx: Prisma.TransactionClient,
     ref_type: RefType,
@@ -125,6 +134,19 @@ export const PaymentService = {
     async create(data: CreatePaymentInput) {
         try {
             return await prisma.$transaction(async (tx) => {
+                if (data.ref_type === "EXPENSE") {
+                    // Wage and fee expenses are settled by their payout's own PAYROLL Payment;
+                    // paying them here as well would send the money out twice.
+                    const expense = await tx.expense.findUnique({
+                        where: { id: data.ref_id },
+                        select: { category: true },
+                    });
+                    if (expense?.category === "SALARY" || expense?.category === "SALARY_TRANSFER_FEE") {
+                        throw AppError.badRequest(
+                            "Salary expenses are paid through their payroll payout, not a payment",
+                        );
+                    }
+                }
                 const outstanding = await outstandingWithin(tx, data.ref_type, data.ref_id);
                 if (new Prisma.Decimal(data.amount).greaterThan(outstanding)) {
                     throw AppError.badRequest(
@@ -137,7 +159,7 @@ export const PaymentService = {
                     data: {
                         amount: data.amount,
                         payment_date: data.payment_date,
-                        direction: data.direction,
+                        direction: DIRECTION[data.ref_type],
                         ref_type: data.ref_type,
                         ref_id: data.ref_id,
                         from_instrument_id: data.from_instrument_id,

@@ -1,18 +1,13 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
-import { PAYOUT_METHODS } from "@validators/employee-payout-account.validator";
-
-const method = z.enum(PAYOUT_METHODS);
 
 export const createPayrollPayoutSchema = z.object({
     payroll_record_id: z.string().uuid(),
     // Omit to use the employee's currently active payout account.
     payout_account_id: z.string().uuid().optional(),
-    method: method.optional(),
-    account_number: z.string().optional(),
-    amount: z.coerce.number().positive("Amount must be positive").optional(),
-    // fee_paid_by_farm is deliberately absent: it is derived from the
-    // destination and the amount (lib/payout-fees.ts), not quoted by the client.
+    // method, account_number, amount and fee_paid_by_farm are deliberately absent: the
+    // destination comes from the payout account on file, the amount from the payroll
+    // record, and the fee is derived from both (lib/payout-fees.ts) -- never quoted by the client.
 });
 
 /**

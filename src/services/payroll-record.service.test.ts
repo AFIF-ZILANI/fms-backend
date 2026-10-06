@@ -4,6 +4,7 @@ import { PerformanceScoreEntryService } from "./performance-score-entry.service"
 import { PayrollPayoutService } from "./payroll-payout.service";
 import { PayrollRecordService } from "./payroll-record.service";
 import { EmployeeService } from "./employee.service";
+import { EmployeePayoutAccountService } from "./employee-payout-account.service";
 
 let profileId: string;
 let instrumentId: string;
@@ -69,6 +70,9 @@ describe("PayrollRecordService", () => {
             where: {
                 OR: [{ employee_id: { in: createdEmployeeIds } }, { id: { in: recordIdsToClean } }],
             },
+        });
+        await prisma.employeePayoutAccount.deleteMany({
+            where: { employee_id: { in: createdEmployeeIds } },
         });
         await prisma.performanceScoreEntry.deleteMany({
             where: { employee_id: { in: createdEmployeeIds } },
@@ -206,11 +210,15 @@ describe("PayrollRecordService", () => {
         });
 
         const record = await PayrollRecordService.generate({ employee_id: employee.id, month });
-        const payout = await PayrollPayoutService.create({
-            payroll_record_id: record.id,
+        // The destination is the account on file, never something the request names.
+        await EmployeePayoutAccountService.create({
+            employee_id: employee.id,
             method: "BKASH",
+            account_name: "Payroll Test",
             account_number: "01712345678",
+            verified_by_id: profileId,
         });
+        const payout = await PayrollPayoutService.create({ payroll_record_id: record.id });
         await PayrollPayoutService.markPaid(payout!.id, {
             transaction_ref: "BKA9Z1",
             paid_by_id: profileId,

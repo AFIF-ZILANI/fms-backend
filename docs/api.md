@@ -1306,7 +1306,7 @@ Append-only (§1.10).
 | GET | `/api/payments` | 200 | query: `ref_type?`, `ref_id?`, `direction?`, `instrument_id?` (matches either from/to) |
 | GET | `/api/payments/total-paid` | 200 | query (**required**): `ref_type`, `ref_id` → `{ ref_type, ref_id, total_paid }` |
 | GET | `/api/payments/:id` | 200 | — |
-| POST | `/api/payments` | 201 | `{ amount, payment_date, direction: PaymentType, ref_type: PaymentRefType, ref_id, from_instrument_id, to_instrument_id?, transaction_ref?, handled_by_id?, note? }` |
+| POST | `/api/payments` | 201 | `{ amount, payment_date, ref_type: SALE\|BIRD_SALE\|PURCHASE\|EXPENSE, ref_id, from_instrument_id, to_instrument_id?, transaction_ref?, note? }` — `direction` is derived from `ref_type` (sales in, purchases and expenses out), and wage/fee expenses are refused: they are paid through their payroll payout |
 
 `from_instrument_id` must reference a real `PaymentInstrument`;
 `to_instrument_id` is optional (e.g. an outgoing payment to a supplier whose

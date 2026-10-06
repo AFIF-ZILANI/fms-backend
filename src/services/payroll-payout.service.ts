@@ -76,37 +76,30 @@ export const PayrollPayoutService = {
             throw AppError.conflict("This payroll record already has a payout");
         }
 
-        // The fallback is only for a caller that named no destination at all.
-        // A caller that named a method means it -- linking their active bank
-        // account to a CASH payout would misstate where the money went.
+        // The destination is only ever an account on file: the one named, else the
+        // employee's active one. A closed account is no destination.
         const account = data.payout_account_id
             ? await prisma.employeePayoutAccount.findUnique({
                   where: { id: data.payout_account_id },
               })
-            : data.method
-              ? null
-              : await prisma.employeePayoutAccount.findFirst({
-                    where: { employee_id: record.employee_id, active_to: null },
-                    orderBy: { active_from: "desc" },
-                });
-
-        // A method and account number have to come from somewhere, and with cash
-        // gone that somewhere is an account on file.
-        const method = data.method ?? account?.method;
-        const account_number = data.account_number ?? account?.account_number;
-        if (!method || !account_number) {
+            : await prisma.employeePayoutAccount.findFirst({
+                  where: { employee_id: record.employee_id, active_to: null },
+                  orderBy: { active_from: "desc" },
+              });
+        if (!account || account.active_to) {
             throw AppError.badRequest(
-                "No payout account on file for this employee -- add one before paying this payroll",
+                "No active payout account on file for this employee -- add one before paying this payroll",
             );
         }
-        if (account && account.employee_id !== record.employee_id) {
+        if (account.employee_id !== record.employee_id) {
             throw AppError.badRequest("That payout account belongs to a different employee");
         }
 
         // The fee is derived from the destination and the amount, never sent by
         // the client -- and snapshotted here, because the published rate will
         // have moved on by the time anyone reads this row back.
-        const amount = data.amount ?? record.total_pay;
+        const { method, account_number } = account;
+        const amount = record.total_pay;
         try {
             return await prisma.payrollPayout.create({
                 data: {
@@ -114,7 +107,7 @@ export const PayrollPayoutService = {
                     method,
                     account_number,
                     amount,
-                    ...(account && { payout_account_id: account.id }),
+                    payout_account_id: account.id,
                     fee_paid_by_farm: transferFee(method, amount),
                 },
                 include,
@@ -131,9 +124,6 @@ export const PayrollPayoutService = {
     async markPaid(id: string, data: MarkPaidInput) {
         const payout = await prisma.payrollPayout.findUnique({ where: { id } });
         if (!payout) throw AppError.notFound("Payout");
-        if (payout.status === "CONFIRMED") {
-            throw AppError.badRequest("Payout is already confirmed");
-        }
 
         const instrument = await prisma.paymentInstrument.findUnique({
             where: { id: data.from_instrument_id },
@@ -146,6 +136,20 @@ export const PayrollPayoutService = {
         const paid_at = data.paid_at ?? new Date();
 
         return prisma.$transaction(async (tx) => {
+            // Claim the payout first. A concurrent second confirm blocks on this row's
+            // lock, re-checks the condition, matches nothing, and aborts before it can
+            // write a second wage, fee and Payment.
+            const claimed = await tx.payrollPayout.updateMany({
+                where: { id, status: { not: "CONFIRMED" } },
+                data: {
+                    status: "CONFIRMED",
+                    paid_at,
+                    transaction_ref: data.transaction_ref,
+                    paid_by_id: data.paid_by_id,
+                },
+            });
+            if (claimed.count === 0) throw AppError.badRequest("Payout is already confirmed");
+
             // Confirming a payout is the moment it becomes real money, so this is
             // where it enters both books: the wage and the fee as cost, and one
             // Payment for the cash that actually left the wallet. Neither is
@@ -208,16 +212,7 @@ export const PayrollPayoutService = {
                 },
             });
 
-            return tx.payrollPayout.update({
-                where: { id },
-                data: {
-                    status: "CONFIRMED",
-                    paid_at,
-                    transaction_ref: data.transaction_ref,
-                    paid_by_id: data.paid_by_id,
-                },
-                include,
-            });
+            return tx.payrollPayout.findUniqueOrThrow({ where: { id }, include });
         });
     },
 
@@ -226,14 +221,15 @@ export const PayrollPayoutService = {
     async markFailed(id: string, data: FailPayoutInput) {
         const payout = await prisma.payrollPayout.findUnique({ where: { id } });
         if (!payout) throw AppError.notFound("Payout");
-        if (payout.status === "CONFIRMED") {
+
+        // Conditional, so a confirm that lands first can never be overwritten.
+        const claimed = await prisma.payrollPayout.updateMany({
+            where: { id, status: { not: "CONFIRMED" } },
+            data: { status: "FAILED", transaction_ref: data.reason },
+        });
+        if (claimed.count === 0) {
             throw AppError.badRequest("A confirmed payout can't be marked failed");
         }
-
-        return prisma.payrollPayout.update({
-            where: { id },
-            data: { status: "FAILED", transaction_ref: data.reason },
-            include,
-        });
+        return prisma.payrollPayout.findUniqueOrThrow({ where: { id }, include });
     },
 };
