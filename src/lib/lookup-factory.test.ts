@@ -29,11 +29,18 @@ describe("createLookupService (against ItemCategory)", () => {
         await expect(service.create("duplicate code test")).rejects.toBeInstanceOf(AppError);
     });
 
-    test("update recomputes code from the new label", async () => {
+    test("update changes the label but never the code", async () => {
         const row = await service.create("Rename Me Test");
         createdIds.push(row.id);
         const updated = await service.update(row.id, "Renamed Test");
-        expect(updated.code).toBe("RENAMED_TEST");
+        expect(updated.label).toBe("Renamed Test");
+        expect(updated.code).toBe("RENAME_ME_TEST");
+    });
+
+    test("update still rejects a label with no letters or digits", async () => {
+        const row = await service.create(`Validation Test ${crypto.randomUUID().slice(0, 8)}`);
+        createdIds.push(row.id);
+        await expect(service.update(row.id, "!!!")).rejects.toBeInstanceOf(AppError);
     });
 
     test("setActive toggles is_active", async () => {
@@ -53,16 +60,7 @@ describe("createLookupService (against ItemCategory)", () => {
         expect(rows.find((r) => r.id === row.id)).toBeUndefined();
     });
 
-    test("update recomputes code by default — the four original lookups are unchanged by stableCode", async () => {
-        const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
-        const row = await service.create(`Default Regen Test ${suffix}`);
-        createdIds.push(row.id);
-        const updated = await service.update(row.id, `Default Regen Renamed ${suffix}`);
-        expect(updated.code).toBe(`DEFAULT_REGEN_RENAMED_${suffix}`);
-        expect(updated.code).not.toBe(row.code);
-    });
-
-    test("renaming a lookup row cascades its new code onto a referencing Item.category via onUpdate: Cascade", async () => {
+    test("renaming a lookup row leaves the code on a referencing Item.category untouched", async () => {
         const category = await service.create("Cascade Rename Test");
         createdIds.push(category.id);
 
@@ -77,45 +75,12 @@ describe("createLookupService (against ItemCategory)", () => {
 
         try {
             const renamed = await service.update(category.id, "Cascade Renamed Test");
-            expect(renamed.code).not.toBe(category.code);
+            expect(renamed.code).toBe(category.code);
 
             const refetched = await prisma.item.findUnique({ where: { id: item.id } });
-            expect(refetched?.category).toBe(renamed.code);
-            expect(refetched?.category).not.toBe(category.code);
+            expect(refetched?.category).toBe(category.code);
         } finally {
             await prisma.item.delete({ where: { id: item.id } });
         }
-    });
-});
-
-/**
- * TaskType.code is the mobile app's routing key -- it maps code -> screen. If a
- * rename moved the code, routing would break with no error anywhere, which is
- * the exact failure stableCode exists to prevent. Tested directly rather than
- * trusted to a comment.
- */
-describe("createLookupService with stableCode (against TaskType)", () => {
-    const stable = createLookupService(prisma.taskType, "TaskType", { stableCode: true });
-    const stableIds: string[] = [];
-
-    afterAll(async () => {
-        await prisma.taskType.deleteMany({ where: { id: { in: stableIds } } });
-    });
-
-    test("update changes the label but leaves code untouched", async () => {
-        const suffix = crypto.randomUUID().slice(0, 8).toUpperCase();
-        const row = await stable.create(`Environment Reading Test ${suffix}`);
-        stableIds.push(row.id);
-        expect(row.code).toBe(`ENVIRONMENT_READING_TEST_${suffix}`);
-
-        const updated = await stable.update(row.id, `Env Reading Test ${suffix}`);
-        expect(updated.label).toBe(`Env Reading Test ${suffix}`);
-        expect(updated.code).toBe(`ENVIRONMENT_READING_TEST_${suffix}`);
-    });
-
-    test("update still rejects a label with no letters or digits", async () => {
-        const row = await stable.create(`Validation Test ${crypto.randomUUID().slice(0, 8)}`);
-        stableIds.push(row.id);
-        await expect(stable.update(row.id, "!!!")).rejects.toBeInstanceOf(AppError);
     });
 });

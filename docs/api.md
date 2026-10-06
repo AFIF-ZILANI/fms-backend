@@ -654,7 +654,7 @@ stores; **you never send `code` directly**, on create or update.
 |---|---|---|---|
 | GET | `/api/item-categories` | 200 | query: `active?` (`"true"`/`"false"`) |
 | POST | `/api/item-categories` | 201 | `{ label }` |
-| PATCH | `/api/item-categories/:id` | 200 | `{ label }` — recomputes `code` from the new label; this is the rename that cascades |
+| PATCH | `/api/item-categories/:id` | 200 | `{ label }` — changes the label only; `code` is fixed at create and never moves |
 | POST | `/api/item-categories/:id/deactivate` | 200 | — |
 | POST | `/api/item-categories/:id/reactivate` | 200 | — |
 

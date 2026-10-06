@@ -418,10 +418,9 @@ model SupplierSupplyLink {
 // code it doesn't recognise, which is what makes a DB-stored list safe here.
 model TaskType {
   id         String   @id @default(uuid())
-  // Unlike every other lookup, code is generated ONCE at create and never
-  // recomputed on rename -- it is the mobile app's routing key, so a rename
-  // regenerating it (what lookup-factory does by default) would silently break
-  // routing with no error anywhere. See createLookupService's stableCode option.
+  // Like every lookup, code is generated ONCE at create and never recomputed on
+  // rename -- here it is also the mobile app's routing key, so moving it would
+  // silently break routing with no error anywhere.
   code       String   @unique
   label      String
   is_active  Boolean  @default(true)

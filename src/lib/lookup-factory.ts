@@ -48,26 +48,7 @@ type LookupDelegate = {
     delete(args: { where: { id: string } }): Promise<LookupRow>;
 };
 
-export type LookupOptions = {
-    /**
-     * Keep `code` fixed for the life of the row -- generated once at create,
-     * never recomputed on rename. Default false, so the four original lookups
-     * (ItemCategory, Unit, ExpenseCategoryLookup, SupplierSupplyCategory) keep
-     * regenerating as they always have.
-     *
-     * Set for lookups whose `code` is a key something else routes on, rather
-     * than a display artifact -- TaskType and Tasks, where the mobile app maps
-     * `TaskType.code` to a screen. There, letting a rename change the code
-     * would silently break routing with no error anywhere.
-     */
-    stableCode?: boolean;
-};
-
-export function createLookupService(
-    delegate: LookupDelegate,
-    resourceName: string,
-    options: LookupOptions = {},
-) {
+export function createLookupService(delegate: LookupDelegate, resourceName: string) {
     return {
         async getAll(query: ListLookupQuery) {
             const where = query.active !== undefined ? { is_active: query.active === "true" } : {};
@@ -92,15 +73,14 @@ export function createLookupService(
         async update(id: string, label: string) {
             const existing = await delegate.findUnique({ where: { id } });
             if (!existing) throw AppError.notFound(resourceName);
-            const code = generateCode(label);
-            if (!code)
+            if (!generateCode(label))
                 throw AppError.badRequest("Label must contain at least one letter or number");
             try {
-                // Under stableCode the label still has to produce a valid code
-                // (checked above, so an all-punctuation rename is still rejected)
-                // -- it just isn't written back.
-                const data = options.stableCode ? { label } : { code, label };
-                return await delegate.update({ where: { id }, data });
+                // ponytail: code is set once at create and never moves. App logic matches on
+                // literal codes (FEED, KG, SALARY, ...) and other tables hold it as an
+                // ON UPDATE CASCADE foreign key, so a rename that moved it would silently
+                // break feed analytics, alerts and unit checks.
+                return await delegate.update({ where: { id }, data: { label } });
             } catch (err) {
                 return handlePrismaWriteError(err);
             }

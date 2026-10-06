@@ -8,9 +8,9 @@ import {
     listLookupQuerySchema,
 } from "@validators/lookup.validator";
 
-// stableCode: TaskType.code is the mobile app's routing key (it maps code ->
-// screen), not a display artifact -- so a rename must not move it.
-const service = createLookupService(prisma.taskType, "TaskType", { stableCode: true });
+// TaskType.code is the mobile app's routing key (code -> screen); like every lookup,
+// it never moves on rename.
+const service = createLookupService(prisma.taskType, "TaskType");
 const controller = createLookupController(service);
 
 export const taskTypeRoutes = new Hono();
