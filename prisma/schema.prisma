@@ -260,6 +260,14 @@ enum PayoutMethod {
   CASH
 }
 
+enum Religion {
+  ISLAM
+  HINDU
+  CHRISTIANITY
+  BUDDHISM
+  OTHER
+}
+
 enum PayoutStatus {
   PENDING
   SENT
@@ -489,7 +497,8 @@ model Profiles {
   scoresGiven             PerformanceScoreEntry[] @relation("ScoreGivenBy")
   scoresApproved          PerformanceScoreEntry[] @relation("ScoreApprovedBy")
   payoutAccountsVerified  EmployeePayoutAccount[] @relation("PayoutAccountVerifiedBy")
-  payoutsPaid             PayrollPayout[]         @relation("PayoutPaidBy")
+  payoutsPaid             EmployeePayout[]        @relation("PayoutPaidBy")
+  bonusEventsCreated      BonusEvent[]
   inventoryAdjustments    InventoryAdjustment[]
   stockTransfersRecorded  StockTransfer[]
   medicationsGiven        Medications[]
@@ -525,6 +534,9 @@ model Employees {
   experience       String? // where and what -- the note beside experience_years
   experience_years Int? // whole years of relevant prior work
   nid_number       String? // the number only; the scan stays in the paper file
+  // Sensitive, and optional on purpose: it only decides who a festival bonus proposes.
+  // Never required, and left out of the payslip response. See docs/superpowers/specs/2026-09-30-festival-bonus-design.md.
+  religion         Religion?
 
   // Emergency contact -- exactly one per employee, so flat columns, not a table.
   emergency_name     String?
@@ -555,6 +567,7 @@ model Employees {
 
   performanceScores PerformanceScoreEntry[]
   payrollRecords    PayrollRecord[]
+  bonuses           Bonus[]
   taskAssignments   EmployeeTaskAssignment[]
   payoutAccounts    EmployeePayoutAccount[]
 
@@ -1351,7 +1364,7 @@ model PayrollRecord {
   locked_at          DateTime  @default(now())
   created_at         DateTime  @default(now())
 
-  payout PayrollPayout?
+  payout EmployeePayout?
 
   @@unique([employee_id, month])
 }
@@ -1377,18 +1390,22 @@ model EmployeePayoutAccount {
   active_to       DateTime? // set when superseded
   created_at      DateTime     @default(now())
 
-  payouts PayrollPayout[]
+  payouts EmployeePayout[]
 
   @@index([employee_id, active_to])
 }
 
-/// Paying a payroll, as distinct from calculating it. Replaces PaymentRefType.PAYROLL
-/// -- a salary payout can't be marked paid without proof of transfer, which the
-/// generic Payment model has no way to require.
-model PayrollPayout {
+/// Paying an employee, as distinct from calculating what they are owed. One payout per
+/// payroll record (a month's wage) or per bonus (a festival bonus) -- exactly one of
+/// the two links is set (CHECK in the festival_bonus migration; Prisma can't express it).
+/// A payout can't be marked paid without proof of transfer, which the generic Payment
+/// model has no way to require. Formerly PayrollPayout.
+model EmployeePayout {
   id                String                 @id @default(uuid())
-  payroll_record_id String                 @unique
-  payroll_record    PayrollRecord          @relation(fields: [payroll_record_id], references: [id])
+  payroll_record_id String?                @unique
+  payroll_record    PayrollRecord?         @relation(fields: [payroll_record_id], references: [id])
+  bonus_id          String?                @unique
+  bonus             Bonus?                 @relation(fields: [bonus_id], references: [id])
   payout_account_id String?
   payout_account    EmployeePayoutAccount? @relation(fields: [payout_account_id], references: [id])
   // Snapshotted even though payout_account_id points at the account: that account
@@ -1404,6 +1421,47 @@ model PayrollPayout {
   paid_by           Profiles?              @relation("PayoutPaidBy", fields: [paid_by_id], references: [id])
   paid_at           DateTime?
   created_at        DateTime               @default(now())
+}
+
+/// One festival (or a one-off farm-wide bonus). Creating it writes nothing else: the
+/// proposal is computed, then the owner commits the Bonus rows they approve.
+model BonusEvent {
+  id                 String    @id @default(uuid())
+  name               String // "Eid ul-Fitr 2026"
+  event_date         DateTime
+  /// null = farm-wide (good harvest, one-off); set = only that religion is auto-selected.
+  religion           Religion?
+  /// × the employee's reference salary. 1.00 = one month's R.
+  multiplier         Decimal   @db.Decimal(4, 2)
+  /// Full entitlement needs this much continuous service at event_date.
+  min_service_months Int       @default(12)
+  /// Below the threshold: pay amount × service_months / 12 instead of nothing.
+  prorate            Boolean   @default(true)
+  created_by_id      String
+  created_by         Profiles  @relation(fields: [created_by_id], references: [id])
+  created_at         DateTime  @default(now())
+
+  bonuses Bonus[]
+}
+
+model Bonus {
+  id               String     @id @default(uuid())
+  event_id         String
+  event            BonusEvent @relation(fields: [event_id], references: [id])
+  employee_id      String
+  employee         Employees  @relation(fields: [employee_id], references: [id])
+  /// Snapshotted together: the event's multiplier and the employee's salary can both move
+  /// afterwards, and a paid bonus must keep showing the arithmetic that produced it.
+  amount           Decimal    @db.Decimal(10, 2)
+  reference_salary Decimal    @db.Decimal(10, 2)
+  service_months   Int
+  note             String?
+  created_at       DateTime   @default(now())
+
+  payout EmployeePayout?
+
+  @@unique([event_id, employee_id]) // makes double-paying one employee at one festival impossible
+  @@index([employee_id])
 }
 
 model EmployeeTaskAssignment {

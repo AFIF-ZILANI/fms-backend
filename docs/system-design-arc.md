@@ -61,7 +61,7 @@ as it grows:
 | **Batch**     | `Batches`, `BatchHouseAllocation`, `BatchHouseBalance`, `MortalityLog`                                                             | Placement, brooder→grower transfer, mortality, the batch-closing lifecycle (not yet defined — see §7) |
 | **Inventory** | `Item`, `Purchase`, `PurchaseItem`, `StockUnit`, `Asset`, `AssetDepreciation`, `Consumption`, `StockLedger`, `InventoryAdjustment` | Lot costing, code binding, consumption/depletion, depreciation                                        |
 | **Treatment** | `Medications`, `Vaccinations`, `EnvironmentRecords`, `WeightRecords`                                                               | Links treatment records to actual stock draws via `Consumption`                                       |
-| **Payroll**   | `PerformanceScoreEntry`, `PayrollRecord`, `PayrollPayout`, `EmployeePayoutAccount`, `Employees`                                     | Point-ledger scoring, monthly clamp-and-compute, proof-of-transfer payout                             |
+| **Payroll**   | `PerformanceScoreEntry`, `PayrollRecord`, `EmployeePayout`, `EmployeePayoutAccount`, `Employees`                                     | Point-ledger scoring, monthly clamp-and-compute, proof-of-transfer payout                             |
 | **Sales**     | `Sale`, `SaleItem`, `BirdSale`                                                                                                     | Revenue recognition                                                                                   |
 | **Money**     | `Expense`, `Payment`, `PaymentInstrument`                                                                                          | Cost classification (`cost_type`), cash movement. Payroll writes here but is not authored here — §4    |
 | **Reporting** | reads across all of the above                                                                                                      | Bird-days allocation (v2), batch P&L, payroll summaries                                               |
@@ -86,7 +86,7 @@ One bottle can span this sequence across several batches and houses over its lif
 
 **Month end payroll** → for each employee, sum `PerformanceScoreEntry.points` for the
 month → clamp to `[-10, +20]` → apply to `Employees.reference_salary` → write one
-`PayrollRecord` (locked snapshot) → a `PayrollPayout` against that record carries the
+`PayrollRecord` (locked snapshot) → a `EmployeePayout` against that record carries the
 money out, snapshotting the destination off the employee's active
 `EmployeePayoutAccount` and deriving the transfer fee the farm absorbs.
 
@@ -100,7 +100,7 @@ Two things about that shape are deliberate and easy to get backwards:
 
 - **The payout is the authority, `Payment` is the consequence.** A wage cannot be
   paid by writing a `Payment` row: `createPaymentSchema` refuses `ref_type =
-  PAYROLL`, because only `PayrollPayout` can make proof of transfer a condition of
+  PAYROLL`, because only `EmployeePayout` can make proof of transfer a condition of
   being marked paid. `Payment` remains the general cash ledger and payroll appears
   in it — it is just not authored there. See `docs/payroll-ledger-bridge.md`.
 - **The cash row references the payout, not the `PayrollRecord`.** The record is a

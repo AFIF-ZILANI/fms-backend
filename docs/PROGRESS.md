@@ -23,7 +23,7 @@ mobile (Expo) clients.
 | --- | --- |
 | Auth and permission enforcement | Login, sessions and default-deny are built (`middlewares/authenticate.ts`, `docs/api.md` §1.6). Employees are default-deny with the WORKER/MANAGER matrix in `lib/permissions.ts`; the web login is built. Still to do: mobile login. |
 | Audit log coverage | Writes exist for password resets/changes, hire/terminate/reinstate/deactivate, admin create/deactivate, payout confirm/fail, payout accounts and salary overrides (`lib/audit.ts`). Not covered yet: devices, purchases, sales, stock adjustments, batch changes. |
-| Festival bonus | Approved spec, no code: `superpowers/specs/2026-09-30-festival-bonus-design.md`. |
+| Festival bonus | Server built (`bonus-event.service.ts`, `docs/api.md` §12.1). Web screens still to do. Spec: `superpowers/specs/2026-09-30-festival-bonus-design.md`. |
 | Bird-days shared-cost allocation | v2. Needs 2–3 overlapping batches of real data. |
 | FCR | Needs a feed-to-weight unit table. |
 | Regular sales moving stock | `SaleService.create` writes no ledger row. Needs its own spec. |

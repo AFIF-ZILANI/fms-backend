@@ -1,14 +1,20 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 
-export const createPayrollPayoutSchema = z.object({
-    payroll_record_id: z.string().uuid(),
+export const createPayrollPayoutSchema = z
+    .object({
+    // Exactly one: a month's wage, or a festival bonus.
+    payroll_record_id: z.string().uuid().optional(),
+    bonus_id: z.string().uuid().optional(),
     // Omit to use the employee's currently active payout account.
     payout_account_id: z.string().uuid().optional(),
     // method, account_number, amount and fee_paid_by_farm are deliberately absent: the
     // destination comes from the payout account on file, the amount from the payroll
-    // record, and the fee is derived from both (lib/payout-fees.ts) -- never quoted by the client.
-});
+    // record (or bonus), and the fee is derived from both (lib/payout-fees.ts) -- never quoted by the client.
+    })
+    .refine((d) => (d.payroll_record_id === undefined) !== (d.bonus_id === undefined), {
+        message: "Give exactly one of payroll_record_id or bonus_id",
+    });
 
 /**
  * Marking a payout paid is the one write that needs proof: the transaction

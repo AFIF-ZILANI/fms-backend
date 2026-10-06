@@ -4,6 +4,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { audit } from "@lib/audit";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import type { Prisma } from "../../prisma/generated/prisma/client";
 import type {
     CreatePayrollPayoutInput,
     FailPayoutInput,
@@ -12,8 +13,10 @@ import type {
 } from "@validators/payroll-payout.validator";
 
 /** Created on first use rather than seeded -- nothing else has to be set up
- *  before the first payroll can be paid. */
+ *  before the first payroll can be paid. The wage and a bonus are different costs, the
+ *  transfer fee is the same either way. */
 const SALARY = "SALARY";
+const FESTIVAL_BONUS = "FESTIVAL_BONUS";
 const SALARY_TRANSFER_FEE = "SALARY_TRANSFER_FEE";
 
 const include = {
@@ -22,6 +25,14 @@ const include = {
             id: true,
             month: true,
             total_pay: true,
+            employee: { select: { id: true, profile: { select: { name: true } } } },
+        },
+    },
+    bonus: {
+        select: {
+            id: true,
+            amount: true,
+            event: { select: { id: true, name: true } },
             employee: { select: { id: true, profile: { select: { name: true } } } },
         },
     },
@@ -40,23 +51,26 @@ export const PayrollPayoutService = {
         const where = {
             ...(query.status !== undefined && { status: query.status }),
             ...(query.employee_id !== undefined && {
-                payroll_record: { employee_id: query.employee_id },
+                OR: [
+                    { payroll_record: { employee_id: query.employee_id } },
+                    { bonus: { employee_id: query.employee_id } },
+                ],
             }),
         };
         const [payouts, total] = await Promise.all([
-            prisma.payrollPayout.findMany({
+            prisma.employeePayout.findMany({
                 where,
                 include,
                 orderBy: { created_at: "desc" },
                 ...toSkipTake(query),
             }),
-            prisma.payrollPayout.count({ where }),
+            prisma.employeePayout.count({ where }),
         ]);
         return { payouts, meta: buildMeta(total, query) };
     },
 
     async getById(id: string) {
-        const payout = await prisma.payrollPayout.findUnique({ where: { id }, include });
+        const payout = await prisma.employeePayout.findUnique({ where: { id }, include });
         if (!payout) throw AppError.notFound("Payout");
         return payout;
     },
@@ -68,13 +82,35 @@ export const PayrollPayoutService = {
      * the money actually went.
      */
     async create(data: CreatePayrollPayoutInput) {
-        const record = await prisma.payrollRecord.findUnique({
-            where: { id: data.payroll_record_id },
-            include: { payout: true },
-        });
-        if (!record) throw AppError.notFound("Payroll record");
-        if (record.payout) {
-            throw AppError.conflict("This payroll record already has a payout");
+        // What is being paid: a month's wage or a festival bonus. Either way the amount is the
+        // record's own, never the request's.
+        let employee_id: string;
+        let amount: Prisma.Decimal;
+        let link: { payroll_record_id: string } | { bonus_id: string };
+        if (data.payroll_record_id !== undefined) {
+            const record = await prisma.payrollRecord.findUnique({
+                where: { id: data.payroll_record_id },
+                include: { payout: true },
+            });
+            if (!record) throw AppError.notFound("Payroll record");
+            if (record.payout) {
+                throw AppError.conflict("This payroll record already has a payout");
+            }
+            employee_id = record.employee_id;
+            amount = record.total_pay;
+            link = { payroll_record_id: record.id };
+        } else {
+            const bonus = await prisma.bonus.findUnique({
+                where: { id: data.bonus_id! },
+                include: { payout: true },
+            });
+            if (!bonus) throw AppError.notFound("Bonus");
+            if (bonus.payout) {
+                throw AppError.conflict("This bonus already has a payout");
+            }
+            employee_id = bonus.employee_id;
+            amount = bonus.amount;
+            link = { bonus_id: bonus.id };
         }
 
         // The destination is only ever an account on file: the one named, else the
@@ -84,15 +120,15 @@ export const PayrollPayoutService = {
                   where: { id: data.payout_account_id },
               })
             : await prisma.employeePayoutAccount.findFirst({
-                  where: { employee_id: record.employee_id, active_to: null },
+                  where: { employee_id, active_to: null },
                   orderBy: { active_from: "desc" },
               });
         if (!account || account.active_to) {
             throw AppError.badRequest(
-                "No active payout account on file for this employee -- add one before paying this payroll",
+                "No active payout account on file for this employee -- add one before paying",
             );
         }
-        if (account.employee_id !== record.employee_id) {
+        if (account.employee_id !== employee_id) {
             throw AppError.badRequest("That payout account belongs to a different employee");
         }
 
@@ -100,11 +136,10 @@ export const PayrollPayoutService = {
         // the client -- and snapshotted here, because the published rate will
         // have moved on by the time anyone reads this row back.
         const { method, account_number } = account;
-        const amount = record.total_pay;
         try {
-            return await prisma.payrollPayout.create({
+            return await prisma.employeePayout.create({
                 data: {
-                    payroll_record_id: record.id,
+                    ...link,
                     method,
                     account_number,
                     amount,
@@ -123,7 +158,7 @@ export const PayrollPayoutService = {
      * transaction reference from the transfer.
      */
     async markPaid(id: string, data: MarkPaidInput) {
-        const payout = await prisma.payrollPayout.findUnique({ where: { id } });
+        const payout = await prisma.employeePayout.findUnique({ where: { id } });
         if (!payout) throw AppError.notFound("Payout");
 
         const instrument = await prisma.paymentInstrument.findUnique({
@@ -140,7 +175,7 @@ export const PayrollPayoutService = {
             // Claim the payout first. A concurrent second confirm blocks on this row's
             // lock, re-checks the condition, matches nothing, and aborts before it can
             // write a second wage, fee and Payment.
-            const claimed = await tx.payrollPayout.updateMany({
+            const claimed = await tx.employeePayout.updateMany({
                 where: { id, status: { not: "CONFIRMED" } },
                 data: {
                     status: "CONFIRMED",
@@ -151,7 +186,7 @@ export const PayrollPayoutService = {
             });
             if (claimed.count === 0) throw AppError.badRequest("Payout is already confirmed");
             await audit(tx, {
-                table: "PayrollPayout",
+                table: "EmployeePayout",
                 record_id: id,
                 action: "UPDATE",
                 actor_id: data.paid_by_id,
@@ -169,14 +204,17 @@ export const PayrollPayoutService = {
             // Payment for the cash that actually left the wallet. Neither is
             // written on create -- an unpaid payout has cost nothing yet.
             // docs/payroll-ledger-bridge.md
+            // A bonus is a different cost from a wage; both are farm-wide and recurring.
+            const isBonus = payout.bonus_id !== null;
+            const category = isBonus ? FESTIVAL_BONUS : SALARY;
             await tx.expenseCategoryLookup.upsert({
-                where: { code: SALARY },
+                where: { code: category },
                 update: {},
-                create: { code: SALARY, label: "Salary" },
+                create: { code: category, label: isBonus ? "Festival bonus" : "Salary" },
             });
             await tx.expense.create({
                 data: {
-                    category: SALARY,
+                    category,
                     // Farm-wide and recurring. Not DIRECT: a PayrollRecord has no
                     // batch, and shed labour spans whatever batches are running,
                     // so batch P&L leaves it unallocated until bird-days (v2).
@@ -184,7 +222,7 @@ export const PayrollPayoutService = {
                     amount: payout.amount,
                     date: paid_at,
                     recorded_by_id: data.paid_by_id,
-                    remarks: `Wage on payout ${payout.id}`,
+                    remarks: `${isBonus ? "Bonus" : "Wage"} on payout ${payout.id}`,
                 },
             });
 
@@ -222,22 +260,22 @@ export const PayrollPayoutService = {
                     from_instrument_id: data.from_instrument_id,
                     transaction_ref: data.transaction_ref,
                     handled_by_id: data.paid_by_id,
-                    note: `Wage + transfer fee, ${payout.method} ${payout.account_number}`,
+                    note: `${isBonus ? "Bonus" : "Wage"} + transfer fee, ${payout.method} ${payout.account_number}`,
                 },
             });
 
-            return tx.payrollPayout.findUniqueOrThrow({ where: { id }, include });
+            return tx.employeePayout.findUniqueOrThrow({ where: { id }, include });
         });
     },
 
     /** The transfer was attempted and bounced -- wrong wallet number, closed
      *  account. Kept as FAILED rather than deleted so the attempt is on record. */
     async markFailed(id: string, data: FailPayoutInput, actor_id?: string) {
-        const payout = await prisma.payrollPayout.findUnique({ where: { id } });
+        const payout = await prisma.employeePayout.findUnique({ where: { id } });
         if (!payout) throw AppError.notFound("Payout");
 
         // Conditional, so a confirm that lands first can never be overwritten.
-        const claimed = await prisma.payrollPayout.updateMany({
+        const claimed = await prisma.employeePayout.updateMany({
             where: { id, status: { not: "CONFIRMED" } },
             data: { status: "FAILED", transaction_ref: data.reason },
         });
@@ -246,7 +284,7 @@ export const PayrollPayoutService = {
         }
         if (actor_id) {
             await audit(prisma, {
-                table: "PayrollPayout",
+                table: "EmployeePayout",
                 record_id: id,
                 action: "UPDATE",
                 actor_id,
@@ -254,6 +292,6 @@ export const PayrollPayoutService = {
                 after: { reason: data.reason },
             });
         }
-        return prisma.payrollPayout.findUniqueOrThrow({ where: { id }, include });
+        return prisma.employeePayout.findUniqueOrThrow({ where: { id }, include });
     },
 };

@@ -56,7 +56,7 @@ describe("EmployeeService", () => {
             where: { employee_id: { in: createdIds } },
             select: { id: true },
         });
-        await prisma.payrollPayout.deleteMany({
+        await prisma.employeePayout.deleteMany({
             where: { payroll_record_id: { in: records.map((r) => r.id) } },
         });
         await prisma.payrollRecord.deleteMany({ where: { employee_id: { in: createdIds } } });

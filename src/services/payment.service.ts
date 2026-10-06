@@ -10,7 +10,7 @@ import type {
 } from "@validators/payment.validator";
 
 // Every ref a stored row can carry, not just the ones a client may author --
-// PAYROLL rows are emitted by PayrollPayout.markPaid and still have to be
+// PAYROLL rows are emitted by EmployeePayout confirmation (wage or bonus) and still have to be
 // readable here.
 type RefType = PaymentRefType;
 
@@ -67,7 +67,7 @@ async function owedForRef(
                     await tx.expense.findUnique({ where: { id: ref_id }, select: { amount: true } })
                 )?.amount;
             case "PAYROLL": {
-                const payout = await tx.payrollPayout.findUnique({
+                const payout = await tx.employeePayout.findUnique({
                     where: { id: ref_id },
                     select: { amount: true, fee_paid_by_farm: true },
                 });
@@ -143,9 +143,11 @@ export const PaymentService = {
                         where: { id: data.ref_id },
                         select: { category: true },
                     });
-                    if (expense?.category === "SALARY" || expense?.category === "SALARY_TRANSFER_FEE") {
+                    if (expense?.category === "SALARY" ||
+                        expense?.category === "FESTIVAL_BONUS" ||
+                        expense?.category === "SALARY_TRANSFER_FEE") {
                         throw AppError.badRequest(
-                            "Salary expenses are paid through their payroll payout, not a payment",
+                            "Salary and bonus expenses are paid through their payout, not a payment",
                         );
                     }
                 }

@@ -16,7 +16,9 @@ const prisma =
         adapter,
         // Never leaves the DB by accident: nested `include: { profile: true }` is all over
         // the services. Auth reads it with an explicit `select`, which wins over this.
-        omit: { profiles: { password_hash: true } },
+        // Same for Employees.religion: sensitive, and only the single-employee reads and the bonus
+        // proposal have a reason to see it (they ask for it explicitly).
+        omit: { profiles: { password_hash: true }, employees: { religion: true } },
     });
 
 if (env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

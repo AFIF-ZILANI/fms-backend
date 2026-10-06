@@ -71,6 +71,9 @@ describe("canAccess", () => {
                 ["PATCH", "/weight-records/1"],
                 ["POST", "/alerts/scan"],
                 ["GET", "/audit-logs"],
+                ["GET", "/bonus-events"],
+                ["POST", "/bonus-events/x/bonuses"],
+                ["GET", "/bonus-events/x/proposal"],
                 ["GET", "/ingest/v1/sales"],
             ] as const) {
                 expect(canAccess(who, m, p, none)).toBe(false);

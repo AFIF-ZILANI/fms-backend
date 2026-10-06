@@ -162,7 +162,11 @@ export const EmployeeService = {
     },
 
     async getById(id: string) {
-        const employee = await prisma.employees.findUnique({ where: { id }, include });
+        const employee = await prisma.employees.findUnique({
+            where: { id },
+            include,
+            omit: { religion: false },
+        });
         if (!employee) throw AppError.notFound("Employee");
         return employee;
     },
@@ -195,6 +199,7 @@ export const EmployeeService = {
                         profile_id: profileRow.id,
                     },
                     include,
+                    omit: { religion: false },
                 });
                 // Hiring creates the login: the admin hands the employee this once.
                 const temp_password = await AuthService.issueTempPassword(profileRow.id, tx);
@@ -343,6 +348,7 @@ export const EmployeeService = {
                         }),
                     },
                     include,
+                    omit: { religion: false },
                 });
             });
         } catch (err) {

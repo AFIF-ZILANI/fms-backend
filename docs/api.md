@@ -1066,6 +1066,31 @@ employee's *current* `Employees.salary` as `baseline_salary`, computes
 
 ---
 
+### 12.1 Festival bonus
+
+All admin-only. Design: `docs/superpowers/specs/2026-09-30-festival-bonus-design.md`.
+The flow is propose, then commit; nothing is written until the second call.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/bonus-events` | `{ name, event_date, religion?, multiplier, min_service_months? (12), prorate? (true) }` — creates the event only. `religion` omitted = farm-wide. `multiplier` is × the employee's reference salary (R). |
+| GET | `/api/bonus-events`, `/api/bonus-events/:id` | The detail carries each granted bonus with its payout status. |
+| GET | `/api/bonus-events/:id/proposal` | **Computes only, writes nothing.** `{ event, rows[] }`, every non-terminated employee with `service_months`, `full_amount`, `proposed_amount`, `selected` and a `reason` when unticked. Ticked: CONFIRMED, religion matches (or the event is farm-wide), and enough service — or prorated `multiplier × R × service_months / 12` when `prorate` is on. Religion not recorded is listed, never ticked and never dropped. Already-granted employees show `already_granted`. |
+| POST | `/api/bonus-events/:id/bonuses` | `{ bonuses: [{ employee_id, amount, note? }] }` — the owner may adjust `amount`; the salary and service months stored beside it are computed by the server. **409** if an employee already has a bonus at this event. |
+
+A granted bonus is paid through the same payout path as a wage:
+`POST /api/payroll-payouts` with `{ bonus_id }` (instead of `payroll_record_id`;
+exactly one is required), then `POST /api/payroll-payouts/:id/mark-paid` with the
+transfer reference. Confirming writes a `FESTIVAL_BONUS` expense plus the transfer-fee
+expense and one `PAYROLL` payment. The payout table is `EmployeePayout` (formerly
+`PayrollPayout`); the URL is unchanged.
+
+`Employees.religion` (`ISLAM|HINDU|CHRISTIANITY|BUDDHISM|OTHER`, optional) is returned only
+by the single-employee endpoints and the proposal — never the employee list, payslip, or
+payroll records.
+
+---
+
 ## 13. Alerts
 
 Built as an **on-demand reconciliation scan**, not live hooks on every

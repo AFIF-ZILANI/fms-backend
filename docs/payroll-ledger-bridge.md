@@ -12,7 +12,7 @@ FMS keeps money in two independent books, and neither of them knows payroll exis
 | **Cost** (accrual) | `Expense`, `PurchaseItem`, `AssetDepreciation` | `financialDashboard.expenses`, `batchPnl`, `expenseBreakdown`, `revenueVsExpenses` |
 | **Cash**           | `Payment` → `PaymentInstrument.getBalance`     | `financialDashboard.cash_position`, `cash_by_instrument`                           |
 
-`PayrollPayout` writes to neither. Confirming a payout sets a status, stores a
+`EmployeePayout` writes to neither. Confirming a payout sets a status, stores a
 transaction reference, and stops. Measured against the current database:
 
 - **8 confirmed payouts, ৳98,070** of wages actually transferred.
@@ -27,7 +27,7 @@ before deciding whether they can afford this month's feed.
 
 ## What this does _not_ reverse
 
-`employee-payroll-design.md` §"Why PayrollPayout and not the existing Payment"
+`employee-payroll-design.md` §"Why EmployeePayout and not the existing Payment"
 moved salary out of `Payment` because `Payment` cannot require proof of transfer,
 cannot hold an account snapshot, and would need six nullable columns that are
 meaningless on a sale. That reasoning is about where a payout is **authored**, and
@@ -36,7 +36,7 @@ it still holds. The same section also says, in its last line:
 > `Payment` stays the general cash ledger and gets simpler for it.
 
 A general cash ledger with payroll missing from it is not a general cash ledger.
-The bridge keeps both halves of that decision: `PayrollPayout` remains the only
+The bridge keeps both halves of that decision: `EmployeePayout` remains the only
 way to author a payout and still refuses to confirm without proof, and the ledger
 rows are **emitted as a consequence** of confirming — downstream shadows, not an
 alternative route to paying someone.

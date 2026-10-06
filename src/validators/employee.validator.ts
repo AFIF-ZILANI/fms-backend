@@ -54,6 +54,9 @@ const employeeFields = {
     date_of_birth: z.coerce.date({ message: "Date of birth is required" }),
     marital_status: maritalStatus,
     nid_number: z.string().min(1, "NID number is required"),
+    // Optional on purpose and nullable so it can be cleared: it only decides who a festival
+    // bonus proposes, and nothing may require it.
+    religion: z.enum(["ISLAM", "HINDU", "CHRISTIANITY", "BUDDHISM", "OTHER"]).nullable().optional(),
     avatar: avatarSchema,
 
     // employment

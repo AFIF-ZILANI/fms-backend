@@ -65,7 +65,7 @@ describe("PayrollRecordService", () => {
         await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: profileId } });
         // Payouts reference payroll records, so they go first.
-        await prisma.payrollPayout.deleteMany({
+        await prisma.employeePayout.deleteMany({
             where: { payroll_record: { employee_id: { in: createdEmployeeIds } } },
         });
         await prisma.payrollRecord.deleteMany({

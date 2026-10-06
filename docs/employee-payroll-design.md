@@ -327,12 +327,12 @@ model EmployeePayoutAccount {
   active_to       DateTime?    // set when superseded; never edited in place
   created_at      DateTime     @default(now())
 
-  payouts PayrollPayout[]
+  payouts EmployeePayout[]
 
   @@index([employee_id, active_to])
 }
 
-model PayrollPayout {
+model EmployeePayout {
   id                String        @id @default(uuid())
   payroll_record_id String        @unique
   payroll_record    PayrollRecord @relation(fields: [payroll_record_id], references: [id])
@@ -356,11 +356,11 @@ model PayrollPayout {
 `payout_account_id` points at the account row. The account can be closed and
 superseded; the payout must keep showing where the money actually went.
 
-### Why `PayrollPayout` and not the existing `Payment`
+### Why `EmployeePayout` and not the existing `Payment`
 
 A generic `Payment` model already exists, carrying `ref_type` / `ref_id` across
 `SALE | BIRD_SALE | PURCHASE | EXPENSE | PAYROLL`. Salary payouts move out of it
-and into `PayrollPayout`; the two are **not** kept side by side.
+and into `EmployeePayout`; the two are **not** kept side by side.
 
 The reason is that a salary payout carries obligations no other payment type has:
 proof of transfer before it can be marked paid, a receipt when it is cash, an
@@ -373,7 +373,7 @@ gets simpler for it.
 **Migration path** (not part of this doc's changes): `PaymentRefType.PAYROLL` is
 retained for now because rows already reference it — there are existing `PAYROLL`
 payments in the database, and dropping the enum value would fail against them.
-The sequence is: ship `PayrollPayout`, backfill those rows into it, repoint the
+The sequence is: ship `EmployeePayout`, backfill those rows into it, repoint the
 finance page's payroll-outstanding view, then remove `PAYROLL` from
 `PaymentRefType`. Until that backfill runs, `PAYROLL` in `PaymentRefType` is
 deprecated and must not be used for new salary payments.

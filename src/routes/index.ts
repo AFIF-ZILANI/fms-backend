@@ -49,6 +49,7 @@ import { ingestRoutes } from "@routes/ingest.routes";
 import { uploadRoutes } from "@routes/upload.routes";
 import { employeePayoutAccountRoutes } from "@routes/employee-payout-account.routes";
 import { payrollPayoutRoutes } from "@routes/payroll-payout.routes";
+import { bonusEventRoutes } from "@routes/bonus-event.routes";
 import { employeeRoleRoutes } from "@routes/employee-role.routes";
 
 export const appRoutes = new Hono();
@@ -63,6 +64,7 @@ appRoutes.route("/employee-roles", employeeRoleRoutes);
 appRoutes.route("/uploads", uploadRoutes);
 appRoutes.route("/employee-payout-accounts", employeePayoutAccountRoutes);
 appRoutes.route("/payroll-payouts", payrollPayoutRoutes);
+appRoutes.route("/bonus-events", bonusEventRoutes);
 appRoutes.route("/suppliers", supplierRoutes);
 appRoutes.route("/customers", customerRoutes);
 appRoutes.route("/doctors", doctorRoutes);
