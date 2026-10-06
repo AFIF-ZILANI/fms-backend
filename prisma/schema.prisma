@@ -54,13 +54,6 @@ enum SupplierRoleNames {
   REPRESENTATIVE
 }
 
-enum ContactMethods {
-  WHATSAPP
-  EMAIL
-  IMO
-  TELEGRAM
-}
-
 enum HouseType {
   BROODER
   GROWER
@@ -640,7 +633,6 @@ model Doctors {
   position    String?
   degrees     String[]
   institution String?
-  rating      Float?   @default(0)
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
@@ -1454,7 +1446,6 @@ model EmployeePayout {
   amount            Decimal                @db.Decimal(10, 2)
   fee_paid_by_farm  Decimal                @default(0) @db.Decimal(10, 2)
   transaction_ref   String? // required unless method = CASH
-  receipt_doc_url   String? // required when method = CASH
   status            PayoutStatus           @default(PENDING)
   paid_by_id        String?
   paid_by           Profiles?              @relation("PayoutPaidBy", fields: [paid_by_id], references: [id])
