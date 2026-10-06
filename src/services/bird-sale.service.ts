@@ -83,6 +83,17 @@ export const BirdSaleService = {
      * BatchHouseBalance in the same transaction -- the third of the "only
      * three things allowed to touch that balance" (batch-management-design.md). */
     async create(data: CreateBirdSaleInput) {
+        try {
+            return await prisma.$transaction((tx) => BirdSaleService.createIn(tx, data));
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
+    },
+
+    /** The same write inside a caller's transaction: IngestService.confirm claims a staging row and
+     * creates the sale as one unit, so a crash or a double-confirm can't leave a sale with no row
+     * linked to it, or two sales for one weighing. */
+    async createIn(tx: Prisma.TransactionClient, data: CreateBirdSaleInput) {
         const total_amount = new Prisma.Decimal(data.net_weight).times(data.price_per_kg);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         // Discount is money knocked off at the point of sale, not money owed --
@@ -97,54 +108,48 @@ export const BirdSaleService = {
             );
         }
 
-        try {
-            return await prisma.$transaction(async (tx) => {
-                // One conditional UPDATE is the guard and the decrement (see MortalityLog).
-                const { count } = await tx.batchHouseBalance.updateMany({
-                    where: {
-                        batch_id: data.batch_id,
-                        house_id: data.house_id,
-                        quantity: { gte: data.birds_count },
-                    },
-                    data: { quantity: { decrement: data.birds_count } },
-                });
-                if (count === 0) {
-                    throw AppError.conflict("Sale quantity exceeds live birds in this house");
-                }
-
-                const birdSale = await tx.birdSale.create({
-                    data: {
-                        batch_id: data.batch_id,
-                        house_id: data.house_id,
-                        sale_date: data.sale_date,
-                        grade: data.grade,
-                        birds_count: data.birds_count,
-                        dholta_in_g: data.dholta_in_g,
-                        total_katha: data.total_katha,
-                        total_weight: data.total_weight,
-                        net_weight: data.net_weight,
-                        price_per_kg: data.price_per_kg,
-                        total_amount,
-                        paid_amount,
-                        discount_amount,
-                        due_amount,
-                        recorded_by_id: data.recorded_by_id,
-                        ...(data.customer_id !== undefined && { customer_id: data.customer_id }),
-                        ...(data.male_count !== undefined && { male_count: data.male_count }),
-                        ...(data.female_count !== undefined && { female_count: data.female_count }),
-                        ...(data.avg_wt_per_katha_kg !== undefined && {
-                            avg_wt_per_katha_kg: data.avg_wt_per_katha_kg,
-                        }),
-                        ...(data.avg_weight_g !== undefined && { avg_weight_g: data.avg_weight_g }),
-                    },
-                });
-
-                await markEmptiedHousesCleaning(tx, [data.house_id]);
-
-                return birdSale;
-            });
-        } catch (err) {
-            return handlePrismaWriteError(err);
+        // One conditional UPDATE is the guard and the decrement (see MortalityLog).
+        const { count } = await tx.batchHouseBalance.updateMany({
+            where: {
+                batch_id: data.batch_id,
+                house_id: data.house_id,
+                quantity: { gte: data.birds_count },
+            },
+            data: { quantity: { decrement: data.birds_count } },
+        });
+        if (count === 0) {
+            throw AppError.conflict("Sale quantity exceeds live birds in this house");
         }
+
+        const birdSale = await tx.birdSale.create({
+            data: {
+                batch_id: data.batch_id,
+                house_id: data.house_id,
+                sale_date: data.sale_date,
+                grade: data.grade,
+                birds_count: data.birds_count,
+                dholta_in_g: data.dholta_in_g,
+                total_katha: data.total_katha,
+                total_weight: data.total_weight,
+                net_weight: data.net_weight,
+                price_per_kg: data.price_per_kg,
+                total_amount,
+                paid_amount,
+                discount_amount,
+                due_amount,
+                recorded_by_id: data.recorded_by_id,
+                ...(data.customer_id !== undefined && { customer_id: data.customer_id }),
+                ...(data.male_count !== undefined && { male_count: data.male_count }),
+                ...(data.female_count !== undefined && { female_count: data.female_count }),
+                ...(data.avg_wt_per_katha_kg !== undefined && {
+                    avg_wt_per_katha_kg: data.avg_wt_per_katha_kg,
+                }),
+                ...(data.avg_weight_g !== undefined && { avg_weight_g: data.avg_weight_g }),
+            },
+        });
+
+        await markEmptiedHousesCleaning(tx, [data.house_id]);
+
+        return birdSale;
     },
 };

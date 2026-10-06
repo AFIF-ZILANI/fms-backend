@@ -52,10 +52,13 @@ export const IngestService = {
         }
     },
 
-    async list(status?: "PENDING" | "CONFIRMED" | "DISMISSED") {
+    /** The review queue. Defaults to what still needs a decision, and is capped: the web only ever
+     * asks for PENDING, and a history view of confirmed/dismissed rows would paginate instead. */
+    async list(status: "PENDING" | "CONFIRMED" | "DISMISSED" = "PENDING") {
         return prisma.ingestedSale.findMany({
-            where: { ...(status !== undefined && { status }) },
+            where: { status },
             orderBy: { received_at: "desc" },
+            take: 200,
             include: {
                 recorded_by: { select: { id: true, name: true } },
                 device: { select: { id: true, label: true } },
@@ -65,59 +68,64 @@ export const IngestService = {
 
     /** Turns a staged row into a real BirdSale through the normal service, so
      * the BatchHouseBalance decrement and the "exceeds live birds" check apply
-     * exactly as they do for a sale typed into the dashboard. */
+     * exactly as they do for a sale typed into the dashboard.
+     *
+     * One transaction claims the row (PENDING -> CONFIRMED), creates the sale and links them. A
+     * second confirm waits on the row, then matches nothing and aborts before writing a sale; a
+     * crash part-way rolls the claim back, so the row stays PENDING with no orphan sale. */
     async confirm(id: string, input: ConfirmIngestedInput) {
-        const row = await prisma.ingestedSale.findUnique({ where: { id } });
-        if (!row) throw AppError.notFound("IngestedSale");
-        if (row.status !== "PENDING") {
-            throw AppError.conflict(`This sale was already ${row.status.toLowerCase()}`);
+        try {
+            return await prisma.$transaction(async (tx) => {
+                const claimed = await tx.ingestedSale.updateMany({
+                    where: { id, status: "PENDING" },
+                    data: {
+                        status: "CONFIRMED",
+                        reviewed_by_id: input.reviewed_by_id,
+                        reviewed_at: new Date(),
+                    },
+                });
+                const row = await tx.ingestedSale.findUnique({ where: { id } });
+                if (!row) throw AppError.notFound("IngestedSale");
+                if (claimed.count === 0) {
+                    throw AppError.conflict(`This sale was already ${row.status.toLowerCase()}`);
+                }
+
+                const birdSale = await BirdSaleService.createIn(tx, {
+                    batch_id: input.batch_id,
+                    house_id: input.house_id,
+                    sale_date: row.device_sale_date,
+                    grade: input.grade,
+                    birds_count: input.birds_count,
+                    dholta_in_g: input.dholta_in_g,
+                    total_katha: input.total_katha,
+                    total_weight: input.total_weight,
+                    net_weight: input.net_weight,
+                    price_per_kg: input.price_per_kg,
+                    paid_amount: input.paid_amount,
+                    discount_amount: input.discount_amount,
+                    recorded_by_id: row.recorded_by_id,
+                    ...(input.customer_id !== undefined && { customer_id: input.customer_id }),
+                    ...(input.male_count !== undefined && { male_count: input.male_count }),
+                    ...(input.female_count !== undefined && { female_count: input.female_count }),
+                    ...(input.avg_wt_per_katha_kg !== undefined && {
+                        avg_wt_per_katha_kg: input.avg_wt_per_katha_kg,
+                    }),
+                    ...(input.avg_weight_g !== undefined && { avg_weight_g: input.avg_weight_g }),
+                });
+
+                await tx.ingestedSale.update({ where: { id }, data: { bird_sale_id: birdSale.id } });
+                return birdSale;
+            });
+        } catch (err) {
+            return handlePrismaWriteError(err);
         }
-
-        const birdSale = await BirdSaleService.create({
-            batch_id: input.batch_id,
-            house_id: input.house_id,
-            sale_date: row.device_sale_date,
-            grade: input.grade,
-            birds_count: input.birds_count,
-            dholta_in_g: input.dholta_in_g,
-            total_katha: input.total_katha,
-            total_weight: input.total_weight,
-            net_weight: input.net_weight,
-            price_per_kg: input.price_per_kg,
-            paid_amount: input.paid_amount,
-            discount_amount: input.discount_amount,
-            recorded_by_id: row.recorded_by_id,
-            ...(input.customer_id !== undefined && { customer_id: input.customer_id }),
-            ...(input.male_count !== undefined && { male_count: input.male_count }),
-            ...(input.female_count !== undefined && { female_count: input.female_count }),
-            ...(input.avg_wt_per_katha_kg !== undefined && {
-                avg_wt_per_katha_kg: input.avg_wt_per_katha_kg,
-            }),
-            ...(input.avg_weight_g !== undefined && { avg_weight_g: input.avg_weight_g }),
-        });
-
-        await prisma.ingestedSale.update({
-            where: { id },
-            data: {
-                status: "CONFIRMED",
-                bird_sale_id: birdSale!.id,
-                reviewed_by_id: input.reviewed_by_id,
-                reviewed_at: new Date(),
-            },
-        });
-
-        return birdSale!;
     },
 
     /** Never deletes: a rejected session stays as the record of what arrived. */
     async dismiss(id: string, reason: string, reviewed_by_id: string) {
-        const row = await prisma.ingestedSale.findUnique({ where: { id } });
-        if (!row) throw AppError.notFound("IngestedSale");
-        if (row.status !== "PENDING") {
-            throw AppError.conflict(`This sale was already ${row.status.toLowerCase()}`);
-        }
-        return prisma.ingestedSale.update({
-            where: { id },
+        // Same claim as confirm, so a dismiss racing a confirm can't both win.
+        const claimed = await prisma.ingestedSale.updateMany({
+            where: { id, status: "PENDING" },
             data: {
                 status: "DISMISSED",
                 dismissed_reason: reason,
@@ -125,6 +133,12 @@ export const IngestService = {
                 reviewed_at: new Date(),
             },
         });
+        const row = await prisma.ingestedSale.findUnique({ where: { id } });
+        if (!row) throw AppError.notFound("IngestedSale");
+        if (claimed.count === 0) {
+            throw AppError.conflict(`This sale was already ${row.status.toLowerCase()}`);
+        }
+        return row;
     },
 
     async getById(id: string) {
