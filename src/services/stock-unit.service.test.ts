@@ -233,6 +233,8 @@ describe("StockUnitService", () => {
         const reAllocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
         expect(reAllocated.type).toBe("ALLOCATION");
 
+        // The allocations that point at this house go first: a house with history can't be deleted.
+        await prisma.stockHouseAllocation.deleteMany({ where: { house_id: houseTwo.id } });
         await prisma.houses.delete({ where: { id: houseTwo.id } });
     });
 

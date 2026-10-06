@@ -9,9 +9,9 @@ import type {
 } from "@validators/warehouse.validator";
 
 // No is_active here -- a warehouse is just a name. Delete is guarded rather than
-// absent: InventoryAdjustment cascades on delete, so removing a warehouse that has
-// been used would silently destroy adjustment history -- remove() refuses in that
-// case, leaving delete usable only for a mis-created (never-used) row.
+// absent: remove() refuses a warehouse that has been used (with a clear message), leaving
+// delete usable only for a mis-created (never-used) row. InventoryAdjustment is
+// onDelete: Restrict, so the database refuses too -- including a delete that races the count.
 export const WarehouseService = {
     async getAll(query: ListWarehousesQuery) {
         const [warehouses, total] = await Promise.all([
@@ -54,8 +54,8 @@ export const WarehouseService = {
     /**
      * Hard delete -- a mis-created warehouse (typo, duplicate) only. There is no
      * is_active to fall back on, so this is the sole way to remove one, which is
-     * exactly why the guard matters: InventoryAdjustment is onDelete: Cascade, so an
-     * unguarded delete would take that history with it.
+     * exactly why the guard matters. InventoryAdjustment is onDelete: Restrict, so the
+     * database is the backstop; the count here exists to give a readable error.
      * StockLedger is polymorphic (location_type/location_id, no FK) -- counted
      * separately. Transfers need no separate count: TransferService writes a ledger
      * row tagged at each endpoint, so a warehouse that was ever a transfer end shows

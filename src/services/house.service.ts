@@ -176,9 +176,9 @@ export const HouseService = {
 
     /**
      * Hard delete -- only for houses registered by mistake. The schema says a
-     * house is never hard-deleted once history attaches, and the FKs alone
-     * won't stop us (BatchHouseAllocation is SetNull, InventoryAdjustment is
-     * Cascade), so count every attachment ourselves and refuse if any exist.
+     * house is never hard-deleted once history attaches. Every FK that points at a house is
+     * onDelete: Restrict, so the database refuses too (including a delete that races the
+     * count); counting every attachment first is what gives a readable error.
      * StockLedger is polymorphic (location_type/location_id, no FK) -- counted
      * separately for the same reason.
      */

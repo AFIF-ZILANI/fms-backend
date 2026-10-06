@@ -515,7 +515,7 @@ model Profiles {
 model Employees {
   id           String            @id @default(uuid())
   profile_id   String            @unique
-  profile      Profiles          @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  profile      Profiles          @relation(fields: [profile_id], references: [id], onDelete: Restrict)
   role     String
   roleRef  EmployeeRole @relation(fields: [role], references: [code], onUpdate: Cascade)
   /// An exception to the role's standard salary. Null means "use the role's" --
@@ -578,7 +578,7 @@ model Employees {
 model Admins {
   id         String   @id @default(uuid())
   profile_id String   @unique
-  profile    Profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  profile    Profiles @relation(fields: [profile_id], references: [id], onDelete: Restrict)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 }
@@ -586,7 +586,7 @@ model Admins {
 model Customers {
   id         String   @id @default(uuid())
   profile_id String   @unique
-  profile    Profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  profile    Profiles @relation(fields: [profile_id], references: [id], onDelete: Restrict)
   company    String?
   rating     Float?   @default(0)
   is_active  Boolean  @default(true)
@@ -600,7 +600,7 @@ model Customers {
 model Suppliers {
   id          String               @id @default(uuid())
   profile_id  String               @unique
-  profile     Profiles             @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  profile     Profiles             @relation(fields: [profile_id], references: [id], onDelete: Restrict)
   role        SupplierRoleNames
   supplyLinks SupplierSupplyLink[]
   company     String?
@@ -615,7 +615,7 @@ model Suppliers {
 model Doctors {
   id          String   @id @default(uuid())
   profile_id  String   @unique
-  profile     Profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  profile     Profiles @relation(fields: [profile_id], references: [id], onDelete: Restrict)
   specialty   String?
   position    String?
   degrees     String[]
@@ -701,11 +701,11 @@ model Batches {
 model BatchHouseAllocation {
   id              String           @id @default(uuid())
   batch_id        String
-  batch           Batches          @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+  batch           Batches          @relation(fields: [batch_id], references: [id], onDelete: Restrict)
   from_house_id   String?
-  from_house      Houses?          @relation("FromHouse", fields: [from_house_id], references: [id], onDelete: SetNull)
+  from_house      Houses?          @relation("FromHouse", fields: [from_house_id], references: [id], onDelete: Restrict)
   to_house_id     String?
-  to_house        Houses?          @relation("ToHouse", fields: [to_house_id], references: [id], onDelete: SetNull)
+  to_house        Houses?          @relation("ToHouse", fields: [to_house_id], references: [id], onDelete: Restrict)
   quantity        Int // birds moved in THIS event (always positive) — stagger a multi-day shift as several rows
   reason          AllocationReason
   recorded_by_id  String
@@ -907,7 +907,7 @@ model StockHouseAllocation {
   stock_unit_id     String
   stock_unit        StockUnit      @relation(fields: [stock_unit_id], references: [id])
   house_id          String? // null = returned to the warehouse
-  house             Houses?        @relation(fields: [house_id], references: [id])
+  house             Houses?        @relation(fields: [house_id], references: [id], onDelete: Restrict)
   type              AllocationType
   // Optional link to the aggregate-quantity move this physical unit was part of -- e.g. 10 units
   // scanned into one "allocate 10L to House Y" batch share one StockTransfer (and its 2 StockLedger
@@ -1111,11 +1111,11 @@ model StockLedger {
 model InventoryAdjustment {
   id                  String      @id @default(uuid())
   item_id             String
-  item                Item        @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  item                Item        @relation(fields: [item_id], references: [id], onDelete: Restrict)
   warehouse_id        String?
-  warehouse           Warehouses? @relation(fields: [warehouse_id], references: [id], onDelete: Cascade)
+  warehouse           Warehouses? @relation(fields: [warehouse_id], references: [id], onDelete: Restrict)
   house_id            String?
-  house               Houses?     @relation(fields: [house_id], references: [id], onDelete: Cascade)
+  house               Houses?     @relation(fields: [house_id], references: [id], onDelete: Restrict)
   quantity_before     Decimal     @db.Decimal(13, 4)
   quantity_after      Decimal     @db.Decimal(13, 4)
   adjustment_quantity Decimal     @db.Decimal(13, 4)
@@ -1480,7 +1480,7 @@ model EmployeeTaskAssignment {
   // never both. Enforced in the service, and expressed in the app as a
   // segmented toggle so the invalid combination can't be entered.
   house_id      String? // null = not house-specific
-  house         Houses? @relation(fields: [house_id], references: [id])
+  house         Houses? @relation(fields: [house_id], references: [id], onDelete: Restrict)
   location_note String? // "front gate", "water line" -- used when house_id is null
 
   due_at          DateTime

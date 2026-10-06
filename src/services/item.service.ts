@@ -147,11 +147,10 @@ export const ItemService = {
      * Hard delete -- only for an item that was never used (typo, duplicate,
      * mis-created). Refuses as soon as any history references it: deactivate
      * that one instead, so its purchases, ledger and consumption keep resolving
-     * to a real row. The FKs alone can't be trusted as the guard -- ItemUnit,
-     * ItemOrganization and *InventoryAdjustment* are onDelete: Cascade, so the
-     * adjustment history would be silently wiped -- hence the explicit count.
-     * ItemUnit/ItemOrganization/Suppliers links are config, not history, and
-     * are allowed to cascade away with the item.
+     * to a real row. InventoryAdjustment is onDelete: Restrict, so the database
+     * refuses too (the backstop, including a delete that races the count); the explicit
+     * count is what gives a readable error. ItemUnit/ItemOrganization/Suppliers links are
+     * config, not history, and are allowed to cascade away with the item.
      */
     async remove(id: string) {
         const item = await prisma.item.findUnique({
