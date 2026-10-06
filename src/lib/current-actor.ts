@@ -28,6 +28,7 @@ export async function getActorId(c: Context): Promise<string> {
 export async function getDefaultActorId(): Promise<string> {
     if (cachedAdminProfileId) return cachedAdminProfileId;
     const admin = await prisma.admins.findFirst({
+        where: { profile: { is_active: true } },
         orderBy: { created_at: "asc" },
         select: { profile_id: true },
     });

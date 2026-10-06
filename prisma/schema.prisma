@@ -512,6 +512,11 @@ model Profiles {
   payoutAccountsVerified  EmployeePayoutAccount[] @relation("PayoutAccountVerifiedBy")
   payoutsPaid             EmployeePayout[]        @relation("PayoutPaidBy")
   bonusEventsCreated      BonusEvent[]
+  scoresVoided            PerformanceScoreEntry[] @relation("ScoreVoidedBy")
+  scoresAcknowledged      PerformanceScoreEntry[] @relation("ScoreAcknowledgedBy")
+  payoutAccountsClosed    EmployeePayoutAccount[] @relation("PayoutAccountClosedBy")
+  devicesRevoked          Device[]                @relation("DeviceRevokedBy")
+  employeesTerminated     Employees[]             @relation("EmployeeTerminatedBy")
   inventoryAdjustments    InventoryAdjustment[]
   stockTransfersRecorded  StockTransfer[]
   medicationsGiven        Medications[]
@@ -574,6 +579,8 @@ model Employees {
   // When employment ended. Payroll may still be generated for the month they
   // left in -- the final month's wage is owed -- but not for months after it.
   terminated_at      DateTime?
+  terminated_by_id   String? // who ended it; cleared on reinstate
+  terminated_by      Profiles?  @relation("EmployeeTerminatedBy", fields: [terminated_by_id], references: [id])
 
   created_at   DateTime          @default(now())
   updated_at   DateTime          @updatedAt
@@ -1362,6 +1369,11 @@ model PerformanceScoreEntry {
   status          ScoreEntryStatus     @default(ACTIVE)
   void_reason     String? // required when status = VOIDED
   acknowledged_at DateTime? // when the employee confirmed they were shown it
+  // Who did each of those, from the session. Null on rows from before logins existed.
+  voided_by_id       String?
+  voided_by          Profiles?            @relation("ScoreVoidedBy", fields: [voided_by_id], references: [id])
+  acknowledged_by_id String?
+  acknowledged_by    Profiles?            @relation("ScoreAcknowledgedBy", fields: [acknowledged_by_id], references: [id])
   created_at      DateTime             @default(now())
   idempotency_key String               @unique // client-generated; prevents double-insert on offline sync retry
 
@@ -1410,6 +1422,8 @@ model EmployeePayoutAccount {
   verified_at     DateTime?
   active_from     DateTime     @default(now())
   active_to       DateTime? // set when superseded
+  closed_by_id    String? // who closed or superseded it; null while open
+  closed_by       Profiles?    @relation("PayoutAccountClosedBy", fields: [closed_by_id], references: [id])
   created_at      DateTime     @default(now())
 
   payouts EmployeePayout[]
@@ -1586,6 +1600,8 @@ model Device {
   token_hash   String    @unique // sha256; plaintext is returned once at pairing
   last_seen_at DateTime?
   revoked_at   DateTime?
+  revoked_by_id String?
+  revoked_by   Profiles? @relation("DeviceRevokedBy", fields: [revoked_by_id], references: [id])
   created_at   DateTime  @default(now())
 
   ingestedSales IngestedSale[]

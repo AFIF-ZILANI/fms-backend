@@ -2,6 +2,7 @@ import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EmployeeService } from "@services/employee.service";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
+import { hashPassword } from "@lib/password";
 import { app } from "../App";
 
 // The phone's whole flow against the real app: hired with a temp password ->
@@ -69,6 +70,7 @@ describe("the phone flow and role matrix", () => {
     afterAll(async () => {
         await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
+        await prisma.admins.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
         await prisma.avatars.deleteMany({ where: { id: { in: avatarIds } } });
     });
@@ -125,5 +127,34 @@ describe("the phone flow and role matrix", () => {
         expect((await call("/api/auth/me", w.token)).status).toBe(200);
         await EmployeeService.terminate(w.id);
         expect((await call("/api/auth/me", w.token)).status).toBe(401);
+    });
+
+    test("an admin terminating or reinstating over HTTP is recorded as the logged-in admin", async () => {
+        const admin = await prisma.profiles.create({
+            data: {
+                name: "HTTP Admin",
+                mobile: mobile(),
+                email: `http-admin-${uniq()}@test.local`,
+                role: "ADMIN",
+                password_hash: await hashPassword("http-admin-pass-1"),
+                password_changed_at: new Date(),
+            },
+        });
+        profileIds.push(admin.id);
+        await prisma.admins.create({ data: { profile_id: admin.id } });
+        const token = await phoneLogin(admin.email!, "http-admin-pass-1");
+        const target = await hire("WORKER");
+
+        const post = (path: string) =>
+            app.request(path, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: "{}",
+            });
+        expect((await post(`/api/employees/${target.id}/terminate`)).status).toBe(200);
+        expect((await prisma.employees.findUniqueOrThrow({ where: { id: target.id } })).terminated_by_id).toBe(admin.id);
+
+        expect((await post(`/api/employees/${target.id}/reinstate`)).status).toBe(200);
+        expect((await prisma.employees.findUniqueOrThrow({ where: { id: target.id } })).terminated_by_id).toBeNull();
     });
 });

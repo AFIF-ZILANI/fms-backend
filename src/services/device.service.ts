@@ -105,12 +105,15 @@ export const DeviceService = {
         return prisma.device.findMany({ orderBy: { created_at: "desc" }, select: deviceSelect });
     },
 
-    async revoke(id: string) {
+    async revoke(id: string, actor_id?: string) {
         const device = await prisma.device.findUnique({ where: { id } });
         if (!device) throw AppError.notFound("Device");
         return prisma.device.update({
             where: { id },
-            data: { revoked_at: new Date() },
+            data: {
+                revoked_at: new Date(),
+                ...(actor_id !== undefined && { revoked_by_id: actor_id }),
+            },
             select: deviceSelect,
         });
     },

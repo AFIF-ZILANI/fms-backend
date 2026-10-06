@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { getActorId } from "@lib/current-actor";
 import { withHandler } from "@lib/helper";
 import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -38,7 +39,7 @@ export const DeviceController = {
 
     async revoke(c: Context) {
         return withHandler(c, async () => {
-            const device = await DeviceService.revoke(c.req.param("id") ?? "");
+            const device = await DeviceService.revoke(c.req.param("id") ?? "", await getActorId(c));
             return sendSuccess(c, device, "Device revoked");
         });
     },

@@ -397,6 +397,7 @@ export const EmployeeService = {
                     employment_status: "TERMINATED",
                     probation_end_date: null,
                     terminated_at: new Date(),
+                    ...(actor_id !== undefined && { terminated_by_id: actor_id }),
                 },
             }),
             prisma.profiles.update({
@@ -440,6 +441,7 @@ export const EmployeeService = {
                     // Cleared, not kept: they are employed again, and a stale date
                     // would keep blocking payroll for every month after it.
                     terminated_at: null,
+                    terminated_by_id: null,
                 },
             }),
             prisma.profiles.update({

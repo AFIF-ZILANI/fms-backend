@@ -62,7 +62,7 @@ export const EmployeePayoutAccountService = {
             return await prisma.$transaction(async (tx) => {
                 await tx.employeePayoutAccount.updateMany({
                     where: { employee_id: data.employee_id, active_to: null },
-                    data: { active_to: now },
+                    data: { active_to: now, closed_by_id: data.verified_by_id },
                 });
                 const account = await tx.employeePayoutAccount.create({
                     data: {
@@ -104,7 +104,10 @@ export const EmployeePayoutAccountService = {
 
         const closed = await prisma.employeePayoutAccount.update({
             where: { id },
-            data: { active_to: new Date() },
+            data: {
+                active_to: new Date(),
+                ...(actor_id !== undefined && { closed_by_id: actor_id }),
+            },
             include,
         });
         if (actor_id) {

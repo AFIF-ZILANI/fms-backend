@@ -4,6 +4,8 @@ import { AdminService } from "./admin.service";
 import { AuthService } from "./auth.service";
 import { EmployeeService } from "./employee.service";
 import { EmployeePayoutAccountService } from "./employee-payout-account.service";
+import { PerformanceScoreEntryService } from "./performance-score-entry.service";
+import { DeviceService } from "./device.service";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
 
 // The sensitive actions leave a permanent "who did it" row -- and never a secret.
@@ -56,6 +58,9 @@ describe("audit writes", () => {
 
     afterAll(async () => {
         await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
+        await prisma.performanceScoreEntry.deleteMany({ where: { employee_id: { in: employeeIds } } });
+        await prisma.device.deleteMany({ where: { profile_id: { in: profileIds } } });
+        await prisma.pairingCode.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: { in: employeeIds } } });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
         await prisma.admins.deleteMany({ where: { id: { in: adminIds } } });
@@ -146,5 +151,60 @@ describe("audit writes", () => {
         ]);
         expect(rows[0]!.after_data).toMatchObject({ method: "BKASH", account_last4: "5678" });
         expect(JSON.stringify(rows)).not.toContain("01712345678");
+    });
+
+    test("terminating records who did it, and reinstating clears it", async () => {
+        const e = await hire();
+        await EmployeeService.terminate(e.id, actorId);
+        expect((await prisma.employees.findUniqueOrThrow({ where: { id: e.id } })).terminated_by_id).toBe(actorId);
+        await EmployeeService.reinstate(e.id, actorId);
+        expect((await prisma.employees.findUniqueOrThrow({ where: { id: e.id } })).terminated_by_id).toBeNull();
+    });
+
+    test("closing or superseding a payout account records who closed it", async () => {
+        const e = await hire();
+        const make = (n: string) =>
+            EmployeePayoutAccountService.create({
+                employee_id: e.id,
+                method: "BKASH",
+                account_name: "Audit Worker",
+                account_number: n,
+                verified_by_id: actorId,
+            });
+        const first = await make("01711110001");
+        const second = await make("01711110002"); // supersedes the first
+        const closedFirst = await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: first!.id } });
+        expect(closedFirst.closed_by_id).toBe(actorId);
+        expect((await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: second!.id } })).closed_by_id).toBeNull();
+
+        await EmployeePayoutAccountService.close(second!.id, actorId);
+        expect((await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: second!.id } })).closed_by_id).toBe(actorId);
+    });
+
+    test("voiding and acknowledging a score entry record who did each", async () => {
+        const e = await hire();
+        const entry = await prisma.performanceScoreEntry.create({
+            data: {
+                employee_id: e.id,
+                given_by_id: actorId,
+                criterion: "ATTENDANCE_PERFECT",
+                points: 3,
+                reason: "who did it",
+                incident_date: new Date(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+        await PerformanceScoreEntryService.acknowledge(entry.id, e.profile_id); // the employee themselves
+        await PerformanceScoreEntryService.void(entry.id, { void_reason: "entered in error" }, actorId);
+        const after = await prisma.performanceScoreEntry.findUniqueOrThrow({ where: { id: entry.id } });
+        expect(after.acknowledged_by_id).toBe(e.profile_id);
+        expect(after.voided_by_id).toBe(actorId);
+    });
+
+    test("revoking a device records who revoked it", async () => {
+        const { code } = await DeviceService.createPairingCode(actorId);
+        const paired = await DeviceService.redeemPairingCode(code, "Who revoked", "android");
+        await DeviceService.revoke(paired.device_id, actorId);
+        expect((await prisma.device.findUniqueOrThrow({ where: { id: paired.device_id } })).revoked_by_id).toBe(actorId);
     });
 });

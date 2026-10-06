@@ -149,7 +149,7 @@ export const PerformanceScoreEntryService = {
 
     /** Entries are never deleted. A wrong one is voided, with the reason kept,
      *  leaving both the entry and the correction on record. */
-    async void(id: string, data: VoidScoreEntryInput) {
+    async void(id: string, data: VoidScoreEntryInput, actor_id?: string) {
         const entry = await prisma.performanceScoreEntry.findUnique({ where: { id } });
         if (!entry) throw AppError.notFound("Score entry");
         if (entry.status === "VOIDED") throw AppError.badRequest("Entry is already voided");
@@ -166,7 +166,11 @@ export const PerformanceScoreEntryService = {
 
         return prisma.performanceScoreEntry.update({
             where: { id },
-            data: { status: "VOIDED", void_reason: data.void_reason },
+            data: {
+                status: "VOIDED",
+                void_reason: data.void_reason,
+                ...(actor_id !== undefined && { voided_by_id: actor_id }),
+            },
         });
     },
 
@@ -186,12 +190,15 @@ export const PerformanceScoreEntryService = {
 
     /** The employee confirms they were shown the entry -- what starts the
      *  7-day dispute clock. */
-    async acknowledge(id: string) {
+    async acknowledge(id: string, actor_id?: string) {
         const entry = await prisma.performanceScoreEntry.findUnique({ where: { id } });
         if (!entry) throw AppError.notFound("Score entry");
         return prisma.performanceScoreEntry.update({
             where: { id },
-            data: { acknowledged_at: new Date() },
+            data: {
+                acknowledged_at: new Date(),
+                ...(actor_id !== undefined && { acknowledged_by_id: actor_id }),
+            },
         });
     },
 };

@@ -33,7 +33,11 @@ export const PerformanceScoreEntryController = {
     async void(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<VoidScoreEntryInput>(c, "json");
-            const entry = await PerformanceScoreEntryService.void(c.req.param("id") ?? "", body);
+            const entry = await PerformanceScoreEntryService.void(
+                c.req.param("id") ?? "",
+                body,
+                await getActorId(c),
+            );
             return sendSuccess(c, entry, "Score entry voided");
         });
     },
@@ -47,7 +51,10 @@ export const PerformanceScoreEntryController = {
 
     async acknowledge(c: Context) {
         return withHandler(c, async () => {
-            const entry = await PerformanceScoreEntryService.acknowledge(c.req.param("id") ?? "");
+            const entry = await PerformanceScoreEntryService.acknowledge(
+                c.req.param("id") ?? "",
+                await getActorId(c),
+            );
             return sendSuccess(c, entry, "Score entry acknowledged");
         });
     },
