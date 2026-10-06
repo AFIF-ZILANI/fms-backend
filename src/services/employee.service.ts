@@ -355,6 +355,11 @@ export const EmployeeService = {
                                 ? { connect: { id: reference_employee_id } }
                                 : { disconnect: true },
                         }),
+                        // A reference is an employee or an outsider, never both (a CHECK
+                        // enforces it): naming an employee clears the outsider's details.
+                        ...(reference_employee_id
+                            ? { reference_name: null, reference_phone: null, reference_address: null }
+                            : {}),
                         // Same reason role can't be a plain scalar here: profile's
                         // nested update above already puts this write on the
                         // relation-shaped (checked) input, where role only exists

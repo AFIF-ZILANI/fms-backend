@@ -76,6 +76,7 @@ describe("PerformanceScoreEntryService", () => {
             points: 4,
             reason: "Went beyond the fixed list -- organized biosecurity training",
             incident_date: new Date(),
+            approved_by_id: profileId, // an OTHER entry always needs the Owner's approval
         });
         createdIds.push(entry!.id);
         expect(entry!.points).toBe(4);

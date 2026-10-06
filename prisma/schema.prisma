@@ -4,8 +4,10 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "./generated/prisma"
+  provider        = "prisma-client"
+  output          = "./generated/prisma"
+  // For the one-active-payout-account index (a partial unique). Documented in Prisma 7.8.
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -1393,6 +1395,9 @@ model EmployeePayoutAccount {
   payouts EmployeePayout[]
 
   @@index([employee_id, active_to])
+  // At most one open account per employee, enforced by the database -- the service closes the old
+  // one in the same transaction, but two concurrent creates could each close it and insert.
+  @@unique([employee_id], where: raw("active_to IS NULL"), map: "EmployeePayoutAccount_one_active_key")
 }
 
 /// Paying an employee, as distinct from calculating what they are owed. One payout per
@@ -1539,6 +1544,13 @@ model Alerts {
   // No actor column here yet -- until one exists the app prefixes description
   // with the raiser's name (mobile/docs/PRD.md §6.20).
   idempotency_key String            @unique
+  // Names the *condition* a scan alert is about ("NEG_PERF:<employee id>"), so one condition has at
+  // most one ACTIVE alert while different conditions about the same employee don't shadow each
+  // other. Null for alerts a person raised by hand. Resolving an alert frees its key to be re-raised.
+  dedupe_key      String?
+
+  @@unique([dedupe_key], where: raw("status = 'ACTIVE'"), map: "Alerts_one_active_per_condition")
+  @@index([status, created_at])
 }
 
 // A paired mobile device. Tokens are long-lived deliberately: pairing is the

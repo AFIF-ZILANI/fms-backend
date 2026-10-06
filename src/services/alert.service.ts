@@ -19,31 +19,42 @@ type AlertDraft = {
     title: string;
     description?: string;
     related_id?: string;
+    /** The condition this alert is about, e.g. "NEG_PERF:<employee id>". One ACTIVE alert per key. */
+    key: string;
 };
 
-/** One ACTIVE alert per (type, related_id) at a time -- reconciling twice
- * in a row shouldn't spam duplicates. Resolving it lets the next scan
- * re-raise if the condition is still true. */
+/** One ACTIVE alert per condition (its `key`) at a time -- reconciling twice in a row shouldn't
+ * spam duplicates, and two different conditions about the same employee mustn't hide each other.
+ * Resolving an alert frees its key, so the next scan re-raises it if the condition is still true.
+ * The partial unique index on dedupe_key is what makes this race-free (overlapping scans, a manual
+ * scan during the timer): the loser's insert fails and it returns the winner's row. */
 async function upsertActiveAlert(draft: AlertDraft) {
-    if (draft.related_id) {
-        const existing = await prisma.alerts.findFirst({
-            where: { type: draft.type, related_id: draft.related_id, status: "ACTIVE" },
-        });
-        if (existing) return existing;
-    }
-    return prisma.alerts.create({
-        data: {
-            title: draft.title,
-            type: draft.type,
-            level: draft.level,
-            issued_at: new Date(),
-            // Server-side scan, not a client retry -- the dedupe above is what
-            // keeps repeat scans from spamming, so this just satisfies the column.
-            idempotency_key: crypto.randomUUID(),
-            ...(draft.description !== undefined && { description: draft.description }),
-            ...(draft.related_id !== undefined && { related_id: draft.related_id }),
-        },
+    const existing = await prisma.alerts.findFirst({
+        where: { dedupe_key: draft.key, status: "ACTIVE" },
     });
+    if (existing) return existing;
+    try {
+        return await prisma.alerts.create({
+            data: {
+                dedupe_key: draft.key,
+                title: draft.title,
+                type: draft.type,
+                level: draft.level,
+                issued_at: new Date(),
+                // Server-side scan, not a client retry -- the dedupe above is what
+                // keeps repeat scans from spamming, so this just satisfies the column.
+                idempotency_key: crypto.randomUUID(),
+                ...(draft.description !== undefined && { description: draft.description }),
+                ...(draft.related_id !== undefined && { related_id: draft.related_id }),
+            },
+        });
+    } catch (err) {
+        // A concurrent scan raised the same condition between our check and insert.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+            return prisma.alerts.findFirst({ where: { dedupe_key: draft.key, status: "ACTIVE" } });
+        }
+        throw err;
+    }
 }
 
 async function checkLowStock() {
@@ -64,6 +75,7 @@ async function checkLowStock() {
                 title: `${item.name} is below reorder level`,
                 description: `Current balance ${balance.toString()}, reorder level ${item.reorder_level!.toString()}`,
                 related_id: item.id,
+                key: `LOW_STOCK:${item.id}`,
             });
         }
     }
@@ -92,6 +104,7 @@ async function checkMortalitySpikes() {
                 title: `${batch.batch_code} mortality rate ${(rate * 100).toFixed(1)}% in the last 24h`,
                 description: `${died} of ${liveCount} live birds`,
                 related_id: batch.id,
+                key: `MORTALITY:${batch.id}`,
             });
         }
     }
@@ -109,6 +122,7 @@ async function checkExpiringStock() {
             level: "WARNING",
             title: `${lot.item.name} lot expires ${lot.expiration_date!.toISOString().slice(0, 10)}`,
             related_id: lot.id,
+            key: `EXPIRY:${lot.id}`,
         });
     }
 }
@@ -131,6 +145,7 @@ async function checkPayrollDue() {
                 title: `Payroll not yet generated for ${employee.profile.name}`,
                 description: `Month: ${lastMonthStart.toISOString().slice(0, 7)}`,
                 related_id: employee.id,
+                key: `PAYROLL_DUE:${employee.id}`,
             });
         }
     }
@@ -159,6 +174,7 @@ async function checkNegativePerformancePatterns() {
                 title: `${employee.profile.name} has a negative performance pattern this month`,
                 description: `Net ${sum} points so far`,
                 related_id: employee.id,
+                key: `NEG_PERF:${employee.id}`,
             });
         }
     }
@@ -193,6 +209,7 @@ async function checkProbationEnding() {
                 : `${employee.profile.name}'s probation ends soon`,
             description: `Probation end: ${endsAt.toISOString().slice(0, 10)}`,
             related_id: employee.id,
+            key: `PROBATION:${employee.id}`,
         });
     }
 }
@@ -226,6 +243,7 @@ async function checkPayoutDue() {
                 : `${record.employee.profile.name}'s payout is still ${record.payout!.status.toLowerCase()}`,
             description: `Due by the 7th working day. Amount: ${record.total_pay.toString()}`,
             related_id: record.id,
+            key: `PAYOUT_DUE:${record.id}`,
         });
     }
 }

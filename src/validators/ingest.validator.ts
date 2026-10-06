@@ -52,7 +52,8 @@ export type ListIngestedQuery = z.infer<typeof listIngestedQuerySchema>;
  * katha figures are pre-filled from the payload in the UI but stay editable:
  * the crate->katha and deduction->dholta mappings are assumptions, and a human
  * has to be able to correct them. */
-export const confirmIngestedSchema = z.object({
+export const confirmIngestedSchema = z
+    .object({
     batch_id: z.string().uuid(),
     house_id: z.string().uuid(),
     customer_id: z.string().uuid().optional(),
@@ -69,7 +70,15 @@ export const confirmIngestedSchema = z.object({
     price_per_kg: z.coerce.number().positive(),
     paid_amount: z.coerce.number().nonnegative().default(0),
     discount_amount: z.coerce.number().nonnegative().default(0),
-});
+    })
+    // Same rule as a dashboard-entered bird sale; the database has a CHECK for it too.
+    .refine(
+        (d) =>
+            d.male_count === undefined ||
+            d.female_count === undefined ||
+            d.male_count + d.female_count === d.birds_count,
+        { message: "male_count + female_count must equal birds_count when both are given" },
+    );
 
 export const dismissIngestedSchema = z.object({
     reason: z.string().min(1).max(500),
