@@ -136,26 +136,35 @@ standard error envelope). No endpoint in this API should legitimately take
 anywhere near 30s — a 504 means something is actually stuck, not a
 false-positive to silently retry through.
 
-### 1.6 No auth yet — actor ids go in the request body
+### 1.6 Authentication
 
-**Phase 15 (Auth) hasn't been built.** There is no login, no session, no
-`Authorization` header, and CORS credentials are off in dev. Every endpoint
-that needs to know "who did this" takes that as an explicit field in the
-request body:
+Every `/api` route needs a session except `POST /auth/login`, `POST /auth/logout`
+and the two PoultryScale device routes (`POST /ingest/v1/pair`, `POST /ingest/v1/sales`,
+which use a device token). Anything else without a valid session is a **401**.
 
-- `recorded_by_id`, `given_by_id`, `administered_by_id`, `measured_by_id`,
-  `handled_by_id`, `changed_by_id` — a **required** `Profiles.id` (UUID).
-  The web/mobile client must know which Admin/Employee is currently "logged
-  in" (however that's tracked client-side for now) and pass it explicitly
-  on every write.
-- `StockUnit.bound_by_id` — same idea, but **optional**.
+There is no registration: admins and employees already exist in the database.
+Hiring an employee or creating an admin returns a one-time `temp_password` in the
+create response; hand it over with the email. The first login must change it.
 
-A bad (nonexistent) actor id doesn't 404 or 409 — see §1.7, it's a 400 like
-any other bad foreign id. When Phase 15 lands, these fields will very likely
-be dropped in favor of deriving the actor from a session — **don't build UI
-that makes the user manually pick "who am I" from a dropdown as a permanent
-pattern**; treat the current explicit-id requirement as a stopgap this doc
-will be updated to reflect once Auth exists.
+| Endpoint | Notes |
+| --- | --- |
+| `POST /auth/login` | `{ email, password, client? }`. `client: "web"` (default) sets an httpOnly `fms_session` cookie, so send `credentials: "include"`. `client: "mobile"` returns `data.token` instead; send it as `Authorization: Bearer <token>`. Wrong email and wrong password are the same 401. Five failures lock that email for 15 minutes (429). |
+| `GET /auth/me` | The logged-in profile: `id, name, email, role, employee_id, employee_role, must_change_password`. |
+| `POST /auth/change-password` | `{ current_password, new_password }` (min 8). Returns a fresh token (mobile) or cookie (web). Every older token for that person stops working. |
+| `POST /auth/logout` | Clears the cookie. Mobile just discards its token. |
+| `POST /employees/:id/reset-password`, `POST /admins/:id/reset-password` | Admin only. New `temp_password`, shown once. The only recovery path (no email is sent). |
+
+While `must_change_password` is true, every route except `/auth/me`,
+`/auth/change-password` and `/auth/logout` returns **403** with
+`extensions.code = "PASSWORD_CHANGE_REQUIRED"`. Show a set-new-password screen.
+
+Deactivating or terminating a person, or changing their password, cuts off their
+existing tokens on the next request. Sessions last 7 days on web and 30 on mobile.
+
+**The actor is never in the request body.** `recorded_by_id`, `given_by_id` and
+the like are stamped from the session. A 403 means the route needs an admin
+(`/admins`, `/devices`, and the ingest review routes today; more as the role
+matrix lands).
 
 ### 1.7 Bad foreign ids are 400, not 404
 

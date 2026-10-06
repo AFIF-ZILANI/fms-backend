@@ -16,7 +16,8 @@
         "db:push": "bunx prisma db push",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "auth:set-password": "bun scripts/set-password.ts"
     },
     "devDependencies": {
         "@types/bun": "latest",

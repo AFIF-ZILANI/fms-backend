@@ -15,3 +15,4 @@ adminRoutes.post("/", zValidatorRfc7807("json", createAdminSchema), AdminControl
 adminRoutes.patch("/:id", zValidatorRfc7807("json", updateAdminSchema), AdminController.update);
 adminRoutes.post("/:id/deactivate", AdminController.deactivate);
 adminRoutes.post("/:id/reactivate", AdminController.reactivate);
+adminRoutes.post("/:id/reset-password", AdminController.resetPassword);

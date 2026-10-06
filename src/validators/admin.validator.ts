@@ -4,7 +4,7 @@ import { paginationQuerySchema } from "@lib/pagination";
 export const createAdminSchema = z.object({
     name: z.string().min(1, "Name is required"),
     mobile: z.string().min(6, "Mobile is required"),
-    email: z.string().email("Invalid email").optional(),
+    email: z.string().email("Invalid email"), // required: it is the login
     address: z.string().optional(),
 });
 

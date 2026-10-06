@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
+import { getActorId } from "@lib/current-actor";
 import { AdminService } from "@services/admin.service";
 import type {
     CreateAdminInput,
@@ -43,8 +44,18 @@ export const AdminController = {
 
     async deactivate(c: Context) {
         return withHandler(c, async () => {
-            const admin = await AdminService.setActive(c.req.param("id") ?? "", false);
+            const admin = await AdminService.setActive(c.req.param("id") ?? "", false, await getActorId(c));
             return sendSuccess(c, admin, "Admin deactivated");
+        });
+    },
+
+    async resetPassword(c: Context) {
+        return withHandler(c, async () => {
+            const result = await AdminService.resetPassword(
+                c.req.param("id") ?? "",
+                await getActorId(c),
+            );
+            return sendSuccess(c, result, "Password reset");
         });
     },
 

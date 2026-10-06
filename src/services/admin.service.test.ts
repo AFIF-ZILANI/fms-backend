@@ -2,8 +2,10 @@ import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { AdminService } from "./admin.service";
 import { AppError } from "@lib/app-error";
+import { AuthService } from "./auth.service";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
+const email = () => `admin-${Math.random().toString(36).slice(2, 10)}@test.local`;
 const createdIds: string[] = [];
 
 describe("AdminService", () => {
@@ -22,7 +24,7 @@ describe("AdminService", () => {
     });
 
     test("create then getById round-trips", async () => {
-        const admin = await AdminService.create({ name: "Test Admin", mobile: mobile() });
+        const admin = await AdminService.create({ name: "Test Admin", mobile: mobile(), email: email() });
         createdIds.push(admin!.id);
 
         const found = await AdminService.getById(admin!.id);
@@ -33,11 +35,11 @@ describe("AdminService", () => {
 
     test("duplicate mobile throws a conflict", async () => {
         const sharedMobile = mobile();
-        const first = await AdminService.create({ name: "First", mobile: sharedMobile });
+        const first = await AdminService.create({ name: "First", mobile: sharedMobile, email: email() });
         createdIds.push(first!.id);
 
         await expect(
-            AdminService.create({ name: "Second", mobile: sharedMobile }),
+            AdminService.create({ name: "Second", mobile: sharedMobile, email: email() }),
         ).rejects.toMatchObject({ status: 409 });
     });
 
@@ -48,14 +50,14 @@ describe("AdminService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const admin = await AdminService.create({ name: "Updatable", mobile: mobile() });
+        const admin = await AdminService.create({ name: "Updatable", mobile: mobile(), email: email() });
         createdIds.push(admin!.id);
 
         await expect(AdminService.update(admin!.id, {})).rejects.toMatchObject({ status: 400 });
     });
 
     test("setActive(false) then setActive(true) round-trips is_active", async () => {
-        const admin = await AdminService.create({ name: "Togglable", mobile: mobile() });
+        const admin = await AdminService.create({ name: "Togglable", mobile: mobile(), email: email() });
         createdIds.push(admin!.id);
 
         const deactivated = await AdminService.setActive(admin!.id, false);
@@ -63,5 +65,50 @@ describe("AdminService", () => {
 
         const reactivated = await AdminService.setActive(admin!.id, true);
         expect(reactivated.profile.is_active).toBe(true);
+    });
+
+    test("create hands back a temp password that logs in and must be changed", async () => {
+        const e = email();
+        const admin = await AdminService.create({ name: "Temp", mobile: mobile(), email: e });
+        createdIds.push(admin!.id);
+
+        const { profile } = await AuthService.login(e, admin!.temp_password, "mobile");
+        expect(profile.must_change_password).toBe(true);
+        expect(profile.role).toBe("ADMIN");
+    });
+
+    test("the password hash never appears in an admin response", async () => {
+        const admin = await AdminService.create({ name: "Hidden", mobile: mobile(), email: email() });
+        createdIds.push(admin!.id);
+        expect("password_hash" in (await AdminService.getById(admin!.id)).profile).toBe(false);
+    });
+
+    test("an admin cannot deactivate themselves", async () => {
+        const admin = await AdminService.create({ name: "Self", mobile: mobile(), email: email() });
+        createdIds.push(admin!.id);
+        await expect(
+            AdminService.setActive(admin!.id, false, admin!.profile_id),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("resetPassword issues a new temp password and kills the old one", async () => {
+        const e = email();
+        const admin = await AdminService.create({ name: "Reset", mobile: mobile(), email: e });
+        createdIds.push(admin!.id);
+
+        const { temp_password } = await AdminService.resetPassword(admin!.id);
+        expect(temp_password).not.toBe(admin!.temp_password);
+        await expect(AuthService.login(e, admin!.temp_password, "web")).rejects.toMatchObject({
+            status: 401,
+        });
+        await AuthService.login(e, temp_password, "web");
+    });
+
+    test("resetPassword refuses your own account", async () => {
+        const admin = await AdminService.create({ name: "Mine", mobile: mobile(), email: email() });
+        createdIds.push(admin!.id);
+        await expect(
+            AdminService.resetPassword(admin!.id, admin!.profile_id),
+        ).rejects.toMatchObject({ status: 400 });
     });
 });

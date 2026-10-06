@@ -105,6 +105,7 @@ const port = env.PORT; // ✅ typed, validated
 | `RATE_LIMIT_WINDOW_MS` | `number`                                  | `60000`                                               | Window duration (ms)         |
 | `TIMEOUT_MS`           | `number`                                  | `30000`                                               | Request timeout (ms)         |
 | `CSRF_ENABLED`         | `boolean`                                 | `true`                                                | CSRF protection (off in dev) |
+| `SESSION_SECRET`       | `string` (32+ chars)                      | _required_                                            | Signs login tokens. Generate with `openssl rand -base64 48` |
 
 Full docs: [`docs/SETUP.md`](./docs/SETUP.md)
 

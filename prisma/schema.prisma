@@ -463,6 +463,10 @@ model Profiles {
   avatar     Avatars? @relation(fields: [avatar_id], references: [id], onDelete: SetNull)
   role       UserRole
   is_active  Boolean  @default(true) // never hard-delete a Profile — it's referenced by every accountability field below
+  // Login credentials (ADMIN and EMPLOYEE profiles only). Null hash = cannot log in.
+  password_hash        String? // scrypt, see lib/password.ts
+  must_change_password Boolean   @default(false) // temp password handed out at hire / reset
+  password_changed_at  DateTime? // stamped into every session token; changing it signs all sessions out
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

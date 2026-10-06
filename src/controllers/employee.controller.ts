@@ -52,6 +52,13 @@ export const EmployeeController = {
         });
     },
 
+    async resetPassword(c: Context) {
+        return withHandler(c, async () => {
+            const result = await EmployeeService.resetPassword(c.req.param("id") ?? "");
+            return sendSuccess(c, result, "Password reset");
+        });
+    },
+
     async terminate(c: Context) {
         return withHandler(c, async () => {
             const employee = await EmployeeService.terminate(c.req.param("id") ?? "");

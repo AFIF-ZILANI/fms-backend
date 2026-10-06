@@ -14,6 +14,9 @@ const prisma =
     globalForPrisma.prisma ||
     new PrismaClient({
         adapter,
+        // Never leaves the DB by accident: nested `include: { profile: true }` is all over
+        // the services. Auth reads it with an explicit `select`, which wins over this.
+        omit: { profiles: { password_hash: true } },
     });
 
 if (env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

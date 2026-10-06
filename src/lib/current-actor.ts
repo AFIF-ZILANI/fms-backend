@@ -9,22 +9,21 @@ let cachedAdminProfileId: string | null = null;
  * given_by_id, administered_by_id, ...). Never comes from the request body --
  * a client that can name the actor can forge attribution on any record.
  *
- * ponytail: there is no login yet, so the fallback is the oldest Admin's
- * profile. When auth lands, read the session/cookie here and every caller is
- * fixed at once -- nothing else has to change.
+ * The logged-in person (authenticate middleware) wins; a paired device
+ * (requireDevice) is the only other caller that can reach a controller.
  */
 export async function getActorId(c: Context): Promise<string> {
-    // A paired device already proved an identity (requireDevice); trust it.
+    const auth = c.get("auth") as { profile_id: string } | undefined;
+    if (auth) return auth.profile_id;
     const device = c.get("device") as { profile_id: string } | undefined;
     if (device) return device.profile_id;
-    return getDefaultActorId();
+    throw AppError.unauthorized();
 }
 
 /**
- * The device-less fallback on its own, for a service called without a
- * Context -- a test hitting EmployeeService.update() directly, say. The
- * controller path always has a Context and goes through getActorId above;
- * this is what it falls back to anyway.
+ * The oldest Admin's profile, for a service called without a Context -- a test
+ * hitting EmployeeService.update() directly, say. Controllers never use this:
+ * they go through getActorId, which has a real login behind it.
  */
 export async function getDefaultActorId(): Promise<string> {
     if (cachedAdminProfileId) return cachedAdminProfileId;

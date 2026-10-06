@@ -1,0 +1,20 @@
+import { z } from "zod";
+import { MIN_PASSWORD_LENGTH } from "@lib/password";
+
+export const loginSchema = z.object({
+    email: z.string().email("Invalid email"),
+    password: z.string().min(1, "Password is required"),
+    // The phone has no cookie jar, so it gets the token in the response body.
+    client: z.enum(["web", "mobile"]).default("web"),
+});
+
+export const changePasswordSchema = z.object({
+    current_password: z.string().min(1, "Current password is required"),
+    new_password: z
+        .string()
+        .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
+        .max(128, "Password is too long"),
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

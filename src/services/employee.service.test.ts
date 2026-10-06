@@ -1,3 +1,4 @@
+import { AuthService } from "./auth.service";
 import { describe, test, expect, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { EmployeeService } from "./employee.service";
@@ -93,6 +94,30 @@ describe("EmployeeService", () => {
         expect(found.reference_salary!.toNumber()).toBe(15000);
         expect(fixedWageFor(found.reference_salary!).toNumber()).toBe(13500); // 0.9 × R, derived by the service
         expect(found.profile.is_active).toBe(true);
+    });
+
+    test("hiring creates a login: the temp password works once, then must be changed", async () => {
+        const data = hire({ role: "WORKER" });
+        const employee = await EmployeeService.create(data);
+        track(employee!);
+
+        const { profile } = await AuthService.login(data.email, employee!.temp_password, "mobile");
+        expect(profile.role).toBe("EMPLOYEE");
+        expect(profile.employee_role).toBe("WORKER");
+        expect(profile.must_change_password).toBe(true);
+        expect("password_hash" in (await EmployeeService.getById(employee!.id)).profile).toBe(false);
+    });
+
+    test("resetPassword gives a fresh temp password and drops the old one", async () => {
+        const data = hire({ role: "WORKER" });
+        const employee = await EmployeeService.create(data);
+        track(employee!);
+
+        const { temp_password } = await EmployeeService.resetPassword(employee!.id);
+        await expect(
+            AuthService.login(data.email, employee!.temp_password, "web"),
+        ).rejects.toMatchObject({ status: 401 });
+        await AuthService.login(data.email, temp_password, "web");
     });
 
     test("duplicate mobile throws a conflict", async () => {

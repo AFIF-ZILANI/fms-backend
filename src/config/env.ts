@@ -26,6 +26,8 @@ const envSchema = z.object({
 
     // ── Security ────────────────────────────────────────────────────────────
     TIMEOUT_MS: z.coerce.number().default(30_000),
+    // Signs session tokens. Rotating it signs everyone out.
+    SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
     CSRF_ENABLED: z
         .string()
         .default("true")

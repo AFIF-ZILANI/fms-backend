@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { authRoutes } from "@routes/auth.routes";
+import { requireAdmin } from "@middlewares/require-admin";
 import { adminRoutes } from "@routes/admin.routes";
 import { employeeRoutes } from "@routes/employee.routes";
 import { supplierRoutes } from "@routes/supplier.routes";
@@ -51,6 +53,13 @@ import { payrollPayoutRoutes } from "@routes/payroll-payout.routes";
 import { employeeRoleRoutes } from "@routes/employee-role.routes";
 
 export const appRoutes = new Hono();
+
+appRoutes.route("/auth", authRoutes);
+
+// Admin-only groups. Everything else needs a login (authenticate, App.ts) but
+// not yet a role -- the employee permission matrix lands with the mobile app.
+appRoutes.use("/admins/*", requireAdmin);
+appRoutes.use("/devices/*", requireAdmin);
 
 appRoutes.route("/admins", adminRoutes);
 appRoutes.route("/devices", deviceRoutes);

@@ -1,6 +1,7 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
+import { AuthService } from "@services/auth.service";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     CreateAdminInput,
@@ -42,11 +43,14 @@ export const AdminService = {
                         name: data.name,
                         mobile: data.mobile,
                         role: "ADMIN",
-                        ...(data.email !== undefined && { email: data.email }),
+                        email: data.email,
                         ...(data.address !== undefined && { address: data.address }),
                     },
                 });
-                return tx.admins.create({ data: { profile_id: profile.id }, include });
+                const admin = await tx.admins.create({ data: { profile_id: profile.id }, include });
+                // The creating admin hands the new one this once.
+                const temp_password = await AuthService.issueTempPassword(profile.id, tx);
+                return { ...admin, temp_password };
             });
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -82,10 +86,33 @@ export const AdminService = {
         }
     },
 
-    async setActive(id: string, is_active: boolean) {
+    async setActive(id: string, is_active: boolean, actor_profile_id?: string) {
         const admin = await prisma.admins.findUnique({ where: { id } });
         if (!admin) throw AppError.notFound("Admin");
+        if (!is_active) {
+            if (admin.profile_id === actor_profile_id) {
+                throw AppError.badRequest("You cannot deactivate yourself");
+            }
+            // Nobody left to log in and fix things.
+            const others = await prisma.admins.count({
+                where: { id: { not: id }, profile: { is_active: true } },
+            });
+            if (others === 0) throw AppError.badRequest("Cannot deactivate the last active admin");
+        }
         await prisma.profiles.update({ where: { id: admin.profile_id }, data: { is_active } });
         return this.getById(id);
+    },
+
+    /** Forgot-password recovery (there is no email): a new temp password, shown once. */
+    async resetPassword(id: string, actor_profile_id?: string) {
+        const admin = await prisma.admins.findUnique({ where: { id }, include });
+        if (!admin) throw AppError.notFound("Admin");
+        if (admin.profile_id === actor_profile_id) {
+            throw AppError.badRequest("Use change password for your own account");
+        }
+        if (!admin.profile.email) {
+            throw AppError.badRequest("Add an email to this admin before resetting their password");
+        }
+        return { temp_password: await AuthService.issueTempPassword(admin.profile_id) };
     },
 };

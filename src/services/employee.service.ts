@@ -1,6 +1,7 @@
 import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { getDefaultActorId } from "@lib/current-actor";
+import { AuthService } from "@services/auth.service";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
@@ -182,7 +183,7 @@ export const EmployeeService = {
                         ...(avatarRow && { avatar_id: avatarRow.id }),
                     },
                 });
-                return tx.employees.create({
+                const created = await tx.employees.create({
                     data: {
                         ...defined(employee),
                         ...(leavingProbation(employee.employment_status) && {
@@ -194,10 +195,26 @@ export const EmployeeService = {
                     },
                     include,
                 });
+                // Hiring creates the login: the admin hands the employee this once.
+                const temp_password = await AuthService.issueTempPassword(profileRow.id, tx);
+                return { ...created, temp_password };
             });
         } catch (err) {
             return handlePrismaWriteError(err);
         }
+    },
+
+    /** Forgot-password recovery (there is no email): a new temp password, shown once. */
+    async resetPassword(id: string) {
+        const employee = await prisma.employees.findUnique({
+            where: { id },
+            select: { profile: { select: { id: true, email: true } } },
+        });
+        if (!employee) throw AppError.notFound("Employee");
+        if (!employee.profile.email) {
+            throw AppError.badRequest("Add an email to this employee before resetting their password");
+        }
+        return { temp_password: await AuthService.issueTempPassword(employee.profile.id) };
     },
 
     async update(id: string, data: UpdateEmployeeInput) {

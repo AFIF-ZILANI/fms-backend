@@ -27,6 +27,7 @@ employeeRoutes.patch(
     zValidatorRfc7807("json", updateEmployeeSchema),
     EmployeeController.update,
 );
+employeeRoutes.post("/:id/reset-password", EmployeeController.resetPassword);
 employeeRoutes.post("/:id/terminate", EmployeeController.terminate);
 employeeRoutes.post("/:id/reinstate", EmployeeController.reinstate);
 employeeRoutes.post("/:id/deactivate", EmployeeController.deactivate);
