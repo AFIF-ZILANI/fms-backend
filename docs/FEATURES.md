@@ -407,7 +407,4 @@ model:
   data to validate against.
 - Auth/role enforcement layer — schema and this permission matrix are ready;
   no middleware/guard code exists yet.
-- Field App offline-sync _implementation_ (queue internals, conflict
-  handling, retry logic against `idempotency_key`) — feature list is now
-  defined (§3); the sync mechanism itself is still a separate design
-  conversation.
+- Field App offline sync — designed in `mobile/docs/offline-sync.md` and built (outbox, `idempotency_key` retries).

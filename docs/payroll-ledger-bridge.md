@@ -137,9 +137,6 @@ which is the thing §7 deliberately deferred.
 ## Still open
 
 - **The ৳98,070 cash adjustment** described under decision 2.
-- **`system-design-arc.md` §4** still says "a `Payment` row pays it out,
-  `ref_type` pointing back at the `PayrollRecord`" — wrong on both counts: the
-  payout pays it, and the cash row references the payout, not the record.
 
 ## Not in scope
 

@@ -1,7 +1,7 @@
 # Item unit conversion design
 
 **Date:** 2026-08-19
-**Status:** approved, not yet implemented
+**Status:** implemented (`lib/unit-conversion.ts`, `unit.routes.ts`)
 
 ## Problem
 

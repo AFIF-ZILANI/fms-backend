@@ -1,5 +1,7 @@
 # Warehouse → House stock transfer
 
+**Status:** implemented (`transfer.routes.ts`, `stock-house-allocation.routes.ts`)
+
 ## Problem
 
 Inventory items (Medicine, Rice Husk, Feed, ...) currently have exactly two

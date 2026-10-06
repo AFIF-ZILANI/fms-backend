@@ -19,7 +19,7 @@ every entry, offline-first capture) serves that one goal.
 graph TB
     subgraph Clients
         PWA["FMS PWA (Vite+React)<br/>Owner/Admin — financial ledger, reporting"]
-        MOBILE["Field App (future, separate design)<br/>Workers/Managers — daily execution, QR scan"]
+        MOBILE["Field App (mobile/, built)<br/>Workers/Managers — daily execution, QR scan"]
         POULTRYSCALE["PoultryScale (external app)<br/>Weighing/sales, references FMS batch_id"]
     end
 
@@ -165,15 +165,12 @@ duplicate mortality entry is discovered in production.
   number is known; only the wallet is not. See `docs/payroll-ledger-bridge.md`.
 - **Postgres hosting** (Supabase/Neon/Railway/self-hosted) — unchanged open item from
   the original plan.
-- **Field App design** — the mobile scanning/execution app is referenced throughout
-  as the eventual consumer of QR codes and daily logging, but has no design of its own
-  yet, by your own choice to defer it.
 
 ## 8. Verification so far
 
 ```
-cd server && bun test src/services/     # 321 tests across 40 files, against real Postgres
-cd server && npx tsc --noEmit           # 10 errors, all in two test files -- see below
+cd server && bun test src/services/     # 394 tests across 51 files, against real Postgres
+cd server && npx tsc --noEmit           # clean
 cd web    && npx tsc --noEmit && npx vite build   # clean
 ```
 
@@ -187,12 +184,4 @@ That closes what §7 used to list as the ORM/runtime gap: `prisma generate` prod
 working client (7.8.0) and 321 tests execute real queries through it **under Bun**,
 which is the evidence that item asked for. Prisma over Drizzle is settled.
 
-`tsc` is **not** clean on the server: `item.service.test.ts` and
-`organization.service.test.ts` pass unit codes (`ML`, `G`) that the `Unit` enum no
-longer carries, 10 errors between them. They are test fixtures written against an
-older enum, no source file is affected, and `bun test` passes because Bun strips
-types rather than checking them — which is exactly why the errors survived. Worth
-clearing, or the next real type error hides in the noise.
-
-Still only a design: the **Field App**. `mobile/` is scaffolded — config, assets,
-lockfile — with no screens in it yet.
+The Field App is built (`mobile/`: Expo, offline outbox, QR scan, Worker and Manager tiers); see `mobile/docs/PRD.md`.
