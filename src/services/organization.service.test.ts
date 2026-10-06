@@ -49,7 +49,7 @@ describe("OrganizationService", () => {
         const item = await ItemService.create({
             name: `Linked Item ${crypto.randomUUID()}`,
             category: "MEDICINE",
-            unit: "ML",
+            unit: "LITER",
         });
         createdItemIds.push(item!.id);
 
@@ -76,7 +76,7 @@ describe("OrganizationService", () => {
         const item = await ItemService.create({
             name: `Dup Link Item ${crypto.randomUUID()}`,
             category: "MEDICINE",
-            unit: "ML",
+            unit: "LITER",
         });
         createdItemIds.push(item!.id);
 
