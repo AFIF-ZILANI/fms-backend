@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { AuthService } from "@services/auth.service";
+import { audit } from "@lib/audit";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     CreateAdminInput,
@@ -35,7 +36,7 @@ export const AdminService = {
         return admin;
     },
 
-    async create(data: CreateAdminInput) {
+    async create(data: CreateAdminInput, actor_id?: string) {
         try {
             return await prisma.$transaction(async (tx) => {
                 const profile = await tx.profiles.create({
@@ -50,6 +51,16 @@ export const AdminService = {
                 const admin = await tx.admins.create({ data: { profile_id: profile.id }, include });
                 // The creating admin hands the new one this once.
                 const temp_password = await AuthService.issueTempPassword(profile.id, tx);
+                if (actor_id) {
+                    await audit(tx, {
+                        table: "Admins",
+                        record_id: admin.id,
+                        action: "CREATE",
+                        actor_id,
+                        note: "Admin created, login created",
+                        after: { email: profile.email },
+                    });
+                }
                 return { ...admin, temp_password };
             });
         } catch (err) {
@@ -100,6 +111,15 @@ export const AdminService = {
             if (others === 0) throw AppError.badRequest("Cannot deactivate the last active admin");
         }
         await prisma.profiles.update({ where: { id: admin.profile_id }, data: { is_active } });
+        if (actor_profile_id) {
+            await audit(prisma, {
+                table: "Admins",
+                record_id: id,
+                action: "UPDATE",
+                actor_id: actor_profile_id,
+                note: is_active ? "Admin reactivated" : "Admin deactivated",
+            });
+        }
         return this.getById(id);
     },
 
@@ -113,6 +133,16 @@ export const AdminService = {
         if (!admin.profile.email) {
             throw AppError.badRequest("Add an email to this admin before resetting their password");
         }
-        return { temp_password: await AuthService.issueTempPassword(admin.profile_id) };
+        const temp_password = await AuthService.issueTempPassword(admin.profile_id);
+        if (actor_profile_id) {
+            await audit(prisma, {
+                table: "Admins",
+                record_id: id,
+                action: "UPDATE",
+                actor_id: actor_profile_id,
+                note: "Password reset",
+            });
+        }
+        return { temp_password };
     },
 };

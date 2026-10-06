@@ -3,6 +3,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
+import { audit, last4 } from "@lib/audit";
 import type {
     CreatePayoutAccountInput,
     ListPayoutAccountsQuery,
@@ -63,7 +64,7 @@ export const EmployeePayoutAccountService = {
                     where: { employee_id: data.employee_id, active_to: null },
                     data: { active_to: now },
                 });
-                return tx.employeePayoutAccount.create({
+                const account = await tx.employeePayoutAccount.create({
                     data: {
                         ...defined(data),
                         active_from: now,
@@ -73,6 +74,21 @@ export const EmployeePayoutAccountService = {
                     },
                     include,
                 });
+                // Redirecting someone's wage is the most attractive target in payroll:
+                // who pointed it where, and when, is exactly the question this answers.
+                await audit(tx, {
+                    table: "EmployeePayoutAccount",
+                    record_id: account.id,
+                    action: "CREATE",
+                    actor_id: data.verified_by_id,
+                    note: "Payout account added; any previous one closed",
+                    after: {
+                        employee_id: data.employee_id,
+                        method: data.method,
+                        account_last4: last4(data.account_number),
+                    },
+                });
+                return account;
             });
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -81,15 +97,26 @@ export const EmployeePayoutAccountService = {
 
     /** Closes an account without opening a replacement -- an employee leaving,
      *  or a wallet that stopped working. */
-    async close(id: string) {
+    async close(id: string, actor_id?: string) {
         const account = await prisma.employeePayoutAccount.findUnique({ where: { id } });
         if (!account) throw AppError.notFound("Payout account");
         if (account.active_to) throw AppError.badRequest("Account is already closed");
 
-        return prisma.employeePayoutAccount.update({
+        const closed = await prisma.employeePayoutAccount.update({
             where: { id },
             data: { active_to: new Date() },
             include,
         });
+        if (actor_id) {
+            await audit(prisma, {
+                table: "EmployeePayoutAccount",
+                record_id: id,
+                action: "UPDATE",
+                actor_id,
+                note: "Payout account closed",
+                after: { account_last4: last4(account.account_number) },
+            });
+        }
+        return closed;
     },
 };

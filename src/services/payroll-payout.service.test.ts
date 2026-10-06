@@ -69,6 +69,7 @@ describe("Payout APIs", () => {
     });
 
     afterAll(async () => {
+        await prisma.auditLog.deleteMany({ where: { changed_by_id: approverId } });
         await prisma.payment.deleteMany({ where: { from_instrument_id: instrumentId } });
         await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: approverId } });
@@ -240,6 +241,14 @@ describe("Payout APIs", () => {
         expect(payments[0]!.direction).toBe("OUTGOING");
         expect(payments[0]!.amount.toNumber()).toBe(15000 + expected);
         expect(payments[0]!.from_instrument_id).toBe(instrumentId);
+
+        // Confirming money out is on the permanent record, against whoever confirmed it.
+        const audit = await prisma.auditLog.findMany({
+            where: { table_name: "PayrollPayout", record_id: payout!.id },
+        });
+        expect(audit).toHaveLength(1);
+        expect(audit[0]).toMatchObject({ note: "Payout confirmed", changed_by_id: approverId });
+        expect(audit[0]!.after_data).toMatchObject({ transaction_ref: "BKA5F5F5", method: "BKASH" });
 
         // The wallet is poorer by exactly that, which is the hole this closed.
         const after = await PaymentInstrumentService.getBalance(instrumentId);

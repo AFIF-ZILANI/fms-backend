@@ -43,6 +43,7 @@ const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 describe("authenticate", () => {
     afterAll(async () => {
+        await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
         await prisma.admins.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
     });
@@ -108,6 +109,25 @@ describe("authenticate", () => {
         const { token } = await mobileLogin(email);
         expect((await app.request("/api/houses", { headers: bearer(token) })).status).toBe(403);
         expect((await app.request("/api/auth/me", { headers: bearer(token) })).status).toBe(200);
+    });
+
+    test("an admin creating an admin over HTTP is audit-logged as the logged-in admin", async () => {
+        const adm = await makePerson("ADMIN");
+        const token = (await mobileLogin(adm.email)).token;
+        const res = await post(
+            "/api/admins",
+            { name: "Made Over HTTP", mobile: mobile(), email: `made-${uniq()}@test.local` },
+            bearer(token),
+        );
+        expect(res.status).toBe(201);
+        const created = ((await res.json()) as { data: { id: string; profile_id: string } }).data;
+        profileIds.push(created.profile_id);
+
+        const rows = await prisma.auditLog.findMany({
+            where: { table_name: "Admins", record_id: created.id },
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.changed_by_id).toBe(adm.id);
     });
 
     test("a deactivated profile is cut off with its existing token", async () => {

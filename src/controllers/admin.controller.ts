@@ -29,7 +29,7 @@ export const AdminController = {
     async create(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreateAdminInput>(c, "json");
-            const admin = await AdminService.create(body);
+            const admin = await AdminService.create(body, await getActorId(c));
             return sendSuccess(c, admin, "Admin created", 201);
         });
     },
@@ -61,7 +61,7 @@ export const AdminController = {
 
     async reactivate(c: Context) {
         return withHandler(c, async () => {
-            const admin = await AdminService.setActive(c.req.param("id") ?? "", true);
+            const admin = await AdminService.setActive(c.req.param("id") ?? "", true, await getActorId(c));
             return sendSuccess(c, admin, "Admin reactivated");
         });
     },

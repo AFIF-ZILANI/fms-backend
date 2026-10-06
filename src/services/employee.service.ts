@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { AppError } from "@lib/app-error";
 import { getDefaultActorId } from "@lib/current-actor";
 import { AuthService } from "@services/auth.service";
+import { audit } from "@lib/audit";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { defined } from "@lib/defined";
@@ -166,7 +167,7 @@ export const EmployeeService = {
         return employee;
     },
 
-    async create(data: CreateEmployeeInput) {
+    async create(data: CreateEmployeeInput, actor_id?: string) {
         const { name, mobile, email, address, avatar, ...employee } = data;
         try {
             return await prisma.$transaction(async (tx) => {
@@ -197,6 +198,16 @@ export const EmployeeService = {
                 });
                 // Hiring creates the login: the admin hands the employee this once.
                 const temp_password = await AuthService.issueTempPassword(profileRow.id, tx);
+                if (actor_id) {
+                    await audit(tx, {
+                        table: "Employees",
+                        record_id: created.id,
+                        action: "CREATE",
+                        actor_id,
+                        note: "Employee hired, login created",
+                        after: { role: created.role, email: profileRow.email },
+                    });
+                }
                 return { ...created, temp_password };
             });
         } catch (err) {
@@ -205,7 +216,7 @@ export const EmployeeService = {
     },
 
     /** Forgot-password recovery (there is no email): a new temp password, shown once. */
-    async resetPassword(id: string) {
+    async resetPassword(id: string, actor_id?: string) {
         const employee = await prisma.employees.findUnique({
             where: { id },
             select: { profile: { select: { id: true, email: true } } },
@@ -214,7 +225,17 @@ export const EmployeeService = {
         if (!employee.profile.email) {
             throw AppError.badRequest("Add an email to this employee before resetting their password");
         }
-        return { temp_password: await AuthService.issueTempPassword(employee.profile.id) };
+        const temp_password = await AuthService.issueTempPassword(employee.profile.id);
+        if (actor_id) {
+            await audit(prisma, {
+                table: "Employees",
+                record_id: id,
+                action: "UPDATE",
+                actor_id,
+                note: "Password reset",
+            });
+        }
+        return { temp_password };
     },
 
     async update(id: string, data: UpdateEmployeeInput) {
@@ -334,7 +355,7 @@ export const EmployeeService = {
      * inactive together, so a terminated employee can never be left showing as
      * active staff because the second call failed.
      */
-    async terminate(id: string) {
+    async terminate(id: string, actor_id?: string) {
         const employee = await prisma.employees.findUnique({ where: { id } });
         if (!employee) throw AppError.notFound("Employee");
         if (employee.employment_status === "TERMINATED") {
@@ -354,6 +375,19 @@ export const EmployeeService = {
                 where: { id: employee.profile_id },
                 data: { is_active: false },
             }),
+            ...(actor_id
+                ? [
+                      audit(prisma, {
+                          table: "Employees",
+                          record_id: id,
+                          action: "UPDATE",
+                          actor_id,
+                          note: "Employment terminated",
+                          before: { employment_status: employee.employment_status },
+                          after: { employment_status: "TERMINATED" },
+                      }),
+                  ]
+                : []),
         ]);
         return this.getById(id);
     },
@@ -362,7 +396,7 @@ export const EmployeeService = {
      * The mirror of terminate: a rehire starts the paperwork sequence over, so
      * they come back as APPOINTED rather than resuming whatever stage they left at.
      */
-    async reinstate(id: string) {
+    async reinstate(id: string, actor_id?: string) {
         const employee = await prisma.employees.findUnique({ where: { id } });
         if (!employee) throw AppError.notFound("Employee");
         if (employee.employment_status !== "TERMINATED") {
@@ -384,14 +418,36 @@ export const EmployeeService = {
                 where: { id: employee.profile_id },
                 data: { is_active: true },
             }),
+            ...(actor_id
+                ? [
+                      audit(prisma, {
+                          table: "Employees",
+                          record_id: id,
+                          action: "UPDATE",
+                          actor_id,
+                          note: "Employee reinstated",
+                          before: { employment_status: "TERMINATED" },
+                          after: { employment_status: "APPOINTED" },
+                      }),
+                  ]
+                : []),
         ]);
         return this.getById(id);
     },
 
-    async setActive(id: string, is_active: boolean) {
+    async setActive(id: string, is_active: boolean, actor_id?: string) {
         const employee = await prisma.employees.findUnique({ where: { id } });
         if (!employee) throw AppError.notFound("Employee");
         await prisma.profiles.update({ where: { id: employee.profile_id }, data: { is_active } });
+        if (actor_id) {
+            await audit(prisma, {
+                table: "Employees",
+                record_id: id,
+                action: "UPDATE",
+                actor_id,
+                note: is_active ? "Login reactivated" : "Login deactivated",
+            });
+        }
         return this.getById(id);
     },
 };

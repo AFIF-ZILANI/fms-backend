@@ -4,14 +4,11 @@ import { toSkipTake, buildMeta } from "@lib/pagination";
 import type { ListAuditLogsQuery } from "@validators/audit-log.validator";
 
 /**
- * Read side only -- population is deliberately not built here. Writing
- * AuditLog rows on every mutable-table update needs to know who made the
- * change, and there's no request-scoped actor identity until Phase 15
- * (Auth) exists. Retrofitting manual audit-write calls into the ~15
- * already-merged services now would give inconsistent coverage (some
- * services get it, others don't), which is worse than the current
- * consistent "not yet populated" state. This endpoint is ready the moment
- * Phase 15 starts writing to it.
+ * Read side. Rows are written by the services that perform a sensitive action
+ * (lib/audit.ts): password resets and changes, hiring and terminating, admin
+ * creation and deactivation, payout confirmation, payout account changes, and
+ * salary overrides. Not every table is covered -- add an audit() call where a
+ * change needs to answer "who did that".
  */
 export const AuditLogService = {
     async getAll(query: ListAuditLogsQuery) {

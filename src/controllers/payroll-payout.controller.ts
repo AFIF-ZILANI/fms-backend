@@ -57,7 +57,11 @@ export const PayrollPayoutController = {
     async markFailed(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<FailPayoutInput>(c, "json");
-            const payout = await PayrollPayoutService.markFailed(c.req.param("id") ?? "", body);
+            const payout = await PayrollPayoutService.markFailed(
+                c.req.param("id") ?? "",
+                body,
+                await getActorId(c),
+            );
             return sendSuccess(c, payout, "Payout marked failed");
         });
     },

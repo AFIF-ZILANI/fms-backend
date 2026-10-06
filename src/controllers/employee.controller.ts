@@ -36,7 +36,7 @@ export const EmployeeController = {
     async create(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreateEmployeeInput>(c, "json");
-            const employee = await EmployeeService.create(body);
+            const employee = await EmployeeService.create(body, await getActorId(c));
             return sendSuccess(c, employee, "Employee created", 201);
         });
     },
@@ -54,35 +54,38 @@ export const EmployeeController = {
 
     async resetPassword(c: Context) {
         return withHandler(c, async () => {
-            const result = await EmployeeService.resetPassword(c.req.param("id") ?? "");
+            const result = await EmployeeService.resetPassword(
+                c.req.param("id") ?? "",
+                await getActorId(c),
+            );
             return sendSuccess(c, result, "Password reset");
         });
     },
 
     async terminate(c: Context) {
         return withHandler(c, async () => {
-            const employee = await EmployeeService.terminate(c.req.param("id") ?? "");
+            const employee = await EmployeeService.terminate(c.req.param("id") ?? "", await getActorId(c));
             return sendSuccess(c, employee, "Employee terminated");
         });
     },
 
     async reinstate(c: Context) {
         return withHandler(c, async () => {
-            const employee = await EmployeeService.reinstate(c.req.param("id") ?? "");
+            const employee = await EmployeeService.reinstate(c.req.param("id") ?? "", await getActorId(c));
             return sendSuccess(c, employee, "Employee reinstated");
         });
     },
 
     async deactivate(c: Context) {
         return withHandler(c, async () => {
-            const employee = await EmployeeService.setActive(c.req.param("id") ?? "", false);
+            const employee = await EmployeeService.setActive(c.req.param("id") ?? "", false, await getActorId(c));
             return sendSuccess(c, employee, "Employee deactivated");
         });
     },
 
     async reactivate(c: Context) {
         return withHandler(c, async () => {
-            const employee = await EmployeeService.setActive(c.req.param("id") ?? "", true);
+            const employee = await EmployeeService.setActive(c.req.param("id") ?? "", true, await getActorId(c));
             return sendSuccess(c, employee, "Employee reactivated");
         });
     },

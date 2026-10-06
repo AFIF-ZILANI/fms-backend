@@ -38,7 +38,10 @@ export const EmployeePayoutAccountController = {
 
     async close(c: Context) {
         return withHandler(c, async () => {
-            const account = await EmployeePayoutAccountService.close(c.req.param("id") ?? "");
+            const account = await EmployeePayoutAccountService.close(
+                c.req.param("id") ?? "",
+                await getActorId(c),
+            );
             return sendSuccess(c, account, "Payout account closed");
         });
     },

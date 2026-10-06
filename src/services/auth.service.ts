@@ -3,6 +3,7 @@ import type { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { generateTempPassword, hashPassword, verifyPassword } from "@lib/password";
 import { signSession, type SessionClient } from "@lib/session";
+import { audit } from "@lib/audit";
 
 // ponytail: in-memory, per process -- fine for one server. Move to the DB if this ever runs behind a load balancer.
 const MAX_FAILS = 5;
@@ -99,14 +100,20 @@ export const AuthService = {
             throw AppError.badRequest("New password must be different from the current one");
         }
         const changedAt = new Date();
-        await prisma.profiles.update({
-            where: { id: profileId },
-            data: {
-                password_hash: await hashPassword(next),
-                must_change_password: false,
-                password_changed_at: changedAt,
-            },
-        });
+        const password_hash = await hashPassword(next);
+        await prisma.$transaction([
+            prisma.profiles.update({
+                where: { id: profileId },
+                data: { password_hash, must_change_password: false, password_changed_at: changedAt },
+            }),
+            audit(prisma, {
+                table: "Profiles",
+                record_id: profileId,
+                action: "UPDATE",
+                actor_id: profileId,
+                note: "Password changed",
+            }),
+        ]);
         return { token: await signSession(profileId, changedAt, client) };
     },
 

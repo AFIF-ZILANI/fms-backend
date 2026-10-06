@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { PAYOUT_FEES, transferFee } from "@lib/payout-fees";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
+import { audit } from "@lib/audit";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type {
     CreatePayrollPayoutInput,
@@ -149,6 +150,19 @@ export const PayrollPayoutService = {
                 },
             });
             if (claimed.count === 0) throw AppError.badRequest("Payout is already confirmed");
+            await audit(tx, {
+                table: "PayrollPayout",
+                record_id: id,
+                action: "UPDATE",
+                actor_id: data.paid_by_id,
+                note: "Payout confirmed",
+                after: {
+                    amount: payout.amount.toString(),
+                    fee: payout.fee_paid_by_farm.toString(),
+                    method: payout.method,
+                    transaction_ref: data.transaction_ref,
+                },
+            });
 
             // Confirming a payout is the moment it becomes real money, so this is
             // where it enters both books: the wage and the fee as cost, and one
@@ -218,7 +232,7 @@ export const PayrollPayoutService = {
 
     /** The transfer was attempted and bounced -- wrong wallet number, closed
      *  account. Kept as FAILED rather than deleted so the attempt is on record. */
-    async markFailed(id: string, data: FailPayoutInput) {
+    async markFailed(id: string, data: FailPayoutInput, actor_id?: string) {
         const payout = await prisma.payrollPayout.findUnique({ where: { id } });
         if (!payout) throw AppError.notFound("Payout");
 
@@ -229,6 +243,16 @@ export const PayrollPayoutService = {
         });
         if (claimed.count === 0) {
             throw AppError.badRequest("A confirmed payout can't be marked failed");
+        }
+        if (actor_id) {
+            await audit(prisma, {
+                table: "PayrollPayout",
+                record_id: id,
+                action: "UPDATE",
+                actor_id,
+                note: "Payout marked failed",
+                after: { reason: data.reason },
+            });
         }
         return prisma.payrollPayout.findUniqueOrThrow({ where: { id }, include });
     },

@@ -67,6 +67,7 @@ async function readyPhone(role: "WORKER" | "MANAGER") {
 
 describe("the phone flow and role matrix", () => {
     afterAll(async () => {
+        await prisma.auditLog.deleteMany({ where: { changed_by_id: { in: profileIds } } });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
         await prisma.avatars.deleteMany({ where: { id: { in: avatarIds } } });

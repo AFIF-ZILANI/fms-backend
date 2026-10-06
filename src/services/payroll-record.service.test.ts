@@ -59,6 +59,8 @@ describe("PayrollRecordService", () => {
     afterAll(async () => {
         // Confirming a payout writes a transfer-fee expense against the actor,
         // so it has to go before the profile it points at.
+        // Confirming a payout is audit-logged against the actor.
+        await prisma.auditLog.deleteMany({ where: { changed_by_id: profileId } });
         await prisma.payment.deleteMany({ where: { from_instrument_id: instrumentId } });
         await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { recorded_by_id: profileId } });
