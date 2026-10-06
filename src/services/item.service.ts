@@ -99,6 +99,22 @@ export const ItemService = {
             throw AppError.badRequest("No update fields provided");
         }
 
+        // Flipping the tracking mode under existing purchases would leave coded units and
+        // aggregate ledger rows for the same item describing stock two different ways.
+        if (is_unit_tracked !== undefined) {
+            const current = await prisma.item.findUnique({
+                where: { id },
+                select: { is_unit_tracked: true },
+            });
+            if (
+                current &&
+                current.is_unit_tracked !== is_unit_tracked &&
+                (await prisma.purchaseItem.count({ where: { item_id: id } })) > 0
+            ) {
+                throw AppError.conflict("Tracking mode can't change once the item has been purchased");
+            }
+        }
+
         try {
             return await prisma.item.update({
                 where: { id },

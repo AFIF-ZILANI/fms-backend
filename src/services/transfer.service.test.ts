@@ -86,6 +86,33 @@ describe("TransferService", () => {
         expect(out._sum.quantity?.toNumber()).toBe(70);
     });
 
+    test("a transfer to a location that doesn't exist is refused and moves nothing", async () => {
+        const { item, warehouse, profile } = await makeFixtures();
+        await prisma.stockLedger.create({
+            data: {
+                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
+                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE", location_id: warehouse.id,
+            },
+        });
+
+        await expect(
+            TransferService.create({
+                item_id: item.id,
+                from_location_type: "WAREHOUSE",
+                from_location_id: warehouse.id,
+                to_location_type: "HOUSE",
+                to_location_id: crypto.randomUUID(),
+                quantity: 40,
+                unit: "G",
+                recorded_by_id: profile.id,
+            }),
+        ).rejects.toMatchObject({ status: 404 });
+
+        // Only the opening IN is on the ledger: no OUT left the warehouse for nowhere.
+        expect(await prisma.stockLedger.count({ where: { item_id: item.id } })).toBe(1);
+    });
+
     test("posts a WAREHOUSE OUT and a HOUSE IN entry, both tagged TRANSFER, sharing one ref_id", async () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.stockLedger.create({

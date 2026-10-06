@@ -6,7 +6,9 @@ export const createInventoryAdjustmentSchema = z
         item_id: z.string().uuid(),
         warehouse_id: z.string().uuid().optional(),
         house_id: z.string().uuid().optional(),
-        quantity_before: z.coerce.number().nonnegative(),
+        // Ignored: the server reads the real balance from the ledger. Still accepted so a client
+        // that sends it (web, mobile) keeps validating.
+        quantity_before: z.coerce.number().nonnegative().optional(),
         quantity_after: z.coerce.number().nonnegative(),
         reason: z.string().min(1, "Reason is required"),
         note: z.string().optional(),

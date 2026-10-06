@@ -44,6 +44,9 @@ export const TransferService = {
                 );
 
                 await assertLocationExists(tx, data.from_location_type, data.from_location_id);
+                // Stock sent to a location that doesn't exist is stock lost: it leaves the source
+                // and lands where nothing can ever read it.
+                await assertLocationExists(tx, data.to_location_type, data.to_location_id);
 
                 const available = await getItemLocationBalance(
                     tx,

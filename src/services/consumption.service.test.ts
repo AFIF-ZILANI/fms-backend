@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { ConsumptionService } from "./consumption.service";
 import { StockUnitService } from "./stock-unit.service";
+import { ItemService } from "./item.service";
 
 let houseId: string;
 let feedItemId: string;
@@ -179,6 +180,50 @@ describe("ConsumptionService", () => {
 
         const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
         expect(updatedUnit.status).toBe("IN_USE");
+    });
+
+    test("a coded draw naming another item's unit is refused, and nothing is written", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdStockUnitIds.push(unit!.id);
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId }); // a medicine unit
+        // Enough feed at the house that the ledger draw itself would succeed.
+        await prisma.stockLedger.create({
+            data: {
+                item_id: feedItemId,
+                quantity: 100,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: houseId,
+            },
+        });
+
+        await expect(
+            ConsumptionService.create({
+                house_id: houseId,
+                item_id: feedItemId, // ...but the draw is for feed
+                stock_unit_id: unit!.id,
+                quantity: 1,
+                unit: "BAG",
+                date: new Date(),
+                recorded_by_id: profileId,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+
+        const after = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
+        expect(after.status).toBe("IN_STOCK"); // not flipped to IN_USE for the wrong item
+    });
+
+    test("an item's tracking mode is fixed once it has been purchased", async () => {
+        // medicineItemId has a purchase line from beforeAll.
+        await expect(
+            ItemService.update(medicineItemId, { is_unit_tracked: false }),
+        ).rejects.toMatchObject({ status: 409 });
+        // Restating the current value is not a change.
+        await ItemService.update(medicineItemId, { is_unit_tracked: true });
     });
 
     test("drawing from a DISPOSED unit throws a conflict", async () => {

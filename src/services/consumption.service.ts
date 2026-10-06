@@ -59,12 +59,20 @@ export const ConsumptionService = {
 
                 if (data.stock_unit_id !== undefined) {
                     const unitId = data.stock_unit_id;
-                    const unit = await tx.stockUnit.findUnique({ where: { id: unitId } });
+                    const unit = await tx.stockUnit.findUnique({
+                        where: { id: unitId },
+                        include: { purchase_item: { select: { item_id: true } } },
+                    });
                     if (!unit) throw AppError.notFound("StockUnit");
                     if (unit.status !== "IN_STOCK" && unit.status !== "IN_USE") {
                         throw AppError.conflict(
                             `StockUnit is ${unit.status.toLowerCase()}, cannot draw from it`,
                         );
+                    }
+                    // The ledger draw above is for data.item_id; a unit of some other item would
+                    // flip that unit to IN_USE while the stock moved for a different item.
+                    if (unit.purchase_item?.item_id !== data.item_id) {
+                        throw AppError.badRequest("That stock unit belongs to a different item");
                     }
 
                     // ponytail: StockUnit no longer stores quantity, so a coded draw just flips

@@ -617,18 +617,21 @@ transaction).
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
 | GET | `/api/inventory-adjustments` | 200 | query: `item_id?` |
-| POST | `/api/inventory-adjustments` | 201 | `{ item_id, warehouse_id? or house_id? (at least one), quantity_before, quantity_after, reason: string, note?, recorded_by_id, idempotency_key? }` |
+| POST | `/api/inventory-adjustments` | 201 | `{ item_id, warehouse_id? or house_id? (at least one; house wins if both), quantity_after, reason: string, note?, idempotency_key? }` — `quantity_before` is accepted but ignored |
 
-`adjustment_quantity` (= `quantity_after - quantity_before`) is computed
-server-side. The paired `StockLedger` entry's direction follows the sign
-automatically.
+The server reads the current balance from the stock ledger, so `quantity_before`
+on the stored row is the real balance, and `adjustment_quantity`
+(= `quantity_after - balance`) is computed from it. The paired `StockLedger`
+entry's direction follows the sign. The reasons `"Wastage"`, `"Expired"` and
+`"Opening balance"` are recorded on the ledger as `WASTAGE`, `EXPIRED` and
+`OPENING_BALANCE`; any other reason is `ADJUSTMENT`. Only the location actually
+used is stored on the row.
 
-**Errors**: **400** if `quantity_after == quantity_before` (no-op
-correction rejected, `detail`: `"quantity_after must differ from
-quantity_before"`); **400** if `item_id`/`warehouse_id`/`house_id`/
-`recorded_by_id` don't reference real rows (§1.7); **400** if neither
-`warehouse_id` nor `house_id` is given (validator-level, before hitting the
-database).
+**Errors**: **400** if `quantity_after` equals the current balance (nothing to
+adjust); **409** if `reason` is `"Opening balance"` and stock is already
+recorded at that location (use a count correction); **400** if
+`item_id`/`warehouse_id`/`house_id` don't reference real rows (§1.7); **400** if
+neither `warehouse_id` nor `house_id` is given.
 
 ### 6.8 Lookup tables — categories & units (formerly fixed enums)
 
