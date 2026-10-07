@@ -16,5 +16,20 @@ export const changePasswordSchema = z.object({
         .max(128, "Password is too long"),
 });
 
+export const updateAccountSchema = z
+    .object({
+        name: z.string().trim().min(1, "Name is required").max(120),
+        mobile: z.string().trim().min(6, "Mobile is required").max(30),
+        // "" clears it.
+        address: z.string().trim().max(300),
+    })
+    .partial();
+
+export const deactivateAccountSchema = z.object({
+    password: z.string().min(1, "Enter your password to confirm"),
+});
+
+export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
+export type DeactivateAccountInput = z.infer<typeof deactivateAccountSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

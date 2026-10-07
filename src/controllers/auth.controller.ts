@@ -7,7 +7,12 @@ import { getValid } from "@lib/valid";
 import { SESSION_COOKIE, SESSION_TTL, type SessionClient } from "@lib/session";
 import { AuthService } from "@services/auth.service";
 import { getAuth } from "@middlewares/authenticate";
-import type { ChangePasswordInput, LoginInput } from "@validators/auth.validator";
+import type {
+    ChangePasswordInput,
+    DeactivateAccountInput,
+    LoginInput,
+    UpdateAccountInput,
+} from "@validators/auth.validator";
 
 const cookieOptions = {
     httpOnly: true,
@@ -47,6 +52,31 @@ export const AuthController = {
         return withHandler(c, async () => {
             const me = await AuthService.me(getAuth(c).profile_id);
             return sendSuccess(c, me, "Fetched successfully");
+        });
+    },
+
+    async account(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(c, await AuthService.account(getAuth(c).profile_id), "Fetched successfully"),
+        );
+    },
+
+    async updateAccount(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(
+                c,
+                await AuthService.updateAccount(getAuth(c).profile_id, getValid<UpdateAccountInput>(c, "json")),
+                "Account updated",
+            ),
+        );
+    },
+
+    async deactivateAccount(c: Context) {
+        return withHandler(c, async () => {
+            const body = getValid<DeactivateAccountInput>(c, "json");
+            await AuthService.deactivateSelf(getAuth(c).profile_id, body.password);
+            deleteCookie(c, SESSION_COOKIE, { path: "/" });
+            return sendSuccess(c, null, "Account deactivated");
         });
     },
 
