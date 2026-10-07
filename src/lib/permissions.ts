@@ -66,6 +66,8 @@ const RULES: Rule[] = [
         level: "manager",
     },
     { methods: POST, path: /^\/task-assignments\/[^/]+\/cancel$/, level: "manager" },
+    // Scanning a coded unit into a house is floor work, not a manager action.
+    { methods: POST, path: /^\/stock-units\/[^/]+\/relocate$/, level: "worker" },
     { methods: POST, path: /^\/stock-units\/[^/]+\/bind$/, level: "manager" },
 ];
 

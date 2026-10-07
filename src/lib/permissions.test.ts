@@ -42,6 +42,15 @@ describe("canAccess", () => {
         }
     });
 
+    test("workers and managers may move a coded unit; other employee roles may not", () => {
+        for (const who of [worker, manager]) {
+            expect(canAccess(who, "POST", "/stock-units/abc/relocate", none)).toBe(true);
+        }
+        expect(canAccess(other, "POST", "/stock-units/abc/relocate", none)).toBe(false);
+        // binding stays manager-only
+        expect(canAccess(worker, "POST", "/stock-units/abc/bind", none)).toBe(false);
+    });
+
     test("a worker sees only their own employee record, a manager anyone's", () => {
         expect(canAccess(worker, "GET", "/employees/emp-w", none)).toBe(true);
         expect(canAccess(worker, "GET", "/employees/emp-m", none)).toBe(false);
