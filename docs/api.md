@@ -1400,3 +1400,15 @@ implementation:
   rate limit is exactly the scenario this app's offline queue is built to
   survive, and a client that assumes every error body is JSON will crash on
   it.
+
+## Paid at creation, and sales taking stock
+
+- `POST /sales`, `/bird-sales`, `/purchases` (and ingest confirm): when `paid_amount > 0` the request must name the
+  account — `paid_to_instrument_id` for sales and bird sales, `paid_from_instrument_id` for purchases (**400**
+  otherwise). The record stores paid `0` and due = net owed; the amount paid up front becomes a `Payment`
+  ("Paid when recorded"), so it counts in the account balance and cash position.
+- `Payment.from_instrument_id` is now nullable: money received from a customer needs only `to_instrument_id`.
+  Outgoing payments (purchases) still require `from_instrument_id`.
+- `POST /sales` now requires `warehouse_id`. Each line leaves that warehouse's stock (StockLedger OUT, reason and
+  ref `SALE`) in the sale's transaction; lines of one item are checked together. **409** when the warehouse holds
+  less than is being sold. Unit-tracked items leave the ledger but their StockUnit status is still manual.
