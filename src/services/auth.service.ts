@@ -4,6 +4,8 @@ import { AppError } from "@lib/app-error";
 import { generateTempPassword, hashPassword, verifyPassword } from "@lib/password";
 import { signSession, type SessionClient } from "@lib/session";
 import { audit } from "@lib/audit";
+import { handlePrismaWriteError } from "@lib/prisma-errors";
+import type { UpdateAccountInput } from "@validators/auth.validator";
 
 // ponytail: in-memory, per process -- fine for one server. Move to the DB if this ever runs behind a load balancer.
 const MAX_FAILS = 5;
@@ -80,6 +82,92 @@ export const AuthService = {
         });
         if (!profile) throw AppError.unauthorized();
         return shapeMe(profile);
+    },
+
+    /** Everything the Account page shows about the signed-in person. */
+    async account(profileId: string) {
+        const p = await prisma.profiles.findUnique({
+            where: { id: profileId },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                mobile: true,
+                address: true,
+                role: true,
+                is_active: true,
+                created_at: true,
+                password_changed_at: true,
+                admins: { select: { created_at: true } },
+                employees: { select: { id: true, role: true } },
+            },
+        });
+        if (!p) throw AppError.unauthorized();
+        const { admins, employees, ...rest } = p;
+        return {
+            ...rest,
+            employee_id: employees?.id ?? null,
+            employee_role: employees?.role ?? null,
+            admin_since: admins?.created_at ?? null,
+        };
+    },
+
+    /** Self-service edit: name, mobile, address. Email is the login, so another admin changes it. */
+    async updateAccount(profileId: string, data: UpdateAccountInput) {
+        const { name, mobile, address } = data;
+        if (name === undefined && mobile === undefined && address === undefined) {
+            throw AppError.badRequest("No update fields provided");
+        }
+        try {
+            await prisma.$transaction([
+                prisma.profiles.update({
+                    where: { id: profileId },
+                    data: {
+                        ...(name !== undefined && { name }),
+                        ...(mobile !== undefined && { mobile }),
+                        ...(address !== undefined && { address: address === "" ? null : address }),
+                    },
+                }),
+                audit(prisma, {
+                    table: "Profiles",
+                    record_id: profileId,
+                    action: "UPDATE",
+                    actor_id: profileId,
+                    note: "Profile updated by the owner",
+                }),
+            ]);
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
+        return this.account(profileId);
+    },
+
+    /** "Delete my account": a profile is referenced by every record it ever made, so it is deactivated, never
+     * removed -- login stops at once (the session check re-reads is_active) and an admin can reactivate it. */
+    async deactivateSelf(profileId: string, password: string) {
+        const profile = await prisma.profiles.findUnique({
+            where: { id: profileId },
+            select: { role: true, password_hash: true },
+        });
+        if (!profile?.password_hash || !(await verifyPassword(password, profile.password_hash))) {
+            throw AppError.badRequest("Password is incorrect");
+        }
+        if (profile.role === "ADMIN") {
+            const others = await prisma.admins.count({
+                where: { profile_id: { not: profileId }, profile: { is_active: true } },
+            });
+            if (others === 0) throw AppError.badRequest("Cannot deactivate the last active admin");
+        }
+        await prisma.$transaction([
+            prisma.profiles.update({ where: { id: profileId }, data: { is_active: false } }),
+            audit(prisma, {
+                table: "Profiles",
+                record_id: profileId,
+                action: "UPDATE",
+                actor_id: profileId,
+                note: "Account deactivated by the owner",
+            }),
+        ]);
     },
 
     /** Returns a fresh token: the old one dies with the password change. */

@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
 import { AuthController } from "@controllers/auth.controller";
-import { changePasswordSchema, loginSchema } from "@validators/auth.validator";
+import {
+    changePasswordSchema,
+    deactivateAccountSchema,
+    loginSchema,
+    updateAccountSchema,
+} from "@validators/auth.validator";
 
 export const authRoutes = new Hono();
 
@@ -12,4 +17,11 @@ authRoutes.post(
     "/change-password",
     zValidatorRfc7807("json", changePasswordSchema),
     AuthController.changePassword,
+);
+authRoutes.get("/account", AuthController.account);
+authRoutes.patch("/account", zValidatorRfc7807("json", updateAccountSchema), AuthController.updateAccount);
+authRoutes.post(
+    "/deactivate-account",
+    zValidatorRfc7807("json", deactivateAccountSchema),
+    AuthController.deactivateAccount,
 );
