@@ -4,6 +4,8 @@ import { PurchaseService, PurchaseItemService } from "./purchase.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
 import { createPurchaseSchema } from "@validators/purchase.validator";
+import { sharedInstrumentId } from "@lib/test-fixtures";
+import { PaymentService } from "./payment.service";
 
 const createdPurchaseIds: string[] = [];
 const createdItemIds: string[] = [];
@@ -81,6 +83,7 @@ describe("PurchaseService", () => {
             warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 100,
+            paid_from_instrument_id: await sharedInstrumentId(),
             recorded_by_id: profileId,
             items: [
                 { item_id: itemId, quantity: 10, unit: "BOTTLE", unit_price: 15.5 },
@@ -91,8 +94,14 @@ describe("PurchaseService", () => {
 
         // 10 * 15.50 = 155.00, 3 * 9.99 = 29.97, total = 184.97
         expect(purchase!.total_amount.toNumber()).toBeCloseTo(184.97, 2);
-        expect(purchase!.paid_amount.toNumber()).toBe(100);
-        expect(purchase!.due_amount.toNumber()).toBeCloseTo(84.97, 2);
+        // Stored as "nothing paid yet": the 100 paid on the spot is a Payment out of the account.
+        expect(purchase!.paid_amount.toNumber()).toBe(0);
+        expect(purchase!.due_amount.toNumber()).toBeCloseTo(184.97, 2);
+        const payments = await prisma.payment.findMany({ where: { ref_type: "PURCHASE", ref_id: purchase!.id } });
+        expect(payments).toHaveLength(1);
+        expect(payments[0]).toMatchObject({ direction: "OUTGOING", to_instrument_id: null });
+        expect(payments[0]!.amount.toNumber()).toBe(100);
+        expect((await PaymentService.outstandingForRef("PURCHASE", purchase!.id)).toNumber()).toBeCloseTo(84.97, 2);
         expect(purchase!.items.length).toBe(2);
         expect(purchase!.items[0]!.total_price.toNumber()).toBeCloseTo(155.0, 2);
     });
@@ -262,6 +271,7 @@ describe("PurchaseService", () => {
             warehouse_id: warehouseId,
             purchase_date: new Date(),
             paid_amount: 1000,
+            paid_from_instrument_id: await sharedInstrumentId(),
             recorded_by_id: profileId,
             discount_type: "FLAT",
             discount_value: 10,
@@ -270,7 +280,8 @@ describe("PurchaseService", () => {
         createdPurchaseIds.push(purchase!.id);
 
         expect(purchase!.total_amount.toNumber()).toBe(1000);
-        expect(purchase!.due_amount.toNumber()).toBe(0);
+        // Paid in full: the stored snapshot still says 1000 due, and the payment settles it.
+        expect((await PaymentService.outstandingForRef("PURCHASE", purchase!.id)).toNumber()).toBe(0);
     });
 
     test("per-line PERCENT discount nets the line total, and feeds the purchase subtotal", async () => {

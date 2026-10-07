@@ -13,7 +13,11 @@ export const PAYMENT_REF_TYPES = ["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE", "P
 const creatableRefType = z.enum(["SALE", "BIRD_SALE", "PURCHASE", "EXPENSE"]);
 const refType = z.enum(PAYMENT_REF_TYPES);
 
-export const createPaymentSchema = z.object({
+/** Refs whose payment is money leaving the farm. Their source instrument is required. */
+const OUTGOING_REFS = ["PURCHASE", "EXPENSE"];
+
+export const createPaymentSchema = z
+    .object({
     amount: z.coerce.number().positive("Amount must be positive"),
     payment_date: z.coerce.date(),
     // ref_id is a polymorphic reference (resolved via ref_type), not a real
@@ -21,11 +25,21 @@ export const createPaymentSchema = z.object({
     // against the target table.
     ref_type: creatableRefType,
     ref_id: z.string().uuid(),
-    from_instrument_id: z.string().uuid(),
+    // Where the money came from / where it landed. Either can be untracked (a customer paying us has no
+    // instrument of ours to leave), but a payment names at least one, and one going out names its source.
+    from_instrument_id: z.string().uuid().optional(),
     to_instrument_id: z.string().uuid().optional(),
     transaction_ref: z.string().optional(),
     note: z.string().optional(),
-});
+    })
+    .refine(
+        (d) => !OUTGOING_REFS.includes(d.ref_type) || d.from_instrument_id !== undefined,
+        { message: "Say which account this was paid from", path: ["from_instrument_id"] },
+    )
+    .refine((d) => d.from_instrument_id !== undefined || d.to_instrument_id !== undefined, {
+        message: "Name the account the money left or the one it landed in",
+        path: ["to_instrument_id"],
+    });
 
 export const listPaymentsQuerySchema = paginationQuerySchema.extend({
     ref_type: refType.optional(),

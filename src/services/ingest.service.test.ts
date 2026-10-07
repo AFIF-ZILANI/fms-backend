@@ -3,7 +3,8 @@ import prisma from "@lib/db";
 import { DeviceService } from "./device.service";
 import { IngestService } from "./ingest.service";
 import type { IngestSaleInput } from "@validators/ingest.validator";
-import { houseNumber } from "@lib/test-fixtures";
+import { houseNumber, sharedInstrumentId } from "@lib/test-fixtures";
+import { PaymentService } from "./payment.service";
 
 let profileId: string;
 let deviceId: string;
@@ -166,6 +167,7 @@ describe("IngestService", () => {
             net_weight: 80,
             total_weight: 82,
             paid_amount: 15000,
+            paid_to_instrument_id: await sharedInstrumentId(),
             discount_amount: 600,
             reviewed_by_id: profileId,
         };
@@ -174,7 +176,10 @@ describe("IngestService", () => {
 
         expect(birdSale.total_amount.toString()).toBe("15600");
         expect(birdSale.discount_amount.toString()).toBe("600");
-        expect(birdSale.due_amount.toString()).toBe("0");
+        // 15,600 total - 600 discount = 15,000 owed; the 15,000 paid at the weighing is a Payment into the
+        // account, so the stored snapshot is the 15,000 and nothing is outstanding.
+        expect(birdSale.due_amount.toString()).toBe("15000");
+        expect((await PaymentService.outstandingForRef("BIRD_SALE", birdSale.id)).toString()).toBe("0");
 
         const row = await prisma.ingestedSale.findUnique({ where: { id: ingested.rows[0]!.id } });
         expect(row?.status).toBe("CONFIRMED");
@@ -238,6 +243,7 @@ describe("IngestService", () => {
             net_weight: 80,
             total_weight: 82,
             paid_amount: 15600,
+            paid_to_instrument_id: await sharedInstrumentId(),
             discount_amount: 0,
             reviewed_by_id: profileId,
         };

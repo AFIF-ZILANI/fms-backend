@@ -166,7 +166,9 @@ export const PaymentService = {
                         direction: DIRECTION[data.ref_type],
                         ref_type: data.ref_type,
                         ref_id: data.ref_id,
-                        from_instrument_id: data.from_instrument_id,
+                        ...(data.from_instrument_id !== undefined && {
+                            from_instrument_id: data.from_instrument_id,
+                        }),
                         ...(data.to_instrument_id !== undefined && {
                             to_instrument_id: data.to_instrument_id,
                         }),

@@ -31,3 +31,22 @@ export async function purgeAuditLog(args: Prisma.AuditLogDeleteManyArgs) {
     ]);
     return result;
 }
+
+const SHARED_WALLET = "Shared Test Wallet";
+
+/** One long-lived account for fixtures that record money paid at creation (which must name an account). Created
+ * on first use and never deleted, for the same reason as the shared warehouse. */
+export async function sharedInstrumentId(): Promise<string> {
+    const find = () => prisma.paymentInstrument.findFirst({ where: { label: SHARED_WALLET }, select: { id: true } });
+    const existing = await find();
+    if (existing) return existing.id;
+    try {
+        return (
+            await prisma.paymentInstrument.create({
+                data: { owner_type: "ADMIN", owner_id: crypto.randomUUID(), type: "CASH", label: SHARED_WALLET },
+            })
+        ).id;
+    } catch {
+        return (await find())!.id;
+    }
+}

@@ -2,6 +2,8 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { SaleService } from "./sale.service";
 import { AppError } from "@lib/app-error";
+import { sharedInstrumentId } from "@lib/test-fixtures";
+import { PaymentService } from "./payment.service";
 
 let itemId: string;
 let profileId: string;
@@ -41,6 +43,7 @@ describe("SaleService", () => {
         const sale = await SaleService.create({
             sale_date: new Date(),
             paid_amount: 50,
+            paid_to_instrument_id: await sharedInstrumentId(),
             recorded_by_id: profileId,
             items: [
                 { item_id: itemId, quantity: 4, unit: "BAG", unit_price: 12.25 },
@@ -51,7 +54,16 @@ describe("SaleService", () => {
 
         // 4 * 12.25 = 49.00, 2 * 8.50 = 17.00, total = 66.00
         expect(sale!.total.toNumber()).toBeCloseTo(66.0, 2);
-        expect(sale!.due_amount.toNumber()).toBeCloseTo(16.0, 2);
+        // Stored as "nothing paid yet": the 50 paid at the till is a Payment into the account, so the cash
+        // position sees it, and what is still owed is the stored due minus that payment.
+        expect(sale!.paid_amount.toNumber()).toBe(0);
+        expect(sale!.due_amount.toNumber()).toBeCloseTo(66.0, 2);
+        const payments = await prisma.payment.findMany({ where: { ref_type: "SALE", ref_id: sale!.id } });
+        expect(payments).toHaveLength(1);
+        expect(payments[0]).toMatchObject({ direction: "INCOMING", from_instrument_id: null });
+        expect(payments[0]!.amount.toNumber()).toBe(50);
+        expect(payments[0]!.to_instrument_id).toBeTruthy();
+        expect((await PaymentService.outstandingForRef("SALE", sale!.id)).toNumber()).toBeCloseTo(16.0, 2);
     });
 
     test("paid_amount exceeding total throws bad-request", async () => {
@@ -120,6 +132,7 @@ describe("SaleService", () => {
         const sale = await SaleService.create({
             sale_date: new Date(),
             paid_amount: 20,
+            paid_to_instrument_id: await sharedInstrumentId(),
             recorded_by_id: profileId,
             items: [{ item_id: itemId, quantity: 2, unit: "BAG", unit_price: 50 }],
         });
