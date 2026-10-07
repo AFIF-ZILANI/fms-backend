@@ -4,6 +4,9 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { toBaseQuantity } from "@lib/unit-conversion";
+import { getItemLocationBalance } from "@lib/stock-balance";
+import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     CreateSaleInput,
     ListSalesQuery,
@@ -86,6 +89,33 @@ export const SaleService = {
         return sale;
     },
 
+    /** Posts a StockLedger OUT per line from the chosen warehouse, in the sale's own transaction. Lines of the
+     * same item are checked together so two half-lines can't each pass and overdraw. Coded (unit-tracked) items
+     * leave the ledger here too; their StockUnit status is still a manual step (ponytail: no unit picker on sales). */
+    async deductStock(tx: Prisma.TransactionClient, sale_id: string, data: CreateSaleInput) {
+        const needed = new Map<string, Prisma.Decimal>();
+        for (const line of data.items) {
+            const base = await toBaseQuantity(tx, line.item_id, line.unit, line.quantity, "USABLE");
+            needed.set(line.item_id, (needed.get(line.item_id) ?? new Prisma.Decimal(0)).plus(base));
+        }
+        for (const [item_id, quantity] of needed) {
+            const available = await getItemLocationBalance(tx, item_id, "WAREHOUSE", data.warehouse_id);
+            if (available.lessThan(quantity)) {
+                throw AppError.conflict(`Only ${available.toString()} of this item is in stock at that warehouse`);
+            }
+            await StockLedgerService.record(tx, {
+                item_id,
+                quantity,
+                direction: "OUT",
+                reason: "SALE",
+                ref_type: "SALE",
+                ref_id: sale_id,
+                location_type: "WAREHOUSE",
+                location_id: data.warehouse_id,
+            });
+        }
+    },
+
     async create(data: CreateSaleInput) {
         const itemsWithTotals = data.items.map((item) => ({
             ...item,
@@ -126,6 +156,8 @@ export const SaleService = {
                         total_price: item.total_price,
                     })),
                 });
+
+                await SaleService.deductStock(tx, sale.id, data);
 
                 await recordPaidAtCreate(tx, {
                     ref_type: "SALE",
