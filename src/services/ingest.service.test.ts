@@ -191,6 +191,7 @@ describe("IngestService", () => {
         ).rejects.toThrow("already");
 
         await prisma.ingestedSale.deleteMany({ where: { id: ingested.rows[0]!.id } });
+        await prisma.payment.deleteMany({ where: { ref_id: birdSale.id } });
         await prisma.birdSale.deleteMany({ where: { id: birdSale.id } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batch.id } });
         await prisma.batches.deleteMany({ where: { id: batch.id } });
@@ -249,6 +250,7 @@ describe("IngestService", () => {
         };
         const cleanup = async () => {
             await prisma.ingestedSale.deleteMany({ where: { id: ingested.rows[0]!.id } });
+            await prisma.payment.deleteMany({ where: { ref_id: { in: (await prisma.birdSale.findMany({ where: { batch_id: batch.id }, select: { id: true } })).map((s) => s.id) } } });
             await prisma.birdSale.deleteMany({ where: { batch_id: batch.id } });
             await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batch.id } });
             await prisma.batches.deleteMany({ where: { id: batch.id } });

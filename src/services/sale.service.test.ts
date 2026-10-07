@@ -33,6 +33,7 @@ describe("SaleService", () => {
 
     afterAll(async () => {
         await prisma.saleItem.deleteMany({ where: { sale_id: { in: createdSaleIds } } });
+        await prisma.payment.deleteMany({ where: { ref_id: { in: createdSaleIds } } });
         await prisma.sale.deleteMany({ where: { id: { in: createdSaleIds } } });
         await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
         await prisma.item.delete({ where: { id: itemId } });

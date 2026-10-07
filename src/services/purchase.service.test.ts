@@ -59,6 +59,7 @@ describe("PurchaseService", () => {
         await prisma.purchaseItem.deleteMany({
             where: { purchase_id: { in: createdPurchaseIds } },
         });
+        await prisma.payment.deleteMany({ where: { ref_id: { in: createdPurchaseIds } } });
         await prisma.purchase.deleteMany({ where: { id: { in: createdPurchaseIds } } });
         // purchases now post StockLedger IN entries against itemId (and every
         // conversion-test item) -- clear those before deleting the items, or the
