@@ -1412,3 +1412,12 @@ implementation:
 - `POST /sales` now requires `warehouse_id`. Each line leaves that warehouse's stock (StockLedger OUT, reason and
   ref `SALE`) in the sale's transaction; lines of one item are checked together. **409** when the warehouse holds
   less than is being sold. Unit-tracked items leave the ledger but their StockUnit status is still manual.
+
+## Account (self-service)
+
+Any signed-in profile, under `/api/auth`:
+
+- `GET /auth/account` — name, email, mobile, address, role, `is_active`, `created_at`, `password_changed_at`, `admin_since`.
+- `PATCH /auth/account` — `name`, `mobile`, `address` (`""` clears it). Email is the login, so it is changed through `PATCH /admins/:id`.
+- `POST /auth/deactivate-account` `{ password }` — deactivates the caller (a profile is never deleted: every record it made points at it)
+  and clears the session. **400** on a wrong password, or when the caller is the last active admin. An admin can reactivate.
