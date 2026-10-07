@@ -1305,10 +1305,15 @@ model Payment {
   direction          PaymentType
   ref_type           PaymentRefType
   ref_id             String
-  from_instrument_id String
-  from_instrument    PaymentInstrument  @relation("PaymentFrom", fields: [from_instrument_id], references: [id])
+  // Money moves out of from_instrument and into to_instrument. Either side can be untracked: an incoming
+  // payment from a customer has no instrument of ours to leave, so it names only where it landed
+  // (to); an outgoing payment to a supplier whose account isn't tracked names only where it came from
+  // (from). At least one is always set, and an OUTGOING payment always has a source (CHECKs in the
+  // optional_payment_source migration).
+  from_instrument_id String?
+  from_instrument    PaymentInstrument? @relation("PaymentFrom", fields: [from_instrument_id], references: [id], onDelete: Restrict)
   to_instrument_id   String?
-  to_instrument      PaymentInstrument? @relation("PaymentTo", fields: [to_instrument_id], references: [id])
+  to_instrument      PaymentInstrument? @relation("PaymentTo", fields: [to_instrument_id], references: [id], onDelete: Restrict)
   transaction_ref    String?
   handled_by_id      String?
   handled_by         Profiles?          @relation(fields: [handled_by_id], references: [id])

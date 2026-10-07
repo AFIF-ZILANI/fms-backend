@@ -13,6 +13,8 @@ export const createSaleSchema = z.object({
     customer_id: z.string().uuid().optional(),
     sale_date: z.coerce.date(),
     paid_amount: z.coerce.number().nonnegative().default(0),
+    // Required when paid_amount > 0: which of the farm's accounts the money went into.
+    paid_to_instrument_id: z.string().uuid().optional(),
     items: z.array(saleItemInput).min(1, "At least one item is required"),
 });
 

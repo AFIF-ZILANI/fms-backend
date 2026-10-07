@@ -22,6 +22,8 @@ export const createBirdSaleSchema = z
         avg_weight_g: z.coerce.number().positive().optional(),
         price_per_kg: z.coerce.number().positive("Price per kg must be positive"),
         paid_amount: z.coerce.number().nonnegative().default(0),
+        // Required when paid_amount > 0: which of the farm's accounts the money went into.
+        paid_to_instrument_id: z.string().uuid().optional(),
         // optional, not .default(0): a default makes the parsed output type
         // required, which would force every in-process caller to pass it.
         discount_amount: z.coerce.number().nonnegative().optional(),

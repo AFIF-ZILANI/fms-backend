@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { BirdSaleService } from "./bird-sale.service";
 import { createBirdSaleSchema } from "@validators/bird-sale.validator";
-import { houseNumber } from "@lib/test-fixtures";
+import { houseNumber, sharedInstrumentId } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -212,6 +212,7 @@ describe("BirdSaleService", () => {
             net_weight: 20,
             price_per_kg: 5,
             paid_amount: 40,
+            paid_to_instrument_id: await sharedInstrumentId(),
             recorded_by_id: profileId,
         });
         createdSaleIds.push(sale!.id);

@@ -104,6 +104,9 @@ export const IngestService = {
                     paid_amount: input.paid_amount,
                     discount_amount: input.discount_amount,
                     recorded_by_id: row.recorded_by_id,
+                    ...(input.paid_to_instrument_id !== undefined && {
+                        paid_to_instrument_id: input.paid_to_instrument_id,
+                    }),
                     ...(input.customer_id !== undefined && { customer_id: input.customer_id }),
                     ...(input.male_count !== undefined && { male_count: input.male_count }),
                     ...(input.female_count !== undefined && { female_count: input.female_count }),

@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -91,10 +92,10 @@ export const PurchaseService = {
         const globalDiscount = computeDiscount(subtotal, data.discount_type, data.discount_value, "Purchase");
         const total_amount = subtotal.minus(globalDiscount);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
-        const due_amount = total_amount.minus(paid_amount);
-        if (due_amount.isNegative()) {
+        if (total_amount.minus(paid_amount).isNegative()) {
             throw AppError.badRequest("paid_amount cannot exceed the purchase total");
         }
+        requirePaidInstrument(paid_amount, data.paid_from_instrument_id, "paid_from_instrument_id", "PURCHASE");
 
         try {
             return await prisma.$transaction(async (tx) => {
@@ -103,8 +104,10 @@ export const PurchaseService = {
                         purchase_date: data.purchase_date,
                         warehouse_id: data.warehouse_id,
                         total_amount,
-                        paid_amount,
-                        due_amount,
+                        // Stored as "nothing paid yet": what was paid at creation is a Payment against an
+                        // account (below), so the books and the cash position both see it.
+                        paid_amount: new Prisma.Decimal(0),
+                        due_amount: total_amount,
                         recorded_by_id: data.recorded_by_id,
                         ...(data.supplier_id !== undefined && { supplier_id: data.supplier_id }),
                         ...(data.invoice_no !== undefined && { invoice_no: data.invoice_no }),
@@ -160,6 +163,15 @@ export const PurchaseService = {
                         location_id: data.warehouse_id,
                     });
                 }
+
+                await recordPaidAtCreate(tx, {
+                    ref_type: "PURCHASE",
+                    ref_id: purchase.id,
+                    amount: paid_amount,
+                    instrument_id: data.paid_from_instrument_id,
+                    date: data.purchase_date,
+                    actor_id: data.recorded_by_id,
+                });
 
                 return tx.purchase.findUniqueOrThrow({ where: { id: purchase.id }, include });
             });

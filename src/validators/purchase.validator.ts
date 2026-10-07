@@ -40,6 +40,8 @@ export const createPurchaseSchema = z
         invoice_no: z.string().optional(),
         purchase_date: z.coerce.date(),
         paid_amount: z.coerce.number().nonnegative().default(0),
+        // Required when paid_amount > 0: which of the farm's accounts the money came from.
+        paid_from_instrument_id: z.string().uuid().optional(),
         ...discountFields,
         items: z.array(purchaseItemInput).min(1, "At least one item is required"),
     })

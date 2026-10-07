@@ -69,6 +69,7 @@ export const confirmIngestedSchema = z
     avg_weight_g: z.coerce.number().positive().optional(),
     price_per_kg: z.coerce.number().positive(),
     paid_amount: z.coerce.number().nonnegative().default(0),
+    paid_to_instrument_id: z.string().uuid().optional(), // required when paid_amount > 0
     discount_amount: z.coerce.number().nonnegative().default(0),
     })
     // Same rule as a dashboard-entered bird sale; the database has a CHECK for it too.

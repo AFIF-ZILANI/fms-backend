@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -95,10 +96,10 @@ export const SaleService = {
             new Prisma.Decimal(0),
         );
         const paid_amount = new Prisma.Decimal(data.paid_amount);
-        const due_amount = total.minus(paid_amount);
-        if (due_amount.isNegative()) {
+        if (total.minus(paid_amount).isNegative()) {
             throw AppError.badRequest("paid_amount cannot exceed the sale total");
         }
+        requirePaidInstrument(paid_amount, data.paid_to_instrument_id, "paid_to_instrument_id", "SALE");
 
         try {
             return await prisma.$transaction(async (tx) => {
@@ -106,8 +107,10 @@ export const SaleService = {
                     data: {
                         sale_date: data.sale_date,
                         total,
-                        paid_amount,
-                        due_amount,
+                        // Stored as "nothing paid yet": what was paid at creation is a Payment against an
+                        // account (below), so the books and the cash position both see it.
+                        paid_amount: new Prisma.Decimal(0),
+                        due_amount: total,
                         recorded_by_id: data.recorded_by_id,
                         ...(data.customer_id !== undefined && { customer_id: data.customer_id }),
                     },
@@ -122,6 +125,15 @@ export const SaleService = {
                         unit_price: item.unit_price,
                         total_price: item.total_price,
                     })),
+                });
+
+                await recordPaidAtCreate(tx, {
+                    ref_type: "SALE",
+                    ref_id: sale.id,
+                    amount: paid_amount,
+                    instrument_id: data.paid_to_instrument_id,
+                    date: data.sale_date,
+                    actor_id: data.recorded_by_id,
                 });
 
                 return tx.sale.findUniqueOrThrow({ where: { id: sale.id }, include });

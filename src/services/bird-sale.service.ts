@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { assertHouseActive } from "@lib/active-guards";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
@@ -103,12 +104,15 @@ export const BirdSaleService = {
         // nobody will ever collect. Defaults to 0, so every existing caller
         // behaves exactly as before.
         const discount_amount = new Prisma.Decimal(data.discount_amount ?? 0);
-        const due_amount = total_amount.minus(discount_amount).minus(paid_amount);
-        if (due_amount.isNegative()) {
+        // What is owed once the discount is off; the amount paid now is a Payment (below), not a deduction
+        // from this snapshot, so the books and the cash position both see it.
+        const due_amount = total_amount.minus(discount_amount);
+        if (due_amount.minus(paid_amount).isNegative()) {
             throw AppError.badRequest(
                 "paid_amount and discount cannot exceed the computed total_amount",
             );
         }
+        requirePaidInstrument(paid_amount, data.paid_to_instrument_id, "paid_to_instrument_id", "BIRD_SALE");
 
         // One conditional UPDATE is the guard and the decrement (see MortalityLog).
         const { count } = await tx.batchHouseBalance.updateMany({
@@ -136,7 +140,7 @@ export const BirdSaleService = {
                 net_weight: data.net_weight,
                 price_per_kg: data.price_per_kg,
                 total_amount,
-                paid_amount,
+                paid_amount: new Prisma.Decimal(0), // see above: the payment carries it
                 discount_amount,
                 due_amount,
                 recorded_by_id: data.recorded_by_id,
@@ -148,6 +152,15 @@ export const BirdSaleService = {
                 }),
                 ...(data.avg_weight_g !== undefined && { avg_weight_g: data.avg_weight_g }),
             },
+        });
+
+        await recordPaidAtCreate(tx, {
+            ref_type: "BIRD_SALE",
+            ref_id: birdSale.id,
+            amount: paid_amount,
+            instrument_id: data.paid_to_instrument_id,
+            date: data.sale_date,
+            actor_id: data.recorded_by_id,
         });
 
         await markEmptiedHousesCleaning(tx, [data.house_id]);
