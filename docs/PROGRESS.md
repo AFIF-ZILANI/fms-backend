@@ -22,11 +22,10 @@ mobile (Expo) clients.
 | Item | State |
 | --- | --- |
 | Auth and permission enforcement | Login, sessions and default-deny are built (`middlewares/authenticate.ts`, `docs/api.md` §1.6). Employees are default-deny with the WORKER/MANAGER matrix in `lib/permissions.ts`; the web login is built. Still to do: mobile login. |
-| Audit log coverage | Writes exist for password resets/changes, hire/terminate/reinstate/deactivate, admin create/deactivate, payout confirm/fail, payout accounts and salary overrides (`lib/audit.ts`). Not covered yet: devices, purchases, sales, stock adjustments, batch changes. |
+| Audit log coverage | Writes exist for password resets/changes, hire/terminate/reinstate/deactivate, admin create/deactivate, payout confirm/fail, payout accounts and salary overrides (`lib/audit.ts`). Writes are append-only at the database. Not covered yet: devices, purchases, sales, stock adjustments, batch changes. |
 
 | Bird-days shared-cost allocation | v2. Needs 2–3 overlapping batches of real data. |
 | FCR | Needs a feed-to-weight unit table. |
-| Regular sales moving stock | `SaleService.create` writes no ledger row. Needs its own spec. |
 | Employer accruals (bonus, gratuity, provident fund) | Not modelled. |
 | PoultryScale mapping questions | Crate vs katha, dholta, per-piece culls, fractional crates. |
 | ৳98,070 pre-bridge cash adjustment | Data fix: confirm which wallet paid the 8 early payouts. |
