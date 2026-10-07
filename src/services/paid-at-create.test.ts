@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
-import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, seedStock } from "@lib/test-fixtures";
 import { createPaymentSchema } from "@validators/payment.validator";
 import { SaleService } from "./sale.service";
 import { PurchaseService } from "./purchase.service";
@@ -25,6 +25,7 @@ const balance = async () => (await PaymentInstrumentService.getBalance(walletId)
 const sale = (over: Record<string, unknown> = {}) =>
     SaleService.create({
         sale_date: new Date(),
+        warehouse_id: warehouseId,
         paid_amount: 0,
         recorded_by_id: profileId,
         items: [{ item_id: itemId, quantity: 4, unit: "BAG", unit_price: 25 }], // 100
@@ -37,6 +38,7 @@ describe("paid when recorded", () => {
         walletId = (await prisma.paymentInstrument.create({ data: { owner_type: "ADMIN", owner_id: profileId, type: "CASH", label: "Paid-at-create wallet" } })).id;
         itemId = (await prisma.item.create({ data: { name: `PAC Item ${crypto.randomUUID()}`, normalized_key: `pac item ${crypto.randomUUID()}`, category: "FEED", unit: "BAG" } })).id;
         warehouseId = await sharedWarehouseId();
+        await seedStock(itemId, warehouseId, 1000);
         houseId = (await prisma.houses.create({ data: { name: "PAC House", type: "GROWER", number: houseNumber() } })).id;
         batchId = (await prisma.batches.create({ data: { batch_code: `PAC-${crypto.randomUUID()}`, breed: "CLASSIC", expected_selling_date: new Date(Date.now() + 30 * 86_400_000), initial_chick_count: 200, init_chicks_avg_wt: 40 } })).id;
         await prisma.batchHouseBalance.create({ data: { batch_id: batchId, house_id: houseId, quantity: 200 } });

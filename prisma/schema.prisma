@@ -154,6 +154,7 @@ enum StockReason {
   PURCHASE
   TRANSFER
   CONSUMPTION
+  SALE
   WASTAGE
   EXPIRED
   ADJUSTMENT
@@ -169,6 +170,7 @@ enum LocationType {
 enum RefType {
   PURCHASE
   CONSUMPTION
+  SALE
   ADJUSTMENT
   TRANSFER
 }

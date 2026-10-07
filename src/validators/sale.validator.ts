@@ -12,6 +12,8 @@ const saleItemInput = z.object({
 export const createSaleSchema = z.object({
     customer_id: z.string().uuid().optional(),
     sale_date: z.coerce.date(),
+    // Stock leaves this warehouse; the sale is refused if it holds less than is being sold.
+    warehouse_id: z.string().uuid(),
     paid_amount: z.coerce.number().nonnegative().default(0),
     // Required when paid_amount > 0: which of the farm's accounts the money went into.
     paid_to_instrument_id: z.string().uuid().optional(),

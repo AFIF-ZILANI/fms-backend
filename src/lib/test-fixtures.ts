@@ -50,3 +50,20 @@ export async function sharedInstrumentId(): Promise<string> {
         return (await find())!.id;
     }
 }
+
+/** Puts `quantity` of an item into a warehouse's stock (a ledger IN). The caller deletes the item's ledger rows in teardown. */
+export async function seedStock(item_id: string, warehouse_id: string, quantity: number) {
+    await prisma.stockLedger.create({
+        data: {
+            item_id,
+            quantity,
+            direction: "IN",
+            reason: "OPENING_BALANCE",
+            ref_type: "ADJUSTMENT",
+            ref_id: crypto.randomUUID(),
+            location_type: "WAREHOUSE",
+            location_id: warehouse_id,
+            idempotency_key: crypto.randomUUID(),
+        },
+    });
+}
