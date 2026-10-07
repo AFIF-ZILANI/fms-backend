@@ -43,6 +43,7 @@ describe("BirdSaleService", () => {
     });
 
     afterAll(async () => {
+        await prisma.payment.deleteMany({ where: { ref_id: { in: createdSaleIds } } });
         await prisma.birdSale.deleteMany({ where: { id: { in: createdSaleIds } } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
         await prisma.batchHouseAllocation.deleteMany({
