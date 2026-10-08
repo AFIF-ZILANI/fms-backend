@@ -9,14 +9,14 @@ export const AlertController = {
     async getAll(c: Context) {
         return withHandler(c, async () => {
             const query = getValid<ListAlertsQuery>(c, "query");
-            const { alerts, meta } = await AlertService.getAll(query);
+            const { alerts, meta } = await AlertService.getAll(query, c.get("auth"));
             return sendList(c, alerts, meta, "Alerts fetched successfully");
         });
     },
 
     async getById(c: Context) {
         return withHandler(c, async () => {
-            const alert = await AlertService.getById(c.req.param("id") ?? "");
+            const alert = await AlertService.getById(c.req.param("id") ?? "", c.get("auth"));
             return sendSuccess(c, alert, "Alert fetched successfully");
         });
     },

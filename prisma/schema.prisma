@@ -1580,6 +1580,11 @@ model Alerts {
   // most one ACTIVE alert while different conditions about the same employee don't shadow each
   // other. Null for alerts a person raised by hand. Resolving an alert frees its key to be re-raised.
   dedupe_key      String?
+  /// Which EMPLOYEE roles (WORKER, MANAGER) also see this alert. Admins always see every alert, so an
+  /// empty list means "admin only" -- payroll and payouts. Set by whatever raises the alert, because
+  /// `type` is too coarse to decide it: EMPLOYEE covers both a performance warning (a manager's) and
+  /// a payroll reminder (an admin's).
+  audience        String[]          @default([])
 
   @@unique([dedupe_key], where: raw("status = 'ACTIVE'"), map: "Alerts_one_active_per_condition")
   @@index([status, created_at])
