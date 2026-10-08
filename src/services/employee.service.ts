@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { passwordReset } from "@lib/notification-messages";
 import { AppError } from "@lib/app-error";
 import { getDefaultActorId } from "@lib/current-actor";
 import { AuthService } from "@services/auth.service";
@@ -257,6 +259,7 @@ export const EmployeeService = {
                 note: "Password reset",
             });
         }
+        await NotificationService.notify(employee.profile.id, passwordReset());
         return { temp_password };
     },
 

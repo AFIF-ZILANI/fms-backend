@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { pointsGiven, pointsVoided } from "@lib/notification-messages";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -125,7 +127,7 @@ export const PerformanceScoreEntryService = {
         }
 
         try {
-            return await prisma.performanceScoreEntry.create({
+            const entry = await prisma.performanceScoreEntry.create({
                 data: {
                     employee_id: data.employee_id,
                     given_by_id: data.given_by_id,
@@ -142,6 +144,15 @@ export const PerformanceScoreEntryService = {
                     }),
                 },
             });
+            const giver = await prisma.profiles.findUnique({
+                where: { id: data.given_by_id },
+                select: { name: true },
+            });
+            await NotificationService.notifyEmployee(
+                entry.employee_id,
+                pointsGiven(entry, giver?.name),
+            );
+            return entry;
         } catch (err) {
             return handlePrismaWriteError(err);
         }
@@ -164,7 +175,7 @@ export const PerformanceScoreEntryService = {
             );
         }
 
-        return prisma.performanceScoreEntry.update({
+        const voided = await prisma.performanceScoreEntry.update({
             where: { id },
             data: {
                 status: "VOIDED",
@@ -172,6 +183,12 @@ export const PerformanceScoreEntryService = {
                 ...(actor_id !== undefined && { voided_by_id: actor_id }),
             },
         });
+        await NotificationService.notifyEmployee(
+            voided.employee_id,
+            pointsVoided(voided),
+            actor_id,
+        );
+        return voided;
     },
 
     /** The employee disputes an entry. The Owner resolves it in writing --

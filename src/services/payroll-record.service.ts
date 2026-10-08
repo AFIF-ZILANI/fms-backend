@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { payslipReady } from "@lib/notification-messages";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { computePay, referenceSalaryFor } from "@lib/payroll-math";
@@ -147,7 +149,7 @@ export const PayrollRecordService = {
         // The unique (employee, month) is the real guard; the check above is just a friendly
         // message. A racing second run lands here as a P2002, which becomes a 409, not a 500.
         try {
-            return await prisma.payrollRecord.create({
+            const record = await prisma.payrollRecord.create({
                 data: {
                     employee_id: data.employee_id,
                     month: monthStart,
@@ -159,6 +161,8 @@ export const PayrollRecordService = {
                     total_pay,
                 },
             });
+            await NotificationService.notifyEmployee(record.employee_id, payslipReady(record));
+            return record;
         } catch (err) {
             return handlePrismaWriteError(err);
         }

@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { taskAssigned } from "@lib/notification-messages";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -52,7 +54,7 @@ export const TaskAssignmentService = {
 
     async create(data: CreateTaskAssignmentInput) {
         try {
-            return await prisma.employeeTaskAssignment.create({
+            const created = await prisma.employeeTaskAssignment.create({
                 data: {
                     employee_id: data.employee_id,
                     assigned_by_id: data.assigned_by_id,
@@ -66,6 +68,13 @@ export const TaskAssignmentService = {
                 },
                 include: withTask,
             });
+            // Tell the assignee, unless they assigned it to themselves.
+            await NotificationService.notifyEmployee(
+                data.employee_id,
+                taskAssigned(created),
+                data.assigned_by_id,
+            );
+            return created;
         } catch (err) {
             return handlePrismaWriteError(err);
         }

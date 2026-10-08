@@ -9,6 +9,16 @@ const manager: AuthContext = { profile_id: "m", role: "EMPLOYEE", employee_role:
 const other: AuthContext = { profile_id: "o", role: "EMPLOYEE", employee_role: "ACCOUNTANT", employee_id: "emp-o" };
 
 describe("canAccess", () => {
+    test("workers and managers may use their own notification inbox", () => {
+        for (const who of [worker, manager]) {
+            expect(canAccess(who, "GET", "/notifications", none)).toBe(true);
+            expect(canAccess(who, "GET", "/notifications/unread-count", none)).toBe(true);
+            expect(canAccess(who, "POST", "/notifications/read-all", none)).toBe(true);
+            expect(canAccess(who, "POST", "/notifications/abc/read", none)).toBe(true);
+        }
+        expect(canAccess(other, "GET", "/notifications", none)).toBe(false);
+    });
+
     test("a manager can resolve an alert, but not run the scan", () => {
         expect(canAccess(manager, "POST", "/alerts/abc/resolve", none)).toBe(true);
         expect(canAccess(manager, "POST", "/alerts/scan", none)).toBe(false);

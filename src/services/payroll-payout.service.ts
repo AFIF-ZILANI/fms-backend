@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { payoutConfirmed, payoutFailed, type NotificationDraft } from "@lib/notification-messages";
 import { PAYOUT_FEES, transferFee } from "@lib/payout-fees";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -39,13 +41,31 @@ const include = {
     paid_by: { select: { id: true, name: true } },
 } as const;
 
+/** Tells the person a payout is for -- the employee behind its payroll record or bonus. */
+async function notifyPayee(
+    payout: { payroll_record_id: string | null; bonus_id: string | null },
+    draft: NotificationDraft,
+) {
+    const owner = payout.payroll_record_id
+        ? await prisma.payrollRecord.findUnique({
+              where: { id: payout.payroll_record_id },
+              select: { employee_id: true },
+          })
+        : payout.bonus_id
+          ? await prisma.bonus.findUnique({
+                where: { id: payout.bonus_id },
+                select: { employee_id: true },
+            })
+          : null;
+    if (owner) await NotificationService.notifyEmployee(owner.employee_id, draft);
+}
+
 export const PayrollPayoutService = {
     /** The published rates the modal previews the fee with, so the figure the
      *  user sees and the figure that gets stored come from one table. */
     feeRates() {
         return PAYOUT_FEES;
     },
-
 
     async getAll(query: ListPayrollPayoutsQuery) {
         const where = {
@@ -57,6 +77,7 @@ export const PayrollPayoutService = {
                 ],
             }),
         };
+
         const [payouts, total] = await Promise.all([
             prisma.employeePayout.findMany({
                 where,
@@ -171,7 +192,7 @@ export const PayrollPayoutService = {
 
         const paid_at = data.paid_at ?? new Date();
 
-        return prisma.$transaction(async (tx) => {
+        const confirmed = await prisma.$transaction(async (tx) => {
             // Claim the payout first. A concurrent second confirm blocks on this row's
             // lock, re-checks the condition, matches nothing, and aborts before it can
             // write a second wage, fee and Payment.
@@ -266,6 +287,8 @@ export const PayrollPayoutService = {
 
             return tx.employeePayout.findUniqueOrThrow({ where: { id }, include });
         });
+        await notifyPayee(confirmed, payoutConfirmed(confirmed));
+        return confirmed;
     },
 
     /** The transfer was attempted and bounced -- wrong wallet number, closed
@@ -292,6 +315,8 @@ export const PayrollPayoutService = {
                 after: { reason: data.reason },
             });
         }
-        return prisma.employeePayout.findUniqueOrThrow({ where: { id }, include });
+        const failed = await prisma.employeePayout.findUniqueOrThrow({ where: { id }, include });
+        await notifyPayee(failed, payoutFailed(failed));
+        return failed;
     },
 };

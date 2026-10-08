@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { bonusGranted } from "@lib/notification-messages";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { audit } from "@lib/audit";
@@ -163,7 +165,7 @@ export const BonusEventService = {
         }
 
         try {
-            return await prisma.$transaction(async (tx) => {
+            const granted = await prisma.$transaction(async (tx) => {
                 const created = [];
                 for (const b of data.bonuses) {
                     const e = byId.get(b.employee_id)!;
@@ -189,6 +191,10 @@ export const BonusEventService = {
                 }
                 return created;
             });
+            for (const bonus of granted) {
+                await NotificationService.notifyEmployee(bonus.employee_id, bonusGranted(bonus, event.name));
+            }
+            return granted;
         } catch (err) {
             return handlePrismaWriteError(err);
         }

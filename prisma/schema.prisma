@@ -289,6 +289,20 @@ enum AuditAction {
   DELETE
 }
 
+/// What happened to the person a Notification is for. A hard enum: the mobile inbox picks an icon and a
+/// destination per kind, so a new kind is a deliberate change on both sides.
+enum NotificationKind {
+  TASK_ASSIGNED
+  POINTS_GIVEN
+  POINTS_VOIDED
+  PAYSLIP_READY
+  PAYOUT_CONFIRMED
+  PAYOUT_FAILED
+  BONUS_GRANTED
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+}
+
 enum AlertTypes {
   EMPLOYEE
   BATCH
@@ -511,6 +525,7 @@ model Profiles {
   scoresAcknowledged      PerformanceScoreEntry[] @relation("ScoreAcknowledgedBy")
   payoutAccountsClosed    EmployeePayoutAccount[] @relation("PayoutAccountClosedBy")
   devicesRevoked          Device[]                @relation("DeviceRevokedBy")
+  notifications           Notifications[]
   employeesTerminated     Employees[]             @relation("EmployeeTerminatedBy")
   inventoryAdjustments    InventoryAdjustment[]
   stockTransfersRecorded  StockTransfer[]
@@ -1588,6 +1603,25 @@ model Alerts {
 
   @@unique([dedupe_key], where: raw("status = 'ACTIVE'"), map: "Alerts_one_active_per_condition")
   @@index([status, created_at])
+}
+
+/// Something that happened to one person: a task assigned, points given, a payslip ready. Unlike an Alert
+/// (a condition the farm should look at, shared by role), a notification belongs to exactly one profile and
+/// is read, not resolved. Deleting a profile takes its notifications with it.
+model Notifications {
+  id         String           @id @default(uuid())
+  profile_id String
+  profile    Profiles         @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  kind       NotificationKind
+  title      String
+  body       String?
+  /// The record it is about (task, score entry, payroll record, payout...); the app maps kind + this to a screen.
+  related_id String?
+  read_at    DateTime?
+  created_at DateTime         @default(now())
+
+  @@index([profile_id, created_at])
+  @@index([profile_id, read_at])
 }
 
 // A paired mobile device. Tokens are long-lived deliberately: pairing is the

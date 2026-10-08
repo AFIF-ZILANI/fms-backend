@@ -1123,6 +1123,25 @@ instant a triggering condition becomes true elsewhere in the API.
 | POST | `/api/alerts` | 201 | `{ title, description?, type: AlertTypes, level: AlertLevels, related_id?, action_type? }` — manual alert |
 | POST | `/api/alerts/:id/resolve` | 200 | — |
 
+### Notifications
+
+A person's own inbox: things that happened *to them*, as opposed to alerts (conditions the farm should look
+at, shared by role). Every endpoint is scoped to the caller; there is no way to name someone else's.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/notifications` | query: `status?` (`all` default, or `unread`), `page`, `limit`. Newest first. |
+| GET | `/api/notifications/unread-count` | `{ count }` |
+| POST | `/api/notifications/read-all` | `{ updated }` |
+| POST | `/api/notifications/:id/read` | 404 for anyone else's. Idempotent. |
+
+Row: `{ id, kind, title, body, related_id, read_at, created_at }`. `kind` is `TASK_ASSIGNED`, `POINTS_GIVEN`,
+`POINTS_VOIDED`, `PAYSLIP_READY`, `PAYOUT_CONFIRMED`, `PAYOUT_FAILED`, `BONUS_GRANTED`, `PASSWORD_CHANGED` or
+`PASSWORD_RESET`; `related_id` is the task, score entry, payroll record, payout or bonus it is about.
+They are written by the services that do the work (assigning a task, giving or voiding points, generating
+payroll, confirming or failing a payout, granting a bonus, changing or resetting a password), best effort:
+a notification that fails to save never fails the action. Words live in `lib/notification-messages.ts`.
+
 **Who sees what.** Every alert carries an `audience` (employee role codes). Admins see all alerts; an
 employee sees only those whose audience names their role, on both the list (and its `total`) and
 `/:id`. An empty audience is admin-only (payroll, payouts). Manual alerts are `["MANAGER"]`.

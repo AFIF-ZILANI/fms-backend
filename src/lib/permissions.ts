@@ -47,6 +47,9 @@ const READ_ANY = [
 ];
 
 const RULES: Rule[] = [
+    // A person's own inbox: the server only ever returns and changes the caller's own rows.
+    { methods: GET, path: /^\/notifications(\/unread-count)?$/, level: "worker" },
+    { methods: POST, path: /^\/notifications\/(read-all|[^/]+\/read)$/, level: "worker" },
     { methods: GET, path: new RegExp(`^/(${READ_ANY.join("|")})(/.*)?$`), level: "worker" },
     // Own record for a worker, any record for a manager.
     { methods: GET, path: /^\/employees\/([^/]+)$/, level: "worker", own: "param" },

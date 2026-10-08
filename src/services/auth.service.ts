@@ -1,4 +1,6 @@
 import prisma from "@lib/db";
+import { NotificationService } from "@services/notification.service";
+import { passwordChanged } from "@lib/notification-messages";
 import type { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { generateTempPassword, hashPassword, verifyPassword } from "@lib/password";
@@ -202,6 +204,7 @@ export const AuthService = {
                 note: "Password changed",
             }),
         ]);
+        await NotificationService.notify(profileId, passwordChanged());
         return { token: await signSession(profileId, changedAt, client) };
     },
 
