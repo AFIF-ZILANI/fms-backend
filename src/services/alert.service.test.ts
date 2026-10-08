@@ -151,10 +151,30 @@ describe("AlertService", () => {
             type: "BATCH",
             status: "ACTIVE",
         });
-        const match = alerts.find((a) => a.related_id === batch.id);
+        // Raised per house now, so the person in the shed knows which one to look at.
+        const match = alerts.find((a) => a.related_id === house.id);
         expect(match).toBeDefined();
         expect(match!.level).toBe("CRITICAL");
+        expect(match!.audience).toEqual(["WORKER", "MANAGER"]);
         createdAlertIds.push(match!.id);
+
+        // A worker sees it; a manager-only alert (low stock) stays out of a worker's list.
+        const worker = { profile_id: "w", role: "EMPLOYEE", employee_role: "WORKER", employee_id: "e" } as const;
+        const manager = { ...worker, employee_role: "MANAGER" } as const;
+        const workerList = await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, worker);
+        expect(workerList.alerts.some((a) => a.id === match!.id)).toBe(true);
+        expect(workerList.alerts.every((a) => a.audience.includes("WORKER"))).toBe(true);
+        const managerOnly = await AlertService.create({ title: "Mgr only", type: "SYSTEM", level: "INFO" });
+        createdAlertIds.push(managerOnly.id);
+        expect((await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, worker)).alerts.some((a) => a.id === managerOnly.id)).toBe(false);
+        expect((await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, manager)).alerts.some((a) => a.id === managerOnly.id)).toBe(true);
+        await expect(AlertService.getById(managerOnly.id, worker)).rejects.toBeInstanceOf(AppError);
+
+        // The condition clears (the deaths are gone): the next scan resolves the alert by itself.
+        await prisma.mortalityLog.deleteMany({ where: { batch_id: batch.id } });
+        await AlertService.runScan();
+        const after = await prisma.alerts.findUnique({ where: { id: match!.id } });
+        expect(after!.status).toBe("RESOLVED");
     });
 
     test("scan raises a negative-performance-pattern alert for a bad month", async () => {
