@@ -40,7 +40,7 @@ const envSchema = z.object({
         .transform((v) => v === "true"),
     // ── Alerts ──────────────────────────────────────────────────────────────
     // How often the background alert scan runs. 0 disables it.
-    ALERT_SCAN_INTERVAL_MS: z.coerce.number().default(3_600_000), // hourly
+    ALERT_SCAN_INTERVAL_MS: z.coerce.number().default(600_000), // every 10 minutes
 
     // ── Cloudinary ───────────────────────────────────────────────────────────
     CLOUDINARY_CLOUD_NAME: z.string().min(1, "CLOUDINARY_CLOUD_NAME is required"),

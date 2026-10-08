@@ -9,6 +9,11 @@ const manager: AuthContext = { profile_id: "m", role: "EMPLOYEE", employee_role:
 const other: AuthContext = { profile_id: "o", role: "EMPLOYEE", employee_role: "ACCOUNTANT", employee_id: "emp-o" };
 
 describe("canAccess", () => {
+    test("a manager can resolve an alert, but not run the scan", () => {
+        expect(canAccess(manager, "POST", "/alerts/abc/resolve", none)).toBe(true);
+        expect(canAccess(manager, "POST", "/alerts/scan", none)).toBe(false);
+    });
+
     test("admins reach everything", () => {
         for (const [m, p] of [["GET", "/admins"], ["POST", "/payroll-payouts"], ["DELETE", "/houses/1"]] as const) {
             expect(canAccess(admin, m, p, none)).toBe(true);
@@ -34,6 +39,7 @@ describe("canAccess", () => {
             ["POST", "/batch-feeding-programs"],
             ["POST", "/inventory-adjustments"],
             ["POST", "/alerts"],
+            ["POST", "/alerts/abc/resolve"],
             ["POST", "/stock-units/abc/bind"],
             ["GET", "/employees"],
         ] as const) {

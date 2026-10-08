@@ -7,17 +7,13 @@ import type { CreateAlertInput, ListAlertsQuery } from "@validators/alert.valida
 import { getItemBalances } from "@lib/stock-balance";
 import {
     AUDIENCE,
-    ENV_FRESH_HOURS,
     TASK_OVERDUE_GRACE_HOURS,
-    environmentBreaches,
     farmDayStart,
-    missingDailyLogs,
     monthKey,
     mortalityLevel,
     overdueByHours,
     overdueLabel,
     pastDailyCutoff,
-    worstLevel,
 } from "@lib/alert-rules";
 import { farmDay } from "@lib/farm-day";
 import type { AuthContext } from "../types/app";
@@ -321,8 +317,8 @@ async function checkPayoutDue(): Promise<Raised> {
     return raised;
 }
 
-/** A running house with no feed or environment entry by the evening cut-off. Clears when it is logged,
- *  and the key carries the date so tomorrow starts fresh. */
+/** A running house with no feed entry by the evening cut-off. Clears when it is logged, and the key
+ *  carries the date so tomorrow starts fresh. */
 async function checkDailyLogs(): Promise<Raised> {
     const raised: Raised = new Set();
     const now = new Date();
@@ -330,65 +326,27 @@ async function checkDailyLogs(): Promise<Raised> {
 
     const since = farmDayStart(now);
     const day = farmDay(now).toISOString().slice(0, 10);
-    const [balances, env, feed] = await Promise.all([
+    const [balances, feed] = await Promise.all([
         prisma.batchHouseBalance.findMany({
             where: { quantity: { gt: 0 }, batch: { status: "RUNNING" } },
             include: { house: true },
-        }),
-        prisma.environmentRecords.groupBy({
-            by: ["house_id"],
-            where: { recorded_at: { gte: since } },
         }),
         prisma.consumption.groupBy({
             by: ["house_id"],
             where: { date: { gte: since }, item: { category: "FEED" } },
         }),
     ]);
-    const hasEnv = new Set(env.map((e) => e.house_id));
     const hasFeed = new Set(feed.map((f) => f.house_id));
     for (const b of balances) {
-        const missing = missingDailyLogs({
-            environment: hasEnv.has(b.house_id),
-            feed: hasFeed.has(b.house_id),
-        });
-        if (missing.length === 0) continue;
+        if (hasFeed.has(b.house_id)) continue;
         await raise(raised, {
             type: "BATCH",
             level: "WARNING",
-            title: `${b.house.name}: today's log is incomplete`,
-            description: `Not logged yet: ${missing.join(", ")}`,
+            title: `${b.house.name}: no feed logged today`,
+            description: "No feed entry has been recorded for this house today.",
             related_id: b.house_id,
             audience: AUDIENCE.FIELD,
             key: `LOG_MISSING:${b.house_id}:${day}`,
-        });
-    }
-    return raised;
-}
-
-/** The latest reading in each running house, if recent, against the limits for that kind of house. */
-async function checkEnvironmentRange(): Promise<Raised> {
-    const raised: Raised = new Set();
-    const fresh = new Date(Date.now() - ENV_FRESH_HOURS * 3_600_000);
-    const balances = await prisma.batchHouseBalance.findMany({
-        where: { quantity: { gt: 0 }, batch: { status: "RUNNING" } },
-        include: { house: true },
-    });
-    for (const b of balances) {
-        const reading = await prisma.environmentRecords.findFirst({
-            where: { house_id: b.house_id, recorded_at: { gte: fresh } },
-            orderBy: { recorded_at: "desc" },
-        });
-        if (!reading) continue;
-        const breaches = environmentBreaches(reading, b.house.type);
-        if (breaches.length === 0) continue;
-        await raise(raised, {
-            type: "BATCH",
-            level: worstLevel(breaches),
-            title: `${b.house.name}: environment out of range`,
-            description: breaches.map((x) => x.text).join("; "),
-            related_id: b.house_id,
-            audience: AUDIENCE.FIELD,
-            key: `ENV_OUT:${b.house_id}`,
         });
     }
     return raised;
@@ -429,7 +387,6 @@ const FAMILIES: [prefix: string, check: () => Promise<Raised>][] = [
     ["PAYOUT_FAILED:", checkPayoutDue],
     ["PAYOUT_DUE:", checkPayoutDue],
     ["LOG_MISSING:", checkDailyLogs],
-    ["ENV_OUT:", checkEnvironmentRange],
     ["TASK_OVERDUE:", checkOverdueTasks],
 ];
 
@@ -501,8 +458,9 @@ export const AlertService = {
         }
     },
 
-    async resolve(id: string) {
-        const alert = await prisma.alerts.findUnique({ where: { id } });
+    /** A manager can only resolve what they can see: an admin-only payroll alert is not theirs to clear. */
+    async resolve(id: string, auth?: AuthContext) {
+        const alert = await prisma.alerts.findFirst({ where: { id, ...visibleTo(auth) } });
         if (!alert) throw AppError.notFound("Alert");
         if (alert.status === "RESOLVED") throw AppError.conflict("Alert is already resolved");
         return prisma.alerts.update({

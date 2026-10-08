@@ -2,16 +2,13 @@
 import assert from "node:assert/strict";
 import {
     AUDIENCE,
-    environmentBreaches,
     farmDayStart,
     farmHour,
-    missingDailyLogs,
     monthKey,
     mortalityLevel,
     overdueByHours,
     overdueLabel,
     pastDailyCutoff,
-    worstLevel,
 } from "./alert-rules";
 
 // --- mortality grading ---
@@ -30,34 +27,6 @@ assert.equal(pastDailyCutoff(new Date("2026-10-08T23:30:00Z")), false);
 assert.equal(
     farmDayStart(new Date("2026-10-08T23:00:00Z")).toISOString(),
     "2026-10-08T18:00:00.000Z",
-);
-
-// --- what's missing ---
-assert.deepEqual(missingDailyLogs({ environment: true, feed: true }), []);
-assert.deepEqual(missingDailyLogs({ environment: false, feed: true }), ["environment reading"]);
-assert.deepEqual(missingDailyLogs({ environment: false, feed: false }), [
-    "environment reading",
-    "feed",
-]);
-
-// --- environment ---
-const ok = { temperature_c: 24, humidity_percent: 60, ammonia_ppm: 10, co2_ppm: 1500 };
-assert.deepEqual(environmentBreaches(ok, "GROWER"), []);
-assert.equal(
-    environmentBreaches({ ...ok, temperature_c: 24 }, "BROODER").length,
-    1,
-    "24C is too cold for chicks",
-);
-assert.deepEqual(environmentBreaches({ ...ok, temperature_c: 33 }, "BROODER"), []);
-const hot = environmentBreaches({ ...ok, temperature_c: 33 }, "GROWER");
-assert.equal(hot.length, 1);
-assert.equal(hot[0]?.level, "CRITICAL");
-assert.match(hot[0]?.text ?? "", /Temperature 33°C \(safe 16–30°C\)/);
-const damp = environmentBreaches({ ...ok, humidity_percent: 85 }, "GROWER");
-assert.equal(worstLevel(damp), "WARNING");
-assert.equal(
-    worstLevel([...damp, ...environmentBreaches({ ...ok, ammonia_ppm: 40 }, "GROWER")]),
-    "CRITICAL",
 );
 
 // --- tasks and months ---

@@ -1129,12 +1129,12 @@ employee sees only those whose audience names their role, on both the list (and 
 
 **What the scan raises** (`alert.service.ts`, thresholds in `lib/alert-rules.ts`): mortality per house
 (Warning over 0.5%, Critical over 1% of live birds in 24h; workers + managers), low stock (Critical at
-zero; managers), lot expiring in 30 days (managers), a running house with no feed or environment entry
-by 18:00 farm time (workers + managers), latest environment reading outside the limits for the house
-type (workers + managers), a task pending 2h+ past due (managers), negative performance pattern and
+zero; managers), lot expiring in 30 days (managers), a running house with no feed logged
+by 18:00 farm time (workers + managers), a task pending 2h+ past due (managers), negative performance pattern and
 probation ending (managers), and, admin only, one payroll-not-generated alert and one failed-payouts
 and one unpaid-wages alert per month. Each scan also **resolves** an alert whose condition has
-cleared; alerts a person raised by hand are never auto-resolved.
+cleared; alerts a person raised by hand are never auto-resolved, so a manager can `POST /:id/resolve`
+one they can see. The scan runs every 10 minutes. Environment and sensor alerts are not built yet.
 | POST | `/api/alerts/scan` | 200 | — runs all 5 checks below, returns the current `ACTIVE` list |
 
 Scan checks (each dedupes against an existing `ACTIVE` alert for the same

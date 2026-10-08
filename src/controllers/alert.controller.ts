@@ -31,7 +31,7 @@ export const AlertController = {
 
     async resolve(c: Context) {
         return withHandler(c, async () => {
-            const alert = await AlertService.resolve(c.req.param("id") ?? "");
+            const alert = await AlertService.resolve(c.req.param("id") ?? "", c.get("auth"));
             return sendSuccess(c, alert, "Alert resolved");
         });
     },

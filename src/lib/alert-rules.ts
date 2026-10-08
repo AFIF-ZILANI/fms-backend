@@ -27,8 +27,9 @@ export function mortalityLevel(rate: number): "WARNING" | "CRITICAL" | null {
 }
 
 // ── Daily log ────────────────────────────────────────────────────────────────
-/** Farm-local hour (0-23) after which a house with no feed or environment entry today is flagged.
- *  Mortality isn't required: a day with no deaths has nothing to log. */
+/** Farm-local hour (0-23) after which a running house with no feed entry today is flagged.
+ *  Environment readings are left out until sensor and environment alerts are decided; mortality isn't
+ *  required, since a day with no deaths has nothing to log. */
 export const DAILY_LOG_CUTOFF_HOUR = 18;
 
 export const farmHour = (now: Date): number =>
@@ -39,66 +40,6 @@ export const pastDailyCutoff = (now: Date): boolean => farmHour(now) >= DAILY_LO
 /** The instant the farm-local day began, for "logged today" queries. */
 export const farmDayStart = (now: Date): Date =>
     new Date(farmDay(now).getTime() - FARM_UTC_OFFSET_MS);
-
-export function missingDailyLogs(logged: { environment: boolean; feed: boolean }): string[] {
-    const missing: string[] = [];
-    if (!logged.environment) missing.push("environment reading");
-    if (!logged.feed) missing.push("feed");
-    return missing;
-}
-
-// ── Environment ──────────────────────────────────────────────────────────────
-/** A reading older than this is a missing-log problem, not a current environment problem. */
-export const ENV_FRESH_HOURS = 12;
-
-type Metric = "temperature_c" | "humidity_percent" | "ammonia_ppm" | "co2_ppm";
-type Limit = {
-    label: string;
-    unit: string;
-    min?: number;
-    max?: number;
-    level: "WARNING" | "CRITICAL";
-};
-
-const COMMON: Record<Exclude<Metric, "temperature_c">, Limit> = {
-    humidity_percent: { label: "Humidity", unit: "%", min: 40, max: 75, level: "WARNING" },
-    ammonia_ppm: { label: "Ammonia", unit: " ppm", max: 25, level: "CRITICAL" },
-    co2_ppm: { label: "CO₂", unit: " ppm", max: 3000, level: "WARNING" },
-};
-
-/** Chicks need a hot house; grown birds overheat in it. */
-const TEMPERATURE: Record<"BROODER" | "GROWER" | "LAYER", Limit> = {
-    BROODER: { label: "Temperature", unit: "°C", min: 28, max: 36, level: "CRITICAL" },
-    GROWER: { label: "Temperature", unit: "°C", min: 16, max: 30, level: "CRITICAL" },
-    LAYER: { label: "Temperature", unit: "°C", min: 16, max: 30, level: "CRITICAL" },
-};
-
-export type EnvReading = Record<Metric, number>;
-export type EnvBreach = { metric: Metric; text: string; level: "WARNING" | "CRITICAL" };
-
-/** Which readings fall outside the limits for this kind of house. Empty when all is well. */
-export function environmentBreaches(
-    reading: EnvReading,
-    houseType: keyof typeof TEMPERATURE,
-): EnvBreach[] {
-    const limits: Record<Metric, Limit> = { temperature_c: TEMPERATURE[houseType], ...COMMON };
-    const out: EnvBreach[] = [];
-    for (const metric of Object.keys(limits) as Metric[]) {
-        const { label, unit, min, max, level } = limits[metric];
-        const value = reading[metric];
-        const tooLow = min !== undefined && value < min;
-        const tooHigh = max !== undefined && value > max;
-        if (!tooLow && !tooHigh) continue;
-        const range = min !== undefined && max !== undefined ? `${min}–${max}` : `max ${max}`;
-        out.push({ metric, level, text: `${label} ${value}${unit} (safe ${range}${unit})` });
-    }
-    return out;
-}
-
-export const worstLevel = (
-    breaches: { level: "WARNING" | "CRITICAL" }[],
-): "WARNING" | "CRITICAL" =>
-    breaches.some((b) => b.level === "CRITICAL") ? "CRITICAL" : "WARNING";
 
 // ── Tasks ────────────────────────────────────────────────────────────────────
 /** How long past due before a manager is told. The worker already sees it on their Tasks tab. */
