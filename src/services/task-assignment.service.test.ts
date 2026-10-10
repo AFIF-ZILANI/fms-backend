@@ -133,6 +133,32 @@ describe("TaskAssignmentService", () => {
         expect(replay.completion_note).toBe("done");
     });
 
+    // The overdue alert is about a pending task; once the task is cancelled or finished the alert must go
+    // at once, not at the next scan, or a manager is told about something that no longer exists.
+    test("cancelling or finishing a task resolves its overdue alert immediately", async () => {
+        for (const act of ["cancel", "complete"] as const) {
+            const row = await newAssignment();
+            const alert = await prisma.alerts.create({
+                data: {
+                    title: "overdue",
+                    type: "EMPLOYEE",
+                    level: "WARNING",
+                    audience: ["MANAGER"],
+                    related_id: row.id,
+                    dedupe_key: `TASK_OVERDUE:${row.id}`,
+                    idempotency_key: crypto.randomUUID(),
+                    issued_at: new Date(),
+                },
+            });
+            if (act === "cancel") await TaskAssignmentService.cancel(row.id);
+            else await TaskAssignmentService.complete(row.id, {});
+            const after = await prisma.alerts.findUniqueOrThrow({ where: { id: alert.id } });
+            expect(after.status).toBe("RESOLVED");
+            expect(after.resolved_at).not.toBeNull();
+            await prisma.alerts.delete({ where: { id: alert.id } });
+        }
+    });
+
     test("cancelling twice is idempotent", async () => {
         const row = await newAssignment();
         const first = await TaskAssignmentService.cancel(row.id);

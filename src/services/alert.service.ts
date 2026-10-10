@@ -458,6 +458,15 @@ export const AlertService = {
         }
     },
 
+    /** Closes the active alert about one condition right now, instead of waiting for the next scan: a task
+     *  that was just cancelled or finished should not keep showing as overdue. A no-op when there is none. */
+    async resolveByKey(key: string) {
+        await prisma.alerts.updateMany({
+            where: { dedupe_key: key, status: "ACTIVE" },
+            data: { status: "RESOLVED", resolved_at: new Date() },
+        });
+    },
+
     /** A manager can only resolve what they can see: an admin-only payroll alert is not theirs to clear. */
     async resolve(id: string, auth?: AuthContext) {
         const alert = await prisma.alerts.findFirst({ where: { id, ...visibleTo(auth) } });

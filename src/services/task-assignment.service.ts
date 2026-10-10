@@ -1,5 +1,6 @@
 import prisma from "@lib/db";
 import { NotificationService } from "@services/notification.service";
+import { AlertService } from "@services/alert.service";
 import { taskAssigned } from "@lib/notification-messages";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -138,7 +139,7 @@ export const TaskAssignmentService = {
             });
         }
 
-        return prisma.employeeTaskAssignment.update({
+        const done = await prisma.employeeTaskAssignment.update({
             where: { id },
             data: {
                 status: "DONE",
@@ -149,6 +150,8 @@ export const TaskAssignmentService = {
             },
             include: withTask,
         });
+        await AlertService.resolveByKey(`TASK_OVERDUE:${id}`);
+        return done;
     },
 
     /** Same replay tolerance as complete(), for the same reason. */
@@ -165,10 +168,12 @@ export const TaskAssignmentService = {
             });
         }
 
-        return prisma.employeeTaskAssignment.update({
+        const cancelled = await prisma.employeeTaskAssignment.update({
             where: { id },
             data: { status: "CANCELLED" },
             include: withTask,
         });
+        await AlertService.resolveByKey(`TASK_OVERDUE:${id}`);
+        return cancelled;
     },
 };

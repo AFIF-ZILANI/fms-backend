@@ -152,7 +152,8 @@ describe("AlertService", () => {
             status: "ACTIVE",
         });
         // Raised per house now, so the person in the shed knows which one to look at.
-        const match = alerts.find((a) => a.related_id === house.id);
+        // After the evening cut-off the daily-log check also raises an alert about this house, so pick by family.
+        const match = alerts.find((a) => a.related_id === house.id && a.dedupe_key?.startsWith("MORTALITY:"));
         expect(match).toBeDefined();
         expect(match!.level).toBe("CRITICAL");
         expect(match!.audience).toEqual(["WORKER", "MANAGER"]);
