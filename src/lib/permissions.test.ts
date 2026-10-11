@@ -52,6 +52,7 @@ describe("canAccess", () => {
             ["POST", "/alerts/abc/resolve"],
             ["POST", "/stock-units/abc/bind"],
             ["GET", "/employees"],
+            ["GET", "/purchase-items"],
         ] as const) {
             expect(canAccess(worker, m, p, none)).toBe(false);
             expect(canAccess(manager, m, p, none)).toBe(true);

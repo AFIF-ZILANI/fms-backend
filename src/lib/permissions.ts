@@ -74,6 +74,8 @@ const RULES: Rule[] = [
     // Scanning a coded unit into a house is floor work, not a manager action.
     { methods: POST, path: /^\/stock-units\/[^/]+\/relocate$/, level: "worker" },
     { methods: POST, path: /^\/stock-units\/[^/]+\/bind$/, level: "manager" },
+    // The lot picker on Link items. Manager-only like the bind it feeds: lines carry purchase data.
+    { methods: GET, path: /^\/purchase-items$/, level: "manager" },
 ];
 
 /** `path` is relative to /api. */
