@@ -3,7 +3,8 @@ import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { BirdSaleService } from "./bird-sale.service";
 import { ConsumptionService } from "./consumption.service";
-import { AnalyticsService } from "./analytics.service";
+import { AnalyticsService, kgPerBaseUnit } from "./analytics.service";
+import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
 
@@ -229,6 +230,50 @@ describe("AnalyticsService", () => {
             expect(todayRows[0]!.died).toBeGreaterThanOrEqual(23); // 20 from beforeAll's seed + 3 from this test
         } finally {
             await prisma.mortalityLog.delete({ where: { id: extraLog.id } });
+        }
+    });
+
+    test("mortalityTrend zero-fills every day and gives rate = died / birds alive", async () => {
+        const trend = await AnalyticsService.mortalityTrend(30);
+        expect(trend.length).toBe(31); // 30 days back through today
+        const today = trend.find((r) => r.date === new Date().toISOString().slice(0, 10))!;
+        expect(today.birds_alive).toBeGreaterThanOrEqual(1000); // this batch's 1000 placed, deaths/sales are today
+        expect(today.rate).toBeCloseTo(today.died / today.birds_alive, 8);
+    });
+
+    test("kgPerBaseUnit: weight base units convert directly, BAG needs a weight ItemUnit", () => {
+        const d = (n: number) => new Prisma.Decimal(n);
+        expect(kgPerBaseUnit("KG", [])).toBe(1);
+        expect(kgPerBaseUnit("G", [])).toBe(0.001);
+        expect(kgPerBaseUnit("BAG", [])).toBeNull();
+        expect(kgPerBaseUnit("BAG", [{ unit: "KG", factor_to_base: d(0.04) }])).toBeCloseTo(25, 8); // 1 kg = 0.04 bag
+        expect(kgPerBaseUnit("BAG", [{ unit: "PCS", factor_to_base: d(10) }])).toBeNull();
+    });
+
+    test("batchesPerformance: gain, cost, and FCR null while the 5 BAGs have no kg conversion", async () => {
+        const row = (await AnalyticsService.batchesPerformance("RUNNING")).find((r) => r.batch_id === batchId)!;
+        // 500 g x 680 alive + 590 kg sold - 1000 chicks x 40 g
+        expect(row.weight_gain_kg).toBeCloseTo(340 + 590 - 40, 6);
+        expect(row.feed_kg).toBeNull();
+        expect(row.fcr).toBeNull();
+        expect(Number(row.cost_to_date)).toBe(2000); // the direct expense; the feed was never purchased (unknown cost)
+        expect(Number(row.cost_per_kg)).toBeCloseTo(2000 / 930, 4);
+    });
+
+    test("batchesPerformance computes FCR once the feed bag has a kg conversion; feedTrend sums it as KG", async () => {
+        const conversion = await prisma.itemUnit.create({
+            data: { item_id: feedItemId, unit: "KG", factor_to_base: 0.04 }, // 25 kg bags
+        });
+        try {
+            const row = (await AnalyticsService.batchesPerformance("RUNNING")).find((r) => r.batch_id === batchId)!;
+            expect(row.feed_kg).toBeCloseTo(125, 6);
+            expect(row.fcr).toBeCloseTo(125 / 890, 6);
+
+            const today = new Date().toISOString().slice(0, 10);
+            const trend = await AnalyticsService.feedTrend(30);
+            expect(parseFloat(trend.find((r) => r.date === today && r.unit === "KG")!.quantity)).toBeGreaterThanOrEqual(125);
+        } finally {
+            await prisma.itemUnit.delete({ where: { id: conversion.id } });
         }
     });
 
