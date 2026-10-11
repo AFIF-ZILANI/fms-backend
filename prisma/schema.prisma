@@ -885,6 +885,9 @@ model PurchaseItem {
   unit            String
   unitRef         Unit          @relation(fields: [unit], references: [code], onUpdate: Cascade)
   base_quantity   Decimal       @db.Decimal(13, 4) // quantity converted to Item.unit, snapshotted at write time
+  // QR-tracked lots only: how many physical bottles this line splits into (10 L in 1 L bottles = 10).
+  // Fixed by the first bind and caps how many StockUnits may link; null = not split yet, uncapped.
+  unit_count      Int?
   unit_price      Decimal       @db.Decimal(10, 2)
   // Per-line discount, e.g. a supplier knocking a few taka off one line. Null discount_value = none.
   discount_type   DiscountType?

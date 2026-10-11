@@ -78,7 +78,7 @@ describe("StockUnitService", () => {
         });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
         await prisma.stockTransfer.deleteMany({ where: { id: { in: createdTransferIds } } });
-        await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
+        await prisma.purchaseItem.deleteMany({ where: { purchase_id: purchaseId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });
         await prisma.item.delete({ where: { id: itemId } });
         await prisma.purchaseItem.delete({ where: { id: equipmentPurchaseItemId } });
@@ -127,6 +127,35 @@ describe("StockUnitService", () => {
 
         await expect(
             StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId }),
+        ).rejects.toMatchObject({ status: 409 });
+    });
+
+    test("the first bind fixes the lot's unit_count and the next bind past it is refused", async () => {
+        const lot = await prisma.purchaseItem.create({
+            data: {
+                purchase_id: purchaseId,
+                item_id: itemId,
+                quantity: 2,
+                unit: "BOTTLE",
+                base_quantity: 2,
+                unit_price: 10,
+                total_price: 20,
+            },
+        });
+        const units = await StockUnitService.provision(3);
+        createdUnitIds.push(...units.map((u) => u.id));
+
+        await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id, unit_count: 2 });
+        expect((await prisma.purchaseItem.findUnique({ where: { id: lot.id } }))?.unit_count).toBe(2);
+
+        // a different split once fixed is refused, and so is omitting it being harmless
+        await expect(
+            StockUnitService.bind(units[1]!.id, { purchase_item_id: lot.id, unit_count: 5 }),
+        ).rejects.toMatchObject({ status: 409 });
+        await StockUnitService.bind(units[1]!.id, { purchase_item_id: lot.id });
+
+        await expect(
+            StockUnitService.bind(units[2]!.id, { purchase_item_id: lot.id }),
         ).rejects.toMatchObject({ status: 409 });
     });
 

@@ -190,7 +190,7 @@ export const PurchaseItemService = {
         const [purchaseItems, total] = await Promise.all([
             prisma.purchaseItem.findMany({
                 where,
-                include: { item: true, purchase: true },
+                include: { item: true, purchase: true, _count: { select: { stockUnits: true } } },
                 orderBy: { created_at: "desc" },
                 ...toSkipTake(query),
             }),

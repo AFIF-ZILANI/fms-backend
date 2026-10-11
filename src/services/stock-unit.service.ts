@@ -91,16 +91,42 @@ export const StockUnitService = {
         }
 
         try {
-            return await prisma.stockUnit.update({
-                where: { id },
-                data: {
-                    purchase_item_id: input.purchase_item_id,
-                    status: "IN_STOCK",
-                    bound_at: new Date(),
-                    ...(input.bound_by_id !== undefined && { bound_by_id: input.bound_by_id }),
-                },
+            return await prisma.$transaction(async (tx) => {
+                // Two phones binding the last slot together would both see room. One lock per lot.
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.purchase_item_id}, 0))`;
+
+                let cap = purchaseItem.unit_count;
+                if (cap !== null && input.unit_count !== undefined && input.unit_count !== cap) {
+                    throw AppError.conflict(`This lot is already split into ${cap} units`);
+                }
+                if (cap === null && input.unit_count !== undefined) {
+                    cap = input.unit_count;
+                    await tx.purchaseItem.update({
+                        where: { id: input.purchase_item_id },
+                        data: { unit_count: cap },
+                    });
+                }
+                if (cap !== null) {
+                    const linked = await tx.stockUnit.count({
+                        where: { purchase_item_id: input.purchase_item_id },
+                    });
+                    if (linked >= cap) {
+                        throw AppError.conflict(`This lot is full — ${linked} of ${cap} units already linked`);
+                    }
+                }
+
+                return tx.stockUnit.update({
+                    where: { id },
+                    data: {
+                        purchase_item_id: input.purchase_item_id,
+                        status: "IN_STOCK",
+                        bound_at: new Date(),
+                        ...(input.bound_by_id !== undefined && { bound_by_id: input.bound_by_id }),
+                    },
+                });
             });
         } catch (err) {
+            if (err instanceof AppError) throw err;
             return handlePrismaWriteError(err);
         }
     },

@@ -10,6 +10,8 @@ export const provisionStockUnitsSchema = z.object({
 
 export const bindStockUnitSchema = z.object({
     purchase_item_id: z.string().uuid(),
+    // Field app only, and only the first bind of a lot: how many bottles it splits into.
+    unit_count: z.number().int().min(1).max(10000).optional(),
     // Optional, not required: the column is nullable (137 units predate it) and
     // the web dashboard's bind dialog posts only purchase_item_id. The field app
     // always sends it -- deliveries land at the farm gate, and FEATURES.md
