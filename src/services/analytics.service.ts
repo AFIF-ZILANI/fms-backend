@@ -6,6 +6,17 @@ import { getItemBalances } from "@lib/stock-balance";
 import { getItemAvgCosts } from "@lib/stock-value";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
+/** kg in one of these weight units. */
+const KG_PER_UNIT: Record<string, number> = { KG: 1, G: 0.001, MON_40KG: 40, METRIC_TON: 1000 };
+
+/** kg in one base unit of an item, or null when the item has no weight conversion (a BAG item with no
+ * KG ItemUnit). factor_to_base is "1 of unit = factor base units", so kg/base = kg/unit / factor. */
+export function kgPerBaseUnit(baseUnit: string, itemUnits: { unit: string; factor_to_base: Prisma.Decimal }[]) {
+    if (KG_PER_UNIT[baseUnit] !== undefined) return KG_PER_UNIT[baseUnit];
+    const weighted = itemUnits.find((u) => KG_PER_UNIT[u.unit] !== undefined && !u.factor_to_base.isZero());
+    return weighted ? KG_PER_UNIT[weighted.unit]! / weighted.factor_to_base.toNumber() : null;
+}
+
 // Reporting is deliberately read-only against every other module's tables
 // (system-design-arc.md §3) -- no state of its own, only queries.
 // See docs/analytics-dashboard-design.md for the full aggregate-endpoint design.
@@ -47,12 +58,8 @@ export const AnalyticsService = {
         };
     },
 
-    /** FCR is deliberately not computed here -- feed quantities are logged
-     * in whatever Unit the item uses (BAG, KG, ...) and converting that to
-     * a true feed-conversion ratio needs a per-unit weight table this
-     * system doesn't have yet. Exposing a computed ratio built on an
-     * unstated unit assumption would be worse than not having one -- same
-     * reasoning as leaving BirdSale's dholta/katha fields alone in Phase 9. */
+    /** FCR and cost live on batchesPerformance only (the Analytics page's source); this
+     * single-batch version keeps its original shape for the batch detail page. */
     async batchPerformance(batchId: string) {
         const batch = await prisma.batches.findUnique({
             where: { id: batchId },
@@ -96,21 +103,89 @@ export const AnalyticsService = {
         });
         const batchIds = batches.map((b) => b.id);
 
-        const [mortalityByBatch, weightRecords] = await Promise.all([
-            prisma.mortalityLog.groupBy({
-                by: ["batch_id"],
-                where: { batch_id: { in: batchIds } },
-                _sum: { count_died: true },
-            }),
-            prisma.weightRecords.findMany({
-                where: { batch_id: { in: batchIds } },
-                // Several houses can be weighed on one day now that date is a day, not a timestamp;
-                // the most recently entered sample wins the tie.
-                orderBy: [{ date: "desc" }, { created_at: "desc" }],
-                select: { batch_id: true, average_wt_grams: true, date: true },
-            }),
-        ]);
+        const [mortalityByBatch, weightRecords, consumptions, soldByBatch, batchPurchases, directExpenses, depreciation] =
+            await Promise.all([
+                prisma.mortalityLog.groupBy({
+                    by: ["batch_id"],
+                    where: { batch_id: { in: batchIds } },
+                    _sum: { count_died: true },
+                }),
+                prisma.weightRecords.findMany({
+                    where: { batch_id: { in: batchIds } },
+                    // Several houses can be weighed on one day now that date is a day, not a timestamp;
+                    // the most recently entered sample wins the tie.
+                    orderBy: [{ date: "desc" }, { created_at: "desc" }],
+                    select: { batch_id: true, average_wt_grams: true, date: true },
+                }),
+                prisma.consumption.findMany({
+                    where: { batch_id: { in: batchIds } },
+                    select: {
+                        batch_id: true,
+                        item_id: true,
+                        base_quantity: true,
+                        item: { select: { category: true, unit: true, itemUnits: { select: { unit: true, factor_to_base: true } } } },
+                    },
+                }),
+                prisma.birdSale.groupBy({
+                    by: ["batch_id"],
+                    where: { batch_id: { in: batchIds } },
+                    _sum: { net_weight: true },
+                }),
+                prisma.purchaseItem.groupBy({
+                    by: ["batch_id", "item_id"],
+                    where: { batch_id: { in: batchIds } },
+                    _sum: { total_price: true },
+                }),
+                prisma.expense.groupBy({
+                    by: ["batch_id"],
+                    where: { batch_id: { in: batchIds }, cost_type: "DIRECT" },
+                    _sum: { amount: true },
+                }),
+                prisma.assetDepreciation.groupBy({
+                    by: ["batch_id"],
+                    where: { batch_id: { in: batchIds } },
+                    _sum: { amount: true },
+                }),
+            ]);
+        const avgCosts = await getItemAvgCosts([...new Set(consumptions.map((c) => c.item_id))]);
 
+        // Cost to date = what batchPnl counts (batch-linked purchases, direct expenses, depreciation)
+        // plus consumed stock valued at avg purchase cost -- batchPnl leaves feed/medicine out.
+        // An item bought straight onto this batch is already in its purchase cost, so its
+        // consumption isn't counted again.
+        const zero = new Prisma.Decimal(0);
+        const costByBatch = new Map<string, Prisma.Decimal>();
+        const addCost = (batchId: string | null, amount: Prisma.Decimal | null) => {
+            if (batchId && amount) costByBatch.set(batchId, (costByBatch.get(batchId) ?? zero).plus(amount));
+        };
+        const purchasedOnBatch = new Set<string>();
+        for (const p of batchPurchases) {
+            addCost(p.batch_id, p._sum.total_price);
+            purchasedOnBatch.add(`${p.batch_id}|${p.item_id}`);
+        }
+        for (const e of directExpenses) addCost(e.batch_id, e._sum.amount);
+        for (const d of depreciation) addCost(d.batch_id, d._sum.amount);
+
+        // FCR is null for a batch when any of its feed can't be expressed in kg -- a partial
+        // feed total would print a flattering ratio, which is worse than none.
+        const feedKgByBatch = new Map<string, number | null>();
+        for (const c of consumptions) {
+            if (!c.batch_id) continue;
+            // ponytail: unpurchased item = unknown cost, skipped (same rule as getItemAvgCosts' callers).
+            const avgCost = avgCosts.get(c.item_id);
+            if (avgCost && !purchasedOnBatch.has(`${c.batch_id}|${c.item_id}`)) {
+                addCost(c.batch_id, c.base_quantity.times(avgCost));
+            }
+            if (c.item.category !== "FEED") continue;
+            const kgPerUnit = kgPerBaseUnit(c.item.unit, c.item.itemUnits);
+            const soFar = feedKgByBatch.has(c.batch_id) ? feedKgByBatch.get(c.batch_id)! : 0;
+            feedKgByBatch.set(
+                c.batch_id,
+                kgPerUnit === null || soFar === null ? null : soFar + c.base_quantity.toNumber() * kgPerUnit,
+            );
+        }
+
+        const soldKgByBatch = new Map(soldByBatch.map((s) => [s.batch_id, s._sum.net_weight?.toNumber() ?? 0]));
         const diedByBatch = new Map(mortalityByBatch.map((m) => [m.batch_id, m._sum.count_died ?? 0]));
         const latestWeightByBatch = new Map<string, (typeof weightRecords)[number]>();
         for (const record of weightRecords) {
@@ -123,6 +198,16 @@ export const AnalyticsService = {
             const liveCount = batch.houseBalances.reduce((sum, b) => sum + b.quantity, 0);
             const died = diedByBatch.get(batch.id) ?? 0;
             const latestWeight = latestWeightByBatch.get(batch.id);
+            // Live weight now (latest sample x birds on hand) + weight already sold. Without a weighing
+            // there's no honest figure, so everything weight-based stays null.
+            // ponytail: one house's latest sample stands in for the whole batch; weight by house balance if houses diverge.
+            const producedKg = latestWeight
+                ? (latestWeight.average_wt_grams.toNumber() * liveCount) / 1000 + (soldKgByBatch.get(batch.id) ?? 0)
+                : null;
+            const gainKg =
+                producedKg === null ? null : producedKg - (batch.initial_chick_count * batch.init_chicks_avg_wt) / 1000;
+            const feedKg = feedKgByBatch.has(batch.id) ? feedKgByBatch.get(batch.id)! : 0;
+            const cost = costByBatch.get(batch.id) ?? zero;
             return {
                 batch_id: batch.id,
                 live_count: liveCount,
@@ -134,6 +219,11 @@ export const AnalyticsService = {
                 actual_end_date: batch.actual_end_date,
                 latest_average_weight_grams: latestWeight?.average_wt_grams ?? null,
                 latest_weight_date: latestWeight?.date ?? null,
+                feed_kg: feedKg,
+                weight_gain_kg: gainKg,
+                fcr: feedKg && gainKg && gainKg > 0 ? feedKg / gainKg : null,
+                cost_to_date: cost.toString(),
+                cost_per_kg: producedKg && producedKg > 0 && !cost.isZero() ? cost.div(producedKg).toString() : null,
             };
         });
     },
@@ -286,46 +376,85 @@ export const AnalyticsService = {
         };
     },
 
-    /** Daily death count across every batch, last `days` days. No zero-fill
-     * for days with no logs — the chart fills gaps client-side, this stays
-     * a straight aggregation. Groups by calendar day (YYYY-MM-DD), not by
-     * raw DateTime; same-day logs at different times are summed into one entry. */
+    /** Daily deaths and daily mortality rate across every batch, last `days` days, one row per
+     * day (zero-filled -- a rate line with gaps would draw straight through quiet days). The rate
+     * is deaths / birds alive at the start of that day, so a 7,500-bird batch and a 200-bird
+     * batch losing the same count no longer look alike. Birds alive is rebuilt from placements
+     * minus earlier deaths and sales; days bucket by calendar day (YYYY-MM-DD). */
     async mortalityTrend(days: number) {
         const window = trendWindow(days);
-        const rows = await prisma.mortalityLog.findMany({
-            where: { date: window },
-            select: { date: true, count_died: true },
+        const batches = await prisma.batches.findMany({
+            where: {
+                starting_date: { lte: window.lte },
+                OR: [{ actual_end_date: null }, { actual_end_date: { gte: window.gte } }],
+            },
+            select: { id: true, initial_chick_count: true, starting_date: true, actual_end_date: true },
         });
+        const ids = batches.map((b) => b.id);
+        const [logs, sales] = await Promise.all([
+            prisma.mortalityLog.findMany({
+                where: { batch_id: { in: ids }, date: { lte: window.lte } },
+                select: { batch_id: true, date: true, count_died: true },
+            }),
+            prisma.birdSale.findMany({
+                where: { batch_id: { in: ids }, sale_date: { lte: window.lte } },
+                select: { batch_id: true, sale_date: true, birds_count: true },
+            }),
+        ]);
+        const removals = [
+            ...logs.map((l) => ({ batch_id: l.batch_id, at: l.date.getTime(), n: l.count_died })),
+            ...sales.map((s) => ({ batch_id: s.batch_id, at: s.sale_date.getTime(), n: s.birds_count })),
+        ];
 
-        const byDate = new Map<string, number>();
-        for (const row of rows) {
-            const dateKey = row.date.toISOString().slice(0, 10);
-            byDate.set(dateKey, (byDate.get(dateKey) ?? 0) + row.count_died);
+        // ponytail: O(days x events) rescan, fine at farm volumes; prefix-sum per batch if it gets slow.
+        const rows = [];
+        for (let t = window.gte.getTime(); t <= window.lte.getTime(); t += 86_400_000) {
+            const dayEnd = t + 86_400_000;
+            const active = new Set(
+                batches
+                    .filter((b) => b.starting_date.getTime() < dayEnd && (!b.actual_end_date || b.actual_end_date.getTime() >= t))
+                    .map((b) => b.id),
+            );
+            let alive = batches.reduce((sum, b) => (active.has(b.id) ? sum + b.initial_chick_count : sum), 0);
+            for (const r of removals) if (active.has(r.batch_id) && r.at < t) alive -= r.n;
+            const died = logs.reduce((sum, l) => {
+                const at = l.date.getTime();
+                return at >= t && at < dayEnd ? sum + l.count_died : sum;
+            }, 0);
+            rows.push({
+                date: new Date(t).toISOString().slice(0, 10),
+                died,
+                birds_alive: Math.max(alive, 0),
+                rate: alive > 0 ? died / alive : 0,
+            });
         }
-
-        return Array.from(byDate.entries())
-            .map(([date, died]) => ({ date, died }))
-            .sort((a, b) => a.date.localeCompare(b.date));
+        return rows;
     },
 
-    /** Daily FEED-category consumption, grouped by date AND unit -- quantities
-     * in different units (BAG vs KG) must never be summed together, same
-     * reasoning as the FCR gap noted on batchPerformance. A raw groupBy can't
-     * reach through the item relation for unit, so this groups in memory. */
+    /** Daily FEED-category consumption in kg. Items with a weight conversion (base unit KG/G/...,
+     * or an ItemUnit to one) are summed together as KG; an item with no conversion keeps its own
+     * unit row -- quantities in unknown-weight units (a BAG of unstated size) are never summed into
+     * kg. A raw groupBy can't reach through the item relation for unit, so this groups in memory. */
     async feedTrend(days: number) {
         const window = trendWindow(days);
         // ponytail: this string is a live FK code (ItemCategory.code) a user can rename via Settings,
         // which silently breaks this comparison with no error -- needs a stable-key mechanism if this keeps mattering.
         const rows = await prisma.consumption.findMany({
             where: { date: window, item: { category: "FEED" } },
-            select: { date: true, base_quantity: true, item: { select: { unit: true } } },
+            select: {
+                date: true,
+                base_quantity: true,
+                item: { select: { unit: true, itemUnits: { select: { unit: true, factor_to_base: true } } } },
+            },
         });
 
         const byKey = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
             const dateKey = row.date.toISOString().slice(0, 10);
-            const key = `${dateKey}|${row.item.unit}`;
-            byKey.set(key, (byKey.get(key) ?? new Prisma.Decimal(0)).plus(row.base_quantity));
+            const kgPerUnit = kgPerBaseUnit(row.item.unit, row.item.itemUnits);
+            const key = `${dateKey}|${kgPerUnit === null ? row.item.unit : "KG"}`;
+            const amount = kgPerUnit === null ? row.base_quantity : row.base_quantity.times(kgPerUnit);
+            byKey.set(key, (byKey.get(key) ?? new Prisma.Decimal(0)).plus(amount));
         }
 
         return Array.from(byKey.entries())

@@ -1302,12 +1302,14 @@ state of its own.
 | GET | `/api/analytics/revenue-vs-expenses` | 200 | `months?` (int, 1-24, default 6) |
 | GET | `/api/analytics/batches/performance` | 200 | `status?` (`RUNNING`\|`CLOSED`\|`SOLD`, optional, all statuses when omitted) |
 
-**`/trends/mortality`** — `{ date: string (YYYY-MM-DD), died: number }[]`,
-one row per day with at least one logged death (no zero-fill).
+**`/trends/mortality`** — `{ date: string (YYYY-MM-DD), died: number, birds_alive: number, rate: number }[]`,
+one row per day in the window (zero-filled). `rate` = `died / birds_alive`, where `birds_alive` is
+birds placed minus earlier deaths and sales across batches running that day.
 
 **`/trends/feed`** — `{ date: string, unit: string, quantity: string }[]`,
-`unit` is a `Unit.code` (§6.8), grouped by date **and** unit (FEED-category
-consumption only) — quantities in different units are never summed together.
+`unit` is a `Unit.code` (§6.8), FEED-category consumption only. Items with a weight conversion
+(base unit KG/G/MON_40KG/METRIC_TON, or an `ItemUnit` to one) are summed into one `KG` row per day;
+items with no conversion keep their own unit row and are never summed into kg.
 
 **`/trends/sales`** — `{ date: string, revenue: string, avg_price_per_kg: string }[]`,
 `avg_price_per_kg` is volume-weighted (`total revenue / total net weight`
@@ -1335,9 +1337,14 @@ that month, same computation as `/analytics/financial`.
 
 **`/batches/performance`** — bulk version of
 `/analytics/batches/:id/performance`; same per-batch shape, array instead
-of one object. Added so the Analytics page's batch table and comparison
-chart can fetch every batch's numbers in one request instead of one per
-batch.
+of one object, plus:
+`feed_kg: number | null` (null when any of the batch's feed has no kg conversion),
+`weight_gain_kg: number | null` (latest avg weight × live + sold net weight − chick weight; null with no weighing),
+`fcr: number | null` (`feed_kg / weight_gain_kg`),
+`cost_to_date: string` (batch-linked purchases + direct expenses + depreciation + consumed stock at avg purchase cost),
+`cost_per_kg: string | null` (`cost_to_date` / live + sold kg).
+Added so the Analytics page's batch table and comparison chart can fetch every batch's numbers in
+one request instead of one per batch.
 
 ---
 
