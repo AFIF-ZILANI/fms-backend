@@ -28,3 +28,4 @@ purchaseItemRoutes.get(
     zValidatorRfc7807("query", listPurchaseItemsQuerySchema),
     PurchaseItemController.getAll,
 );
+purchaseItemRoutes.post("/:id/complete", PurchaseItemController.complete);

@@ -198,4 +198,32 @@ export const PurchaseItemService = {
         ]);
         return { purchaseItems, meta: buildMeta(total, query) };
     },
+
+    /** Locks a lot at the codes linked so far: unit_count becomes the linked count, so bind() refuses
+     *  any more and a different split is refused too. A manager's call that every bottle that came
+     *  has a code -- including a short delivery (9 of an expected 10) or a lot linked before caps existed. */
+    async complete(id: string) {
+        return prisma.$transaction(async (tx) => {
+            // Same per-lot lock bind() takes, so a scan can't land between the count and the write.
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+            const lot = await tx.purchaseItem.findUnique({
+                where: { id },
+                include: { item: true },
+            });
+            if (!lot) throw AppError.notFound("PurchaseItem");
+            if (!lot.item.is_unit_tracked) {
+                throw AppError.badRequest(`"${lot.item.name}" isn't tracked by QR code`);
+            }
+            const linked = await tx.stockUnit.count({ where: { purchase_item_id: id } });
+            if (linked === 0) throw AppError.badRequest("Nothing is linked to this lot yet");
+            if (lot.unit_count !== null && linked >= lot.unit_count) {
+                throw AppError.conflict("This lot is already complete");
+            }
+            return tx.purchaseItem.update({
+                where: { id },
+                data: { unit_count: linked },
+                include: { item: true, purchase: true, _count: { select: { stockUnits: true } } },
+            });
+        });
+    },
 };

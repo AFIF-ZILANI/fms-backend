@@ -46,4 +46,11 @@ export const PurchaseItemController = {
             return sendList(c, purchaseItems, meta, "Purchase items fetched successfully");
         });
     },
+
+    async complete(c: Context) {
+        return withHandler(c, async () => {
+            const lot = await PurchaseItemService.complete(c.req.param("id") ?? "");
+            return sendSuccess(c, lot, "Lot marked complete");
+        });
+    },
 };
