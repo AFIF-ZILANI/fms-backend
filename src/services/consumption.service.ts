@@ -10,6 +10,10 @@ import type {
     CreateConsumptionInput,
     ListConsumptionsQuery,
 } from "@validators/consumption.validator";
+import type {
+    StockActivitySummary,
+    StockActivitySummaryQuery,
+} from "@validators/stock-activity.validator";
 
 export const ConsumptionService = {
     async getAll(query: ListConsumptionsQuery) {
@@ -27,13 +31,32 @@ export const ConsumptionService = {
         const [consumptions, total] = await Promise.all([
             prisma.consumption.findMany({
                 where,
-                include: { batch: true, house: true, item: true, stock_unit: true },
+                include: {
+                    batch: true,
+                    house: true,
+                    item: true,
+                    stock_unit: true,
+                    recorded_by: { select: { id: true, name: true } },
+                },
                 orderBy: { date: "desc" },
                 ...toSkipTake(query),
             }),
             prisma.consumption.count({ where }),
         ]);
         return { consumptions, meta: buildMeta(total, query) };
+    },
+
+    /** What a house has used: draws in all, today, this week, across how many items, and the latest. */
+    async summary(query: StockActivitySummaryQuery): Promise<StockActivitySummary> {
+        const where = { house_id: query.house_id };
+        const [total, today, week, items, latest] = await Promise.all([
+            prisma.consumption.count({ where }),
+            prisma.consumption.count({ where: { ...where, date: { gte: query.today_from } } }),
+            prisma.consumption.count({ where: { ...where, date: { gte: query.week_from } } }),
+            prisma.consumption.groupBy({ by: ["item_id"], where }),
+            prisma.consumption.aggregate({ where, _max: { date: true } }),
+        ]);
+        return { total, today, week, items: items.length, last_at: latest._max.date };
     },
 
     /** Two draw paths, branching on stock_unit_id:

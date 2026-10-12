@@ -37,6 +37,7 @@ const READ_ANY = [
     "task-assignments",
     "alerts",
     "stock-units",
+    "stock-house-allocations",
     "medications",
     "vaccinations",
     "weight-records",

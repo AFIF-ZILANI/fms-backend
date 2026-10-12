@@ -5,6 +5,7 @@ import {
     createConsumptionSchema,
     listConsumptionsQuerySchema,
 } from "@validators/consumption.validator";
+import { stockActivitySummaryQuerySchema } from "@validators/stock-activity.validator";
 
 export const consumptionRoutes = new Hono();
 
@@ -12,6 +13,11 @@ consumptionRoutes.get(
     "/",
     zValidatorRfc7807("query", listConsumptionsQuerySchema),
     ConsumptionController.getAll,
+);
+consumptionRoutes.get(
+    "/summary",
+    zValidatorRfc7807("query", stockActivitySummaryQuerySchema),
+    ConsumptionController.summary,
 );
 consumptionRoutes.post(
     "/",

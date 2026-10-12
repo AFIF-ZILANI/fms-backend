@@ -60,6 +60,20 @@ describe("canAccess", () => {
         }
     });
 
+    test("workers and managers may read a house's stock history", () => {
+        for (const who of [worker, manager]) {
+            for (const path of [
+                "/stock-house-allocations",
+                "/stock-house-allocations/summary",
+                "/consumptions",
+                "/consumptions/summary",
+            ]) {
+                expect(canAccess(who, "GET", path, none)).toBe(true);
+            }
+        }
+        expect(canAccess(other, "GET", "/stock-house-allocations/summary", none)).toBe(false);
+    });
+
     test("workers and managers may move a coded unit; other employee roles may not", () => {
         for (const who of [worker, manager]) {
             expect(canAccess(who, "POST", "/stock-units/abc/relocate", none)).toBe(true);

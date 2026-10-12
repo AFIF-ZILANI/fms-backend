@@ -8,6 +8,7 @@ import type {
     CreateConsumptionInput,
     ListConsumptionsQuery,
 } from "@validators/consumption.validator";
+import type { StockActivitySummaryQuery } from "@validators/stock-activity.validator";
 
 export const ConsumptionController = {
     async getAll(c: Context) {
@@ -15,6 +16,13 @@ export const ConsumptionController = {
             const query = getValid<ListConsumptionsQuery>(c, "query");
             const { consumptions, meta } = await ConsumptionService.getAll(query);
             return sendList(c, consumptions, meta, "Consumptions fetched successfully");
+        });
+    },
+
+    async summary(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<StockActivitySummaryQuery>(c, "query");
+            return sendSuccess(c, await ConsumptionService.summary(query), "Summary fetched");
         });
     },
 
