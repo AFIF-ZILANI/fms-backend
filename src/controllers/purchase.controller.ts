@@ -8,6 +8,7 @@ import type {
     CreatePurchaseInput,
     ListPurchasesQuery,
     ListPurchaseItemsQuery,
+    CompletePurchaseItemInput,
 } from "@validators/purchase.validator";
 
 export const PurchaseController = {
@@ -49,7 +50,8 @@ export const PurchaseItemController = {
 
     async complete(c: Context) {
         return withHandler(c, async () => {
-            const lot = await PurchaseItemService.complete(c.req.param("id") ?? "");
+            const { unit_count } = getValid<CompletePurchaseItemInput>(c, "json");
+            const lot = await PurchaseItemService.complete(c.req.param("id") ?? "", unit_count);
             return sendSuccess(c, lot, "Lot marked complete");
         });
     },

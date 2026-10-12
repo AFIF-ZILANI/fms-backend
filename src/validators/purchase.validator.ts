@@ -59,6 +59,11 @@ export const listPurchaseItemsQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
 });
 
+export const completePurchaseItemSchema = z.object({
+    unit_count: z.number().int().min(1).max(10000),
+});
+
 export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema> & { recorded_by_id: string };
 export type ListPurchasesQuery = z.infer<typeof listPurchasesQuerySchema>;
 export type ListPurchaseItemsQuery = z.infer<typeof listPurchaseItemsQuerySchema>;
+export type CompletePurchaseItemInput = z.infer<typeof completePurchaseItemSchema>;

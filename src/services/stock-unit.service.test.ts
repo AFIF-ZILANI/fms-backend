@@ -160,7 +160,7 @@ describe("StockUnitService", () => {
         ).rejects.toMatchObject({ status: 409 });
     });
 
-    test("complete locks a lot at its linked count: no more binds, and it can't complete twice", async () => {
+    test("complete needs every stated unit linked, and only applies to a lot with no bottle count", async () => {
         const lot = await prisma.purchaseItem.create({
             data: {
                 purchase_id: purchaseId,
@@ -172,20 +172,23 @@ describe("StockUnitService", () => {
                 total_price: 50,
             },
         });
-        await expect(PurchaseItemService.complete(lot.id)).rejects.toMatchObject({ status: 400 }); // nothing linked
-
         const units = await StockUnitService.provision(3);
         createdUnitIds.push(...units.map((u) => u.id));
         await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id });
         await StockUnitService.bind(units[1]!.id, { purchase_item_id: lot.id });
 
-        const done = await PurchaseItemService.complete(lot.id);
+        // 2 linked of 3 stated: refused, and nothing is saved
+        await expect(PurchaseItemService.complete(lot.id, 3)).rejects.toMatchObject({ status: 400 });
+        expect((await prisma.purchaseItem.findUnique({ where: { id: lot.id } }))?.unit_count).toBeNull();
+
+        const done = await PurchaseItemService.complete(lot.id, 2);
         expect(done.unit_count).toBe(2);
 
         await expect(
             StockUnitService.bind(units[2]!.id, { purchase_item_id: lot.id }),
         ).rejects.toMatchObject({ status: 409 });
-        await expect(PurchaseItemService.complete(lot.id)).rejects.toMatchObject({ status: 409 });
+        // already has a count -- a split lot completes by itself, there is nothing to mark
+        await expect(PurchaseItemService.complete(lot.id, 2)).rejects.toMatchObject({ status: 409 });
     });
 
     test("binding a lot whose item isn't unit-tracked is rejected", async () => {

@@ -199,10 +199,10 @@ export const PurchaseItemService = {
         return { purchaseItems, meta: buildMeta(total, query) };
     },
 
-    /** Locks a lot at the codes linked so far: unit_count becomes the linked count, so bind() refuses
-     *  any more and a different split is refused too. A manager's call that every bottle that came
-     *  has a code -- including a short delivery (9 of an expected 10) or a lot linked before caps existed. */
-    async complete(id: string) {
+    /** Locks a lot whose bottle count was never saved (it predates splits): the caller states how many
+     *  bottles it is, and that only sticks once every one of them has a code. A lot that already has a
+     *  split completes by itself the moment its last code links, so there is nothing to mark. */
+    async complete(id: string, unitCount: number) {
         return prisma.$transaction(async (tx) => {
             // Same per-lot lock bind() takes, so a scan can't land between the count and the write.
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
@@ -214,14 +214,20 @@ export const PurchaseItemService = {
             if (!lot.item.is_unit_tracked) {
                 throw AppError.badRequest(`"${lot.item.name}" isn't tracked by QR code`);
             }
+            if (lot.unit_count !== null) {
+                throw AppError.conflict(
+                    "This lot already has a bottle count — it completes when every code is linked",
+                );
+            }
             const linked = await tx.stockUnit.count({ where: { purchase_item_id: id } });
-            if (linked === 0) throw AppError.badRequest("Nothing is linked to this lot yet");
-            if (lot.unit_count !== null && linked >= lot.unit_count) {
-                throw AppError.conflict("This lot is already complete");
+            if (linked < unitCount) {
+                throw AppError.badRequest(
+                    `Only ${linked} of ${unitCount} units are linked — link the rest first`,
+                );
             }
             return tx.purchaseItem.update({
                 where: { id },
-                data: { unit_count: linked },
+                data: { unit_count: unitCount },
                 include: { item: true, purchase: true, _count: { select: { stockUnits: true } } },
             });
         });

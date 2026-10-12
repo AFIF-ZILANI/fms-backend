@@ -5,6 +5,7 @@ import {
     createPurchaseSchema,
     listPurchasesQuerySchema,
     listPurchaseItemsQuerySchema,
+    completePurchaseItemSchema,
 } from "@validators/purchase.validator";
 
 export const purchaseRoutes = new Hono();
@@ -28,4 +29,8 @@ purchaseItemRoutes.get(
     zValidatorRfc7807("query", listPurchaseItemsQuerySchema),
     PurchaseItemController.getAll,
 );
-purchaseItemRoutes.post("/:id/complete", PurchaseItemController.complete);
+purchaseItemRoutes.post(
+    "/:id/complete",
+    zValidatorRfc7807("json", completePurchaseItemSchema),
+    PurchaseItemController.complete,
+);
