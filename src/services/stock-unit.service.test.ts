@@ -191,6 +191,39 @@ describe("StockUnitService", () => {
         await expect(PurchaseItemService.complete(lot.id, 2)).rejects.toMatchObject({ status: 409 });
     });
 
+    test("purchase-items reports when a line was last linked and how many since a given time", async () => {
+        const lot = await prisma.purchaseItem.create({
+            data: {
+                purchase_id: purchaseId,
+                item_id: itemId,
+                quantity: 3,
+                unit: "BOTTLE",
+                base_quantity: 3,
+                unit_price: 10,
+                total_price: 30,
+            },
+        });
+        const units = await StockUnitService.provision(2);
+        createdUnitIds.push(...units.map((u) => u.id));
+        const before = new Date();
+        await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id });
+        await StockUnitService.bind(units[1]!.id, { purchase_item_id: lot.id });
+
+        const { purchaseItems } = await PurchaseItemService.getAll({
+            page: 1,
+            limit: 100,
+            item_id: itemId,
+            since: before,
+        });
+        const row = purchaseItems.find((p) => p.id === lot.id)!;
+        expect(row.linked_since).toBe(2);
+        expect(row.last_linked_at!.getTime()).toBeGreaterThanOrEqual(before.getTime());
+
+        // a line nothing was linked to reports none, rather than throwing on the missing group
+        const empty = purchaseItems.find((p) => p.id === purchaseItemId)!;
+        expect(empty.linked_since).toBe(0);
+    });
+
     test("binding a lot whose item isn't unit-tracked is rejected", async () => {
         const untrackedItem = await prisma.item.create({
             data: {

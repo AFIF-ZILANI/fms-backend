@@ -57,6 +57,8 @@ export const listPurchasesQuerySchema = paginationQuerySchema.extend({
 export const listPurchaseItemsQuerySchema = paginationQuerySchema.extend({
     item_id: z.string().uuid().optional(),
     batch_id: z.string().uuid().optional(),
+    // Start of the caller's day: each line then reports how many of its units were linked since.
+    since: z.coerce.date().optional(),
 });
 
 export const completePurchaseItemSchema = z.object({

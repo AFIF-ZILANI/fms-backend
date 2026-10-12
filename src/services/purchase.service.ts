@@ -196,7 +196,35 @@ export const PurchaseItemService = {
             }),
             prisma.purchaseItem.count({ where }),
         ]);
-        return { purchaseItems, meta: buildMeta(total, query) };
+
+        // When each line was last linked (orders "recently completed"), and how many of its units
+        // were linked since `since` (the field app's "linked today").
+        const ids = purchaseItems.map((p) => p.id);
+        const [latest, recent] = await Promise.all([
+            prisma.stockUnit.groupBy({
+                by: ["purchase_item_id"],
+                where: { purchase_item_id: { in: ids } },
+                _max: { bound_at: true },
+            }),
+            query.since
+                ? prisma.stockUnit.groupBy({
+                      by: ["purchase_item_id"],
+                      where: { purchase_item_id: { in: ids }, bound_at: { gte: query.since } },
+                      _count: { _all: true },
+                  })
+                : Promise.resolve([]),
+        ]);
+        const lastLinked = new Map(latest.map((r) => [r.purchase_item_id, r._max.bound_at]));
+        const linkedSince = new Map(recent.map((r) => [r.purchase_item_id, r._count._all]));
+
+        return {
+            purchaseItems: purchaseItems.map((p) => ({
+                ...p,
+                last_linked_at: lastLinked.get(p.id) ?? null,
+                linked_since: linkedSince.get(p.id) ?? 0,
+            })),
+            meta: buildMeta(total, query),
+        };
     },
 
     /** Locks a lot whose bottle count was never saved (it predates splits): the caller states how many
