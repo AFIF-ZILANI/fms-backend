@@ -68,6 +68,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
         const [unit] = await StockUnitService.provision(1);
         stockUnitId = unit!.id;
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
 
         const asset = await prisma.asset.create({
             data: {
@@ -89,6 +90,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
         // StockLedger_item_id_fkey.
         await prisma.stockLedger.deleteMany({ where: { item_id: itemId } });
         await prisma.asset.delete({ where: { id: assetId } });
+        await prisma.stockHouseAllocation.deleteMany({ where: { stock_unit_id: stockUnitId } });
         await prisma.stockUnit.delete({ where: { id: stockUnitId } });
         await prisma.purchaseItem.delete({ where: { id: purchaseItemId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });

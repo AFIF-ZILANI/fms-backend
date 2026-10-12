@@ -88,6 +88,9 @@ describe("ConsumptionService", () => {
         await prisma.stockLedger.deleteMany({
             where: { item_id: { in: [feedItemId, medicineItemId, ...createdItemIds] } },
         });
+        await prisma.stockHouseAllocation.deleteMany({
+            where: { stock_unit_id: { in: createdStockUnitIds } },
+        });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdStockUnitIds } } });
         await prisma.purchaseItem.deleteMany({
             where: { id: { in: [purchaseItemId, ...createdPurchaseItemIds] } },
@@ -134,6 +137,7 @@ describe("ConsumptionService", () => {
         const [unit] = await StockUnitService.provision(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
 
         const consumption = await ConsumptionService.create({
             house_id: houseId,
@@ -166,6 +170,7 @@ describe("ConsumptionService", () => {
         const [unit] = await StockUnitService.provision(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
 
         for (const qty of [40, 40]) {
             const consumption = await ConsumptionService.create({
@@ -188,6 +193,7 @@ describe("ConsumptionService", () => {
         const [unit] = await StockUnitService.provision(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId }); // a medicine unit
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
         // Enough feed at the house that the ledger draw itself would succeed.
         await prisma.stockLedger.create({
             data: {
@@ -226,6 +232,42 @@ describe("ConsumptionService", () => {
         ).rejects.toMatchObject({ status: 409 });
         // Restating the current value is not a change.
         await ItemService.update(medicineItemId, { is_unit_tracked: true });
+    });
+
+    test("a coded unit can only be used in the house it is in", async () => {
+        const [unit] = await StockUnitService.provision(1);
+        createdStockUnitIds.push(unit!.id);
+        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+        const draw = () =>
+            ConsumptionService.create({
+                house_id: houseId,
+                item_id: medicineItemId,
+                stock_unit_id: unit!.id,
+                quantity: 1,
+                unit: "BOTTLE",
+                date: new Date(),
+                recorded_by_id: profileId,
+            });
+
+        // never moved: it is still in the warehouse
+        await expect(draw()).rejects.toMatchObject({ status: 409, message: expect.stringContaining("warehouse") });
+
+        // moved into another house: still not here
+        const other = await prisma.houses.create({ data: { name: "Other", type: "BROODER", number: houseNumber() } });
+        try {
+            await StockUnitService.relocate(unit!.id, other.id, crypto.randomUUID());
+            await expect(draw()).rejects.toMatchObject({ status: 409, message: expect.stringContaining("Other") });
+
+            // moved here: now it can be used, and nothing was written by the refused draws
+            await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+            const consumption = await draw();
+            createdConsumptionIds.push(consumption!.id);
+            expect(await prisma.consumption.count({ where: { stock_unit_id: unit!.id } })).toBe(1);
+        } finally {
+            await prisma.consumption.deleteMany({ where: { stock_unit_id: unit!.id } });
+            await prisma.stockHouseAllocation.deleteMany({ where: { stock_unit_id: unit!.id } });
+            await prisma.houses.delete({ where: { id: other.id } });
+        }
     });
 
     test("drawing from a DISPOSED unit throws a conflict", async () => {
@@ -378,6 +420,7 @@ describe("ConsumptionService", () => {
         await StockUnitService.bind(unit!.id, {
             purchase_item_id: mlPurchaseItem.id,
         });
+        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
 
         const consumption = await ConsumptionService.create({
             house_id: houseId,

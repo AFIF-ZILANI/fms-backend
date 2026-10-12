@@ -115,6 +115,58 @@ export const HouseService = {
         return house;
     },
 
+    /** The coded (QR) units physically in this house and not yet used, per item: how many, and how much
+     *  they hold when every lot has a bottle count. "In" a house = its latest move was into this house
+     *  (a return to the warehouse, or a move on to another house, takes it out). A unit already IN_USE
+     *  has been drawn on and no longer counts. */
+    async getCodedStock(id: string) {
+        const house = await prisma.houses.findUnique({ where: { id } });
+        if (!house) throw AppError.notFound("House");
+
+        const rows = await prisma.$queryRaw<
+            {
+                item_id: string;
+                item_name: string;
+                item_unit: string;
+                pack_unit: string | null;
+                units: number;
+                unsized: number;
+                quantity: string | null;
+            }[]
+        >`
+            SELECT pi.item_id,
+                   i.name AS item_name,
+                   i.unit AS item_unit,
+                   CASE WHEN COUNT(DISTINCT pi.unit) = 1 THEN MIN(pi.unit) END AS pack_unit,
+                   COUNT(*)::int AS units,
+                   COUNT(*) FILTER (WHERE pi.unit_count IS NULL)::int AS unsized,
+                   SUM(pi.base_quantity / NULLIF(pi.unit_count, 0))::text AS quantity
+            FROM "StockUnit" su
+            JOIN LATERAL (
+                SELECT a.house_id FROM "StockHouseAllocation" a
+                WHERE a.stock_unit_id = su.id
+                ORDER BY a.occurred_at DESC, a.created_at DESC
+                LIMIT 1
+            ) cur ON TRUE
+            JOIN "PurchaseItem" pi ON pi.id = su.purchase_item_id
+            JOIN "Item" i ON i.id = pi.item_id
+            WHERE cur.house_id = ${id} AND su.status = 'IN_STOCK'
+            GROUP BY pi.item_id, i.name, i.unit
+            ORDER BY i.name`;
+
+        return rows.map((r) => ({
+            item_id: r.item_id,
+            item_name: r.item_name,
+            /** The item's own unit, which `quantity` is in. */
+            unit: r.item_unit,
+            /** What one coded unit is (BOTTLE), when every unit of this item here is the same. */
+            pack_unit: r.pack_unit,
+            units: r.units,
+            /** Null when any lot of this item has no bottle count yet, so its size isn't known. */
+            quantity: r.unsized > 0 || r.quantity === null ? null : Number(r.quantity),
+        }));
+    },
+
     async getStock(id: string) {
         const house = await prisma.houses.findUnique({ where: { id } });
         if (!house) throw AppError.notFound("House");
