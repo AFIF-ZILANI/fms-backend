@@ -148,16 +148,31 @@ describe("ExpenseService", () => {
     });
 
     test("a DIRECT cost needs a batch -- refused by the validator and by the database", async () => {
-        const base = { category: "TRANSPORT", cost_type: "DIRECT", amount: 100, date: "2027-01-05" };
+        const base = {
+            category: "TRANSPORT",
+            cost_type: "DIRECT",
+            amount: 100,
+            date: "2027-01-05",
+        };
         expect(createExpenseSchema.safeParse(base).success).toBe(false);
-        expect(createExpenseSchema.safeParse({ ...base, batch_id: crypto.randomUUID() }).success).toBe(true);
-        expect(createExpenseSchema.safeParse({ ...base, cost_type: "SHARED_PERIOD" }).success).toBe(true);
+        expect(
+            createExpenseSchema.safeParse({ ...base, batch_id: crypto.randomUUID() }).success,
+        ).toBe(true);
+        expect(createExpenseSchema.safeParse({ ...base, cost_type: "SHARED_PERIOD" }).success).toBe(
+            true,
+        );
 
         // A script or a future service that skips the validator still can't write one.
         await expect(
             (async () =>
                 prisma.expense.create({
-                    data: { category: "TRANSPORT", cost_type: "DIRECT", amount: 100, date: new Date(), recorded_by_id: profileId },
+                    data: {
+                        category: "TRANSPORT",
+                        cost_type: "DIRECT",
+                        amount: 100,
+                        date: new Date(),
+                        recorded_by_id: profileId,
+                    },
                 }))(),
         ).rejects.toThrow();
 
@@ -172,7 +187,14 @@ describe("ExpenseService", () => {
         });
         try {
             const ok = await prisma.expense.create({
-                data: { batch_id: batch.id, category: "TRANSPORT", cost_type: "DIRECT", amount: 100, date: new Date(), recorded_by_id: profileId },
+                data: {
+                    batch_id: batch.id,
+                    category: "TRANSPORT",
+                    cost_type: "DIRECT",
+                    amount: 100,
+                    date: new Date(),
+                    recorded_by_id: profileId,
+                },
             });
             createdIds.push(ok.id);
         } finally {

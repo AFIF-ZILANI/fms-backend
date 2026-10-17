@@ -24,7 +24,11 @@ describe("AdminService", () => {
     });
 
     test("create then getById round-trips", async () => {
-        const admin = await AdminService.create({ name: "Test Admin", mobile: mobile(), email: email() });
+        const admin = await AdminService.create({
+            name: "Test Admin",
+            mobile: mobile(),
+            email: email(),
+        });
         createdIds.push(admin!.id);
 
         const found = await AdminService.getById(admin!.id);
@@ -35,7 +39,11 @@ describe("AdminService", () => {
 
     test("duplicate mobile throws a conflict", async () => {
         const sharedMobile = mobile();
-        const first = await AdminService.create({ name: "First", mobile: sharedMobile, email: email() });
+        const first = await AdminService.create({
+            name: "First",
+            mobile: sharedMobile,
+            email: email(),
+        });
         createdIds.push(first!.id);
 
         await expect(
@@ -50,14 +58,22 @@ describe("AdminService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const admin = await AdminService.create({ name: "Updatable", mobile: mobile(), email: email() });
+        const admin = await AdminService.create({
+            name: "Updatable",
+            mobile: mobile(),
+            email: email(),
+        });
         createdIds.push(admin!.id);
 
         await expect(AdminService.update(admin!.id, {})).rejects.toMatchObject({ status: 400 });
     });
 
     test("setActive(false) then setActive(true) round-trips is_active", async () => {
-        const admin = await AdminService.create({ name: "Togglable", mobile: mobile(), email: email() });
+        const admin = await AdminService.create({
+            name: "Togglable",
+            mobile: mobile(),
+            email: email(),
+        });
         createdIds.push(admin!.id);
 
         const deactivated = await AdminService.setActive(admin!.id, false);
@@ -78,7 +94,11 @@ describe("AdminService", () => {
     });
 
     test("the password hash never appears in an admin response", async () => {
-        const admin = await AdminService.create({ name: "Hidden", mobile: mobile(), email: email() });
+        const admin = await AdminService.create({
+            name: "Hidden",
+            mobile: mobile(),
+            email: email(),
+        });
         createdIds.push(admin!.id);
         expect("password_hash" in (await AdminService.getById(admin!.id)).profile).toBe(false);
     });

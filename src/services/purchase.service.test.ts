@@ -98,11 +98,15 @@ describe("PurchaseService", () => {
         // Stored as "nothing paid yet": the 100 paid on the spot is a Payment out of the account.
         expect(purchase!.paid_amount.toNumber()).toBe(0);
         expect(purchase!.due_amount.toNumber()).toBeCloseTo(184.97, 2);
-        const payments = await prisma.payment.findMany({ where: { ref_type: "PURCHASE", ref_id: purchase!.id } });
+        const payments = await prisma.payment.findMany({
+            where: { ref_type: "PURCHASE", ref_id: purchase!.id },
+        });
         expect(payments).toHaveLength(1);
         expect(payments[0]).toMatchObject({ direction: "OUTGOING", to_instrument_id: null });
         expect(payments[0]!.amount.toNumber()).toBe(100);
-        expect((await PaymentService.outstandingForRef("PURCHASE", purchase!.id)).toNumber()).toBeCloseTo(84.97, 2);
+        expect(
+            (await PaymentService.outstandingForRef("PURCHASE", purchase!.id)).toNumber(),
+        ).toBeCloseTo(84.97, 2);
         expect(purchase!.items.length).toBe(2);
         expect(purchase!.items[0]!.total_price.toNumber()).toBeCloseTo(155.0, 2);
     });
@@ -282,7 +286,9 @@ describe("PurchaseService", () => {
 
         expect(purchase!.total_amount.toNumber()).toBe(1000);
         // Paid in full: the stored snapshot still says 1000 due, and the payment settles it.
-        expect((await PaymentService.outstandingForRef("PURCHASE", purchase!.id)).toNumber()).toBe(0);
+        expect((await PaymentService.outstandingForRef("PURCHASE", purchase!.id)).toNumber()).toBe(
+            0,
+        );
     });
 
     test("per-line PERCENT discount nets the line total, and feeds the purchase subtotal", async () => {

@@ -121,7 +121,9 @@ describe("WeightRecordService", () => {
         const first = await weigh("2027-05-02T03:00:00Z", { batch_id: null });
         createdIds.push(first!.id);
         // NULL batch_id used to slip past the composite unique, so this was silently stored twice.
-        await expect(weigh("2027-05-02T10:00:00Z", { batch_id: null })).rejects.toMatchObject({ status: 409 });
+        await expect(weigh("2027-05-02T10:00:00Z", { batch_id: null })).rejects.toMatchObject({
+            status: 409,
+        });
         // A batch weighing the same day in the same house is a different thing and is allowed.
         const withBatch = await weigh("2027-05-02T04:00:00Z");
         createdIds.push(withBatch!.id);

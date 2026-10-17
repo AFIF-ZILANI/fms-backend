@@ -51,11 +51,24 @@ describe("dashboard and summary queries", () => {
     test("outstanding payables and receivables drop by what has been paid", async () => {
         const longAgo = new Date(Date.now() - 400 * 86_400_000);
         const sale = await prisma.sale.create({
-            data: { sale_date: longAgo, total: 200, paid_amount: 0, due_amount: 200, recorded_by_id: actorId },
+            data: {
+                sale_date: longAgo,
+                total: 200,
+                paid_amount: 0,
+                due_amount: 200,
+                recorded_by_id: actorId,
+            },
         });
         saleIds.push(sale.id);
         const purchase = await prisma.purchase.create({
-            data: { warehouse_id: await sharedWarehouseId(), purchase_date: longAgo, total_amount: 300, paid_amount: 0, due_amount: 300, recorded_by_id: actorId },
+            data: {
+                warehouse_id: await sharedWarehouseId(),
+                purchase_date: longAgo,
+                total_amount: 300,
+                paid_amount: 0,
+                due_amount: 300,
+                recorded_by_id: actorId,
+            },
         });
         purchaseIds.push(purchase.id);
 
@@ -77,8 +90,12 @@ describe("dashboard and summary queries", () => {
         const after = await AnalyticsService.financialDashboard({});
 
         // Previously these read the create-time snapshot and never moved.
-        expect(D(before.outstanding_receivables).minus(after.outstanding_receivables).toString()).toBe("50");
-        expect(D(before.outstanding_payables).minus(after.outstanding_payables).toString()).toBe("70");
+        expect(
+            D(before.outstanding_receivables).minus(after.outstanding_receivables).toString(),
+        ).toBe("50");
+        expect(D(before.outstanding_payables).minus(after.outstanding_payables).toString()).toBe(
+            "70",
+        );
     });
 
     test("revenueVsExpenses buckets by month exactly as per-month aggregates would", async () => {
@@ -87,11 +104,23 @@ describe("dashboard and summary queries", () => {
         const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
         const inMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 2, 12));
         const sale = await prisma.sale.create({
-            data: { sale_date: inMonth, total: 123, paid_amount: 0, due_amount: 123, recorded_by_id: actorId },
+            data: {
+                sale_date: inMonth,
+                total: 123,
+                paid_amount: 0,
+                due_amount: 123,
+                recorded_by_id: actorId,
+            },
         });
         saleIds.push(sale.id);
         const expense = await prisma.expense.create({
-            data: { category: CATEGORY, cost_type: "SHARED_PERIOD", amount: 45, date: inMonth, recorded_by_id: actorId },
+            data: {
+                category: CATEGORY,
+                cost_type: "SHARED_PERIOD",
+                amount: 45,
+                date: inMonth,
+                recorded_by_id: actorId,
+            },
         });
         expenseIds.push(expense.id);
 
@@ -99,11 +128,26 @@ describe("dashboard and summary queries", () => {
             (r) => r.month === monthStart.toISOString().slice(0, 7),
         );
         const [s, b, e] = await Promise.all([
-            prisma.sale.aggregate({ where: { sale_date: { gte: monthStart, lt: monthEnd } }, _sum: { total: true } }),
-            prisma.birdSale.aggregate({ where: { sale_date: { gte: monthStart, lt: monthEnd } }, _sum: { total_amount: true } }),
-            prisma.expense.aggregate({ where: { date: { gte: monthStart, lt: monthEnd } }, _sum: { amount: true } }),
+            prisma.sale.aggregate({
+                where: { sale_date: { gte: monthStart, lt: monthEnd } },
+                _sum: { total: true },
+            }),
+            prisma.birdSale.aggregate({
+                where: { sale_date: { gte: monthStart, lt: monthEnd } },
+                _sum: { total_amount: true, discount_amount: true },
+            }),
+            prisma.expense.aggregate({
+                where: { date: { gte: monthStart, lt: monthEnd } },
+                _sum: { amount: true },
+            }),
         ]);
-        expect(row!.revenue).toBe(D(s._sum.total ?? 0).plus(b._sum.total_amount ?? 0).toString());
+        // bird-sale revenue is net of the discount knocked off at the point of sale
+        expect(row!.revenue).toBe(
+            D(s._sum.total ?? 0)
+                .plus(b._sum.total_amount ?? 0)
+                .minus(b._sum.discount_amount ?? 0)
+                .toString(),
+        );
         expect(row!.expenses).toBe(D(e._sum.amount ?? 0).toString());
         // And the rows span exactly the requested window, oldest first.
         expect((await AnalyticsService.revenueVsExpenses(3)).map((r) => r.month)).toHaveLength(3);
@@ -115,7 +159,9 @@ describe("dashboard and summary queries", () => {
             where: { is_active: true },
             include: { batchHouseBalances: true },
         });
-        const occupied = houses.filter((h) => h.batchHouseBalances.some((x) => x.quantity > 0)).length;
+        const occupied = houses.filter((h) =>
+            h.batchHouseBalances.some((x) => x.quantity > 0),
+        ).length;
         expect(overview.houses_occupied).toBe(occupied);
         expect(overview.houses_empty).toBe(houses.length - occupied);
     });
@@ -123,7 +169,13 @@ describe("dashboard and summary queries", () => {
     test("the unfiltered sales summaries net every payment, as the filtered ones do per id", async () => {
         const longAgo = new Date(Date.now() - 400 * 86_400_000);
         const sale = await prisma.sale.create({
-            data: { sale_date: longAgo, total: 90, paid_amount: 0, due_amount: 90, recorded_by_id: actorId },
+            data: {
+                sale_date: longAgo,
+                total: 90,
+                paid_amount: 0,
+                due_amount: 90,
+                recorded_by_id: actorId,
+            },
         });
         saleIds.push(sale.id);
         await PaymentService.create({
@@ -136,13 +188,27 @@ describe("dashboard and summary queries", () => {
 
         const all = await SaleService.summary({} as never);
         const dueSum = await prisma.sale.aggregate({ _sum: { due_amount: true } });
-        const paidSum = await prisma.payment.aggregate({ where: { ref_type: "SALE" }, _sum: { amount: true } });
-        expect(all.total_due).toBe(D(dueSum._sum.due_amount ?? 0).minus(paidSum._sum.amount ?? 0).toString());
+        const paidSum = await prisma.payment.aggregate({
+            where: { ref_type: "SALE" },
+            _sum: { amount: true },
+        });
+        expect(all.total_due).toBe(
+            D(dueSum._sum.due_amount ?? 0)
+                .minus(paidSum._sum.amount ?? 0)
+                .toString(),
+        );
 
         // The bird-sale summary takes the same shortcut.
         const birds = await BirdSaleService.summary({} as never);
         const bDue = await prisma.birdSale.aggregate({ _sum: { due_amount: true } });
-        const bPaid = await prisma.payment.aggregate({ where: { ref_type: "BIRD_SALE" }, _sum: { amount: true } });
-        expect(birds.total_due).toBe(D(bDue._sum.due_amount ?? 0).minus(bPaid._sum.amount ?? 0).toString());
+        const bPaid = await prisma.payment.aggregate({
+            where: { ref_type: "BIRD_SALE" },
+            _sum: { amount: true },
+        });
+        expect(birds.total_due).toBe(
+            D(bDue._sum.due_amount ?? 0)
+                .minus(bPaid._sum.amount ?? 0)
+                .toString(),
+        );
     });
 });

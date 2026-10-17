@@ -36,11 +36,7 @@ async function newItem(opts: { stockAtWarehouse?: number } = {}) {
     return item;
 }
 
-const adjust = (
-    item_id: string,
-    quantity_after: number,
-    over: Record<string, unknown> = {},
-) =>
+const adjust = (item_id: string, quantity_after: number, over: Record<string, unknown> = {}) =>
     InventoryAdjustmentService.create({
         item_id,
         warehouse_id: warehouseId,
@@ -51,14 +47,20 @@ const adjust = (
     });
 
 const ledgerFor = (adjustmentId: string) =>
-    prisma.stockLedger.findFirstOrThrow({ where: { ref_type: "ADJUSTMENT", ref_id: adjustmentId } });
+    prisma.stockLedger.findFirstOrThrow({
+        where: { ref_type: "ADJUSTMENT", ref_id: adjustmentId },
+    });
 
 describe("InventoryAdjustmentService", () => {
     beforeAll(async () => {
         const [warehouse, house, profile] = await Promise.all([
             prisma.warehouses.create({ data: { name: "Adjustment Warehouse" } }),
             prisma.houses.create({
-                data: { name: "Adjustment House", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+                data: {
+                    name: "Adjustment House",
+                    type: "GROWER",
+                    number: Math.floor(Math.random() * 100000),
+                },
             }),
             prisma.profiles.create({
                 data: {
@@ -114,7 +116,9 @@ describe("InventoryAdjustmentService", () => {
 
     test("a count equal to the real balance is refused", async () => {
         const item = await newItem({ stockAtWarehouse: 50 });
-        await expect(adjust(item.id, 50, { reason: "no-op" })).rejects.toMatchObject({ status: 400 });
+        await expect(adjust(item.id, 50, { reason: "no-op" })).rejects.toMatchObject({
+            status: 400,
+        });
     });
 
     test("Wastage and Expired reach the ledger as WASTAGE and EXPIRED, other reasons as ADJUSTMENT", async () => {

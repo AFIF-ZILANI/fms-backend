@@ -179,16 +179,18 @@ describe("IngestService", () => {
         // 15,600 total - 600 discount = 15,000 owed; the 15,000 paid at the weighing is a Payment into the
         // account, so the stored snapshot is the 15,000 and nothing is outstanding.
         expect(birdSale.due_amount.toString()).toBe("15000");
-        expect((await PaymentService.outstandingForRef("BIRD_SALE", birdSale.id)).toString()).toBe("0");
+        expect((await PaymentService.outstandingForRef("BIRD_SALE", birdSale.id)).toString()).toBe(
+            "0",
+        );
 
         const row = await prisma.ingestedSale.findUnique({ where: { id: ingested.rows[0]!.id } });
         expect(row?.status).toBe("CONFIRMED");
         expect(row?.bird_sale_id).toBe(birdSale.id);
 
         // a second confirm of the same row is refused
-        await expect(
-            IngestService.confirm(ingested.rows[0]!.id, confirmInput),
-        ).rejects.toThrow("already");
+        await expect(IngestService.confirm(ingested.rows[0]!.id, confirmInput)).rejects.toThrow(
+            "already",
+        );
 
         await prisma.ingestedSale.deleteMany({ where: { id: ingested.rows[0]!.id } });
         await prisma.payment.deleteMany({ where: { ref_id: birdSale.id } });
@@ -228,7 +230,9 @@ describe("IngestService", () => {
                 init_chicks_avg_wt: 40,
             },
         });
-        await prisma.batchHouseBalance.create({ data: { batch_id: batch.id, house_id: house.id, quantity: birdsInHouse } });
+        await prisma.batchHouseBalance.create({
+            data: { batch_id: batch.id, house_id: house.id, quantity: birdsInHouse },
+        });
         const ingested = await IngestService.ingest(payload(crypto.randomUUID()), {
             device_id: deviceId,
             profile_id: profileId,
@@ -250,7 +254,18 @@ describe("IngestService", () => {
         };
         const cleanup = async () => {
             await prisma.ingestedSale.deleteMany({ where: { id: ingested.rows[0]!.id } });
-            await prisma.payment.deleteMany({ where: { ref_id: { in: (await prisma.birdSale.findMany({ where: { batch_id: batch.id }, select: { id: true } })).map((s) => s.id) } } });
+            await prisma.payment.deleteMany({
+                where: {
+                    ref_id: {
+                        in: (
+                            await prisma.birdSale.findMany({
+                                where: { batch_id: batch.id },
+                                select: { id: true },
+                            })
+                        ).map((s) => s.id),
+                    },
+                },
+            });
             await prisma.birdSale.deleteMany({ where: { batch_id: batch.id } });
             await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batch.id } });
             await prisma.batches.deleteMany({ where: { id: batch.id } });
@@ -262,12 +277,17 @@ describe("IngestService", () => {
     test("simultaneous confirms of one staged sale create exactly one BirdSale", async () => {
         const t = await stagedSale();
         try {
-            const results = await Promise.allSettled(Array.from({ length: 6 }, () => IngestService.confirm(t.id, t.input)));
+            const results = await Promise.allSettled(
+                Array.from({ length: 6 }, () => IngestService.confirm(t.id, t.input)),
+            );
             expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-            for (const r of results) if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
+            for (const r of results)
+                if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
 
             expect(await prisma.birdSale.count({ where: { batch_id: t.batchId } })).toBe(1);
-            const balance = await prisma.batchHouseBalance.findFirstOrThrow({ where: { batch_id: t.batchId } });
+            const balance = await prisma.batchHouseBalance.findFirstOrThrow({
+                where: { batch_id: t.batchId },
+            });
             expect(balance.quantity).toBe(460); // 500 - 40, once -- not 500 - 6x40
             const row = await prisma.ingestedSale.findUniqueOrThrow({ where: { id: t.id } });
             expect(row.status).toBe("CONFIRMED");
@@ -280,13 +300,19 @@ describe("IngestService", () => {
     test("a confirm the house can't cover is refused and the sale stays PENDING, to be confirmed properly later", async () => {
         const t = await stagedSale(10); // only 10 birds, the sale says 40
         try {
-            await expect(IngestService.confirm(t.id, t.input)).rejects.toMatchObject({ status: 409 });
+            await expect(IngestService.confirm(t.id, t.input)).rejects.toMatchObject({
+                status: 409,
+            });
             const row = await prisma.ingestedSale.findUniqueOrThrow({ where: { id: t.id } });
             expect(row.status).toBe("PENDING"); // the claim rolled back with the failed sale
             expect(row.bird_sale_id).toBeNull();
             expect(await prisma.birdSale.count({ where: { batch_id: t.batchId } })).toBe(0);
 
-            const ok = await IngestService.confirm(t.id, { ...t.input, birds_count: 10, paid_amount: 0 });
+            const ok = await IngestService.confirm(t.id, {
+                ...t.input,
+                birds_count: 10,
+                paid_amount: 0,
+            });
             expect(ok.birds_count).toBe(10);
         } finally {
             await t.cleanup();

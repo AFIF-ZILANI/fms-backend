@@ -43,7 +43,9 @@ describe("TaskAssignmentService", () => {
                     role: "EMPLOYEE",
                 },
             }),
-            prisma.houses.create({ data: { name: "Task House", type: "BROODER", number: houseNumber() } }),
+            prisma.houses.create({
+                data: { name: "Task House", type: "BROODER", number: houseNumber() },
+            }),
             prisma.taskType.create({
                 data: { code: `ENVIRONMENT_${suffix}`, label: "Environment" },
             }),

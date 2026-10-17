@@ -155,7 +155,9 @@ describe("PerformanceScoreEntryService", () => {
                 points: 1,
                 reason: "approved by a non-admin",
                 incident_date: new Date("2026-04-10T00:00:00Z"),
-                approved_by_id: (await prisma.employees.findUniqueOrThrow({ where: { id: employeeId } })).profile_id,
+                approved_by_id: (
+                    await prisma.employees.findUniqueOrThrow({ where: { id: employeeId } })
+                ).profile_id,
             }),
         ).rejects.toMatchObject({ status: 400 });
     });

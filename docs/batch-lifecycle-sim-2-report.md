@@ -12,9 +12,9 @@ Batch `SIM2-2026-08-10` (KEDERNATH), 3000 chicks, 62 days (2026-08-10 -> 2026-10
 | Final avg weight (last sample) | 1611.09 g |
 | Feed used | 11,929.5 kg  (FCR api 2.76, expected 2.76) |
 | Revenue (sum of total_amount; 0 discounted at sale) | 1,162,747.65 |
-| Chicks + direct expenses + consumed stock | 165,000 + 102,000 + 695,637.25 = 962,637.25 |
-| True profit (revenue - discounts - costs) | 200,110.4 |
-| P&L endpoint profit | 200,110.4 |
+| Chicks + direct expenses + consumed stock | 165,000 + 102,000 + 694,912.25 = 961,912.25 |
+| True profit (revenue - discounts - costs) | 200,835.4 |
+| P&L endpoint profit | 200,835.4 |
 | Receivable (customers still owe) / payable (suppliers) | 621,390.97 / 456,300 |
 | Feed left unused (warehouse + houses) | 1,120.5 kg |
 | Active alerts after scan | 2 |
@@ -246,12 +246,12 @@ Batch `SIM2-2026-08-10` (KEDERNATH), 3000 chicks, 62 days (2026-08-10 -> 2026-10
 - PASS ledger vitamin: grower = model
 - PASS consumption vitamin: DB = model
 - PASS purchases: total = Σ lines - discount
-- PASS purchase SIM2-INV-1-46fb: paid <= total
-- PASS purchase SIM2-INV-1-499a: paid <= total
-- PASS purchase SIM2-INV-1-4bcd: paid <= total
-- PASS purchase SIM2-INV-14-499a: paid <= total
-- PASS purchase SIM2-INV-34-499a: paid <= total
-- PASS purchase SIM2-INV-46-499a: paid <= total
+- PASS purchase SIM2-INV-1-4e9d: paid <= total
+- PASS purchase SIM2-INV-1-deb8: paid <= total
+- PASS purchase SIM2-INV-1-9d84: paid <= total
+- PASS purchase SIM2-INV-14-deb8: paid <= total
+- PASS purchase SIM2-INV-34-deb8: paid <= total
+- PASS purchase SIM2-INV-46-deb8: paid <= total
 - PASS sales revenue = model
 - PASS analytics: cumulative_died
 - PASS analytics: mortality rate

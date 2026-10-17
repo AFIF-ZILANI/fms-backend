@@ -173,7 +173,10 @@ describe("PaymentService", () => {
             label: "Dormant Cash",
         });
         createdInstrumentIds.push(dead.id);
-        await prisma.paymentInstrument.update({ where: { id: dead.id }, data: { is_active: false } });
+        await prisma.paymentInstrument.update({
+            where: { id: dead.id },
+            data: { is_active: false },
+        });
         await expect(
             PaymentService.create({
                 amount: 1,

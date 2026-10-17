@@ -6,6 +6,7 @@ import { toSkipTake, buildMeta } from "@lib/pagination";
 import { toBaseQuantity } from "@lib/unit-conversion";
 import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
+import { codedRemaining, isNonDepleting, lockLot } from "@lib/coded-stock";
 import type {
     CreateConsumptionInput,
     ListConsumptionsQuery,
@@ -82,11 +83,22 @@ export const ConsumptionService = {
                     "USABLE",
                 );
 
+                let nonDepleting = false;
                 if (data.stock_unit_id !== undefined) {
                     const unitId = data.stock_unit_id;
                     const unit = await tx.stockUnit.findUnique({
                         where: { id: unitId },
-                        include: { purchase_item: { select: { item_id: true } } },
+                        include: {
+                            purchase_item: {
+                                select: {
+                                    id: true,
+                                    item_id: true,
+                                    base_quantity: true,
+                                    unit_count: true,
+                                    item: { select: { category: true } },
+                                },
+                            },
+                        },
                     });
                     if (!unit) throw AppError.notFound("StockUnit");
                     if (unit.status !== "IN_STOCK" && unit.status !== "IN_USE") {
@@ -112,13 +124,31 @@ export const ConsumptionService = {
                     }
                     // The ledger draw above is for data.item_id; a unit of some other item would
                     // flip that unit to IN_USE while the stock moved for a different item.
-                    if (unit.purchase_item?.item_id !== data.item_id) {
+                    if (!unit.purchase_item)
+                        throw AppError.badRequest("That code isn't linked to a purchase lot yet");
+                    if (unit.purchase_item.item_id !== data.item_id) {
                         throw AppError.badRequest("That stock unit belongs to a different item");
                     }
 
-                    // ponytail: StockUnit no longer stores quantity, so a coded draw just flips
-                    // IN_STOCK -> IN_USE on first use. No per-unit remaining/overdraw check and no
-                    // auto-CONSUMED -- both went with the qty columns; mark CONSUMED/DISPOSED via the API.
+                    // A draw can't take more than is left in the unit (lot size / unit_count, minus earlier
+                    // draws) or in its lot as a whole -- the lot check also covers a lot with no unit_count
+                    // yet. Equipment is used, not used up, so it has nothing to run out of.
+                    nonDepleting = isNonDepleting(unit.purchase_item.item.category);
+                    if (!nonDepleting) {
+                        await lockLot(tx, unit.purchase_item.id);
+                        const left = await codedRemaining(tx, unitId, unit.purchase_item);
+                        if (left.unit !== null && left.unit.lessThan(base_quantity)) {
+                            throw AppError.conflict(
+                                `Only ${left.unit.toString()} is left in this unit`,
+                            );
+                        }
+                        if (left.lot.lessThan(base_quantity)) {
+                            throw AppError.conflict(
+                                `Only ${left.lot.toString()} is left in this lot`,
+                            );
+                        }
+                    }
+                    // A first draw flips IN_STOCK -> IN_USE; CONSUMED/DISPOSED stay manual.
                     if (unit.status === "IN_STOCK") {
                         await tx.stockUnit.update({
                             where: { id: unitId },
@@ -128,7 +158,12 @@ export const ConsumptionService = {
                 } else {
                     // Aggregate (non-coded) draw -- must not exceed what's actually been
                     // transferred to this house and not yet used.
-                    const available = await getItemLocationBalance(tx, data.item_id, "HOUSE", data.house_id);
+                    const available = await getItemLocationBalance(
+                        tx,
+                        data.item_id,
+                        "HOUSE",
+                        data.house_id,
+                    );
                     if (available.lessThan(base_quantity)) {
                         throw AppError.conflict(
                             `Only ${available.toString()} of this item is on hand at this house`,
@@ -154,21 +189,23 @@ export const ConsumptionService = {
                     },
                 });
 
-                await StockLedgerService.record(tx, {
-                    item_id: data.item_id,
-                    quantity: base_quantity,
-                    direction: "OUT",
-                    reason: "CONSUMPTION",
-                    ref_type: "CONSUMPTION",
-                    ref_id: consumption.id,
-                    // Aggregate draws only -- the coded StockUnit path is a separate mechanism whose IN
-                    // side is never HOUSE-tagged (Purchase tags coded units WAREHOUSE; "Relocate" writes
-                    // no ledger row at all), so tagging its OUT here would drive house balances negative.
-                    ...(data.stock_unit_id === undefined && {
-                        location_type: "HOUSE" as const,
-                        location_id: data.house_id,
-                    }),
-                });
+                // Equipment stays in stock after use; it leaves only when disposed.
+                if (!nonDepleting)
+                    await StockLedgerService.record(tx, {
+                        item_id: data.item_id,
+                        quantity: base_quantity,
+                        direction: "OUT",
+                        reason: "CONSUMPTION",
+                        ref_type: "CONSUMPTION",
+                        ref_id: consumption.id,
+                        // Aggregate draws only -- the coded StockUnit path is a separate mechanism whose IN
+                        // side is never HOUSE-tagged (Purchase tags coded units WAREHOUSE; "Relocate" writes
+                        // no ledger row at all), so tagging its OUT here would drive house balances negative.
+                        ...(data.stock_unit_id === undefined && {
+                            location_type: "HOUSE" as const,
+                            location_id: data.house_id,
+                        }),
+                    });
 
                 return consumption;
             });

@@ -4,10 +4,7 @@ import { EmployeePayoutAccountService } from "./employee-payout-account.service"
 import { PayrollPayoutService } from "./payroll-payout.service";
 import { PaymentInstrumentService } from "./payment-instrument.service";
 import { purgeAuditLog } from "@lib/test-fixtures";
-import {
-    createPayrollPayoutSchema,
-    markPaidSchema,
-} from "@validators/payroll-payout.validator";
+import { createPayrollPayoutSchema, markPaidSchema } from "@validators/payroll-payout.validator";
 
 const mobile = () => `+880${Math.floor(1e9 + Math.random() * 8e9)}`;
 let employeeId: string;
@@ -193,9 +190,8 @@ describe("Payout APIs", () => {
     });
 
     test("a third-party account records whose it is", async () => {
-        const { createPayoutAccountSchema } = await import(
-            "@validators/employee-payout-account.validator"
-        );
+        const { createPayoutAccountSchema } =
+            await import("@validators/employee-payout-account.validator");
         const parsed = createPayoutAccountSchema.safeParse({
             employee_id: employeeId,
             method: "BKASH",
@@ -249,7 +245,10 @@ describe("Payout APIs", () => {
         });
         expect(audit).toHaveLength(1);
         expect(audit[0]).toMatchObject({ note: "Payout confirmed", changed_by_id: approverId });
-        expect(audit[0]!.after_data).toMatchObject({ transaction_ref: "BKA5F5F5", method: "BKASH" });
+        expect(audit[0]!.after_data).toMatchObject({
+            transaction_ref: "BKA5F5F5",
+            method: "BKASH",
+        });
 
         // The wallet is poorer by exactly that, which is the hole this closed.
         const after = await PaymentInstrumentService.getBalance(instrumentId);

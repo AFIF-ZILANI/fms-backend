@@ -251,7 +251,9 @@ describe("AnalyticsService", () => {
     });
 
     test("batchesPerformance: gain, cost, and FCR null while the 5 BAGs have no kg conversion", async () => {
-        const row = (await AnalyticsService.batchesPerformance("RUNNING")).find((r) => r.batch_id === batchId)!;
+        const row = (await AnalyticsService.batchesPerformance("RUNNING")).find(
+            (r) => r.batch_id === batchId,
+        )!;
         // 500 g x 680 alive + 590 kg sold - 1000 chicks x 40 g
         expect(row.weight_gain_kg).toBeCloseTo(340 + 590 - 40, 6);
         expect(row.feed_kg).toBeNull();
@@ -265,13 +267,17 @@ describe("AnalyticsService", () => {
             data: { item_id: feedItemId, unit: "KG", factor_to_base: 0.04 }, // 25 kg bags
         });
         try {
-            const row = (await AnalyticsService.batchesPerformance("RUNNING")).find((r) => r.batch_id === batchId)!;
+            const row = (await AnalyticsService.batchesPerformance("RUNNING")).find(
+                (r) => r.batch_id === batchId,
+            )!;
             expect(row.feed_kg).toBeCloseTo(125, 6);
             expect(row.fcr).toBeCloseTo(125 / 890, 6);
 
             const today = new Date().toISOString().slice(0, 10);
             const trend = await AnalyticsService.feedTrend(30);
-            expect(parseFloat(trend.find((r) => r.date === today && r.unit === "KG")!.quantity)).toBeGreaterThanOrEqual(125);
+            expect(
+                parseFloat(trend.find((r) => r.date === today && r.unit === "KG")!.quantity),
+            ).toBeGreaterThanOrEqual(125);
         } finally {
             await prisma.itemUnit.delete({ where: { id: conversion.id } });
         }
@@ -322,9 +328,15 @@ describe("AnalyticsService", () => {
         // Simulate a prior transfer having landed 50 KG (1 BAG) at this house.
         await prisma.stockLedger.create({
             data: {
-                item_id: kgItem.id, quantity: 50, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: houseId,
+                item_id: kgItem.id,
+                quantity: 50,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: houseId,
             },
         });
 

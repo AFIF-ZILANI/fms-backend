@@ -27,14 +27,23 @@ async function newInstrument(label: string) {
 describe("financialDashboard cash_by_instrument", () => {
     beforeAll(async () => {
         const owner = await prisma.profiles.create({
-            data: { name: "Cash Owner", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+            data: {
+                name: "Cash Owner",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
         });
         ownerId = owner.id;
     });
 
     afterAll(async () => {
         await prisma.payment.deleteMany({
-            where: { OR: [{ from_instrument_id: { in: instrumentIds } }, { to_instrument_id: { in: instrumentIds } }] },
+            where: {
+                OR: [
+                    { from_instrument_id: { in: instrumentIds } },
+                    { to_instrument_id: { in: instrumentIds } },
+                ],
+            },
         });
         await prisma.paymentInstrument.deleteMany({ where: { id: { in: instrumentIds } } });
         await prisma.profiles.delete({ where: { id: ownerId } });
@@ -66,8 +75,14 @@ describe("financialDashboard cash_by_instrument", () => {
             const row = dash.cash_by_instrument.find((r) => r.instrument_id === id);
             expect(row?.balance.toString()).toBe(expected.toString());
         }
-        expect(dash.cash_by_instrument.find((r) => r.instrument_id === a)!.balance.toString()).toBe("-325.5");
-        expect(dash.cash_by_instrument.find((r) => r.instrument_id === b)!.balance.toString()).toBe("250");
-        expect(dash.cash_by_instrument.find((r) => r.instrument_id === idle)!.balance.toString()).toBe("0");
+        expect(dash.cash_by_instrument.find((r) => r.instrument_id === a)!.balance.toString()).toBe(
+            "-325.5",
+        );
+        expect(dash.cash_by_instrument.find((r) => r.instrument_id === b)!.balance.toString()).toBe(
+            "250",
+        );
+        expect(
+            dash.cash_by_instrument.find((r) => r.instrument_id === idle)!.balance.toString(),
+        ).toBe("0");
     });
 });

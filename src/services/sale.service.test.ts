@@ -66,19 +66,24 @@ describe("SaleService", () => {
         // position sees it, and what is still owed is the stored due minus that payment.
         expect(sale!.paid_amount.toNumber()).toBe(0);
         expect(sale!.due_amount.toNumber()).toBeCloseTo(66.0, 2);
-        const payments = await prisma.payment.findMany({ where: { ref_type: "SALE", ref_id: sale!.id } });
+        const payments = await prisma.payment.findMany({
+            where: { ref_type: "SALE", ref_id: sale!.id },
+        });
         expect(payments).toHaveLength(1);
         expect(payments[0]).toMatchObject({ direction: "INCOMING", from_instrument_id: null });
         expect(payments[0]!.amount.toNumber()).toBe(50);
         expect(payments[0]!.to_instrument_id).toBeTruthy();
-        expect((await PaymentService.outstandingForRef("SALE", sale!.id)).toNumber()).toBeCloseTo(16.0, 2);
+        expect((await PaymentService.outstandingForRef("SALE", sale!.id)).toNumber()).toBeCloseTo(
+            16.0,
+            2,
+        );
     });
 
     test("paid_amount exceeding total throws bad-request", async () => {
         await expect(
             SaleService.create({
                 sale_date: new Date(),
-            warehouse_id: warehouseId,
+                warehouse_id: warehouseId,
                 paid_amount: 9999,
                 recorded_by_id: profileId,
                 items: [{ item_id: itemId, quantity: 1, unit: "BAG", unit_price: 5 }],
@@ -153,7 +158,10 @@ describe("SaleService", () => {
 
         const after = await SaleService.summary({});
         expect(after.count - before.count).toBe(1);
-        expect(parseFloat(after.total_revenue) - parseFloat(before.total_revenue)).toBeCloseTo(100, 2);
+        expect(parseFloat(after.total_revenue) - parseFloat(before.total_revenue)).toBeCloseTo(
+            100,
+            2,
+        );
         expect(parseFloat(after.total_due) - parseFloat(before.total_due)).toBeCloseTo(80, 2);
     });
 });
@@ -173,12 +181,31 @@ describe("SaleService stock", () => {
             ...over,
         } as never);
     const onHand = () =>
-        prisma.$transaction((tx) => getItemLocationBalance(tx, item, "WAREHOUSE", wh)).then((d) => d.toNumber());
+        prisma
+            .$transaction((tx) => getItemLocationBalance(tx, item, "WAREHOUSE", wh))
+            .then((d) => d.toNumber());
 
     beforeAll(async () => {
         wh = await sharedWarehouseId();
-        item = (await prisma.item.create({ data: { name: `Stock Sale ${crypto.randomUUID()}`, normalized_key: `stock sale ${crypto.randomUUID()}`, category: "OTHER", unit: "BAG" } })).id;
-        actor = (await prisma.profiles.create({ data: { name: "Stock Sale Actor", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" } })).id;
+        item = (
+            await prisma.item.create({
+                data: {
+                    name: `Stock Sale ${crypto.randomUUID()}`,
+                    normalized_key: `stock sale ${crypto.randomUUID()}`,
+                    category: "OTHER",
+                    unit: "BAG",
+                },
+            })
+        ).id;
+        actor = (
+            await prisma.profiles.create({
+                data: {
+                    name: "Stock Sale Actor",
+                    mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                    role: "ADMIN",
+                },
+            })
+        ).id;
         await seedStock(item, wh, 10);
     });
 
@@ -194,7 +221,9 @@ describe("SaleService stock", () => {
         const s = await sell(4);
         saleIds.push(s!.id);
         expect(await onHand()).toBe(6);
-        const out = await prisma.stockLedger.findMany({ where: { ref_type: "SALE", ref_id: s!.id } });
+        const out = await prisma.stockLedger.findMany({
+            where: { ref_type: "SALE", ref_id: s!.id },
+        });
         expect(out).toHaveLength(1);
         expect(out[0]!.direction).toBe("OUT");
     });
@@ -208,7 +237,12 @@ describe("SaleService stock", () => {
 
     test("two lines of one item are checked together", async () => {
         await expect(
-            sell(0, { items: [{ item_id: item, quantity: 4, unit: "BAG", unit_price: 10 }, { item_id: item, quantity: 4, unit: "BAG", unit_price: 10 }] }),
+            sell(0, {
+                items: [
+                    { item_id: item, quantity: 4, unit: "BAG", unit_price: 10 },
+                    { item_id: item, quantity: 4, unit: "BAG", unit_price: 10 },
+                ],
+            }),
         ).rejects.toMatchObject({ status: 409 });
         expect(await onHand()).toBe(6);
     });

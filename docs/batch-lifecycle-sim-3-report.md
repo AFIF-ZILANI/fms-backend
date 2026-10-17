@@ -12,12 +12,12 @@ Batch `SIM3-2026-09-16` (FAOMI), 4000 chicks, 31 days (2026-09-16 -> 2026-10-16)
 | Final avg weight (last sample) | 507.43 g |
 | Feed used | 4,900.5 kg  (FCR api 2.75, expected 2.75) |
 | Revenue (sum of total_amount; 0 discounted at sale) | 0 |
-| Chicks + direct expenses + consumed stock | 166,000 + 45,700 + 310,377.73 = 522,077.73 |
-| True profit (revenue - discounts - costs) | -522,077.73 |
-| P&L endpoint profit | -522,077.73 |
+| Chicks + direct expenses + consumed stock | 166,000 + 45,700 + 309,652.73 = 521,352.73 |
+| True profit (revenue - discounts - costs) | -521,352.73 |
+| P&L endpoint profit | -521,352.73 |
 | Receivable (customers still owe) / payable (suppliers) | 0 / 225,400 |
 | Feed left unused (warehouse + houses) | 2,499.5 kg |
-| Active alerts after scan | 2 |
+| Active alerts after scan | 3 |
 
 ## Findings
 
@@ -30,6 +30,7 @@ Batch `SIM3-2026-09-16` (FAOMI), 4000 chicks, 31 days (2026-09-16 -> 2026-10-16)
 
 ## Alerts raised by the scan
 
+- [WARNING] বড় সেড: no feed logged today
 - [WARNING] Jihad: "Blood sampling round" is overdue
 - [INFO] Payroll not yet generated for 2 employees
 
@@ -162,11 +163,11 @@ Batch `SIM3-2026-09-16` (FAOMI), 4000 chicks, 31 days (2026-09-16 -> 2026-10-16)
 - PASS ledger vitamin: grower = model
 - PASS consumption vitamin: DB = model
 - PASS purchases: total = Σ lines - discount
-- PASS purchase SIM3-INV-1-1185: paid <= total
-- PASS purchase SIM3-INV-2-3674: paid <= total
-- PASS purchase SIM3-INV-1-0658: paid <= total
-- PASS purchase SIM3-INV-1-f069: paid <= total
-- PASS purchase SIM3-INV-14-0658: paid <= total
+- PASS purchase SIM3-INV-1-73b2: paid <= total
+- PASS purchase SIM3-INV-2-219f: paid <= total
+- PASS purchase SIM3-INV-1-89c1: paid <= total
+- PASS purchase SIM3-INV-1-7ab8: paid <= total
+- PASS purchase SIM3-INV-14-89c1: paid <= total
 - PASS sales revenue = model
 - PASS analytics: cumulative_died
 - PASS analytics: mortality rate

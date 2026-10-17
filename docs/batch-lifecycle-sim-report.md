@@ -12,9 +12,9 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 | Final avg weight (last sample) | 1756.33 g |
 | Feed used | 20,175.3 kg  (FCR api 2.78, expected 2.78) |
 | Revenue (sum of total_amount; 1,500 discounted at sale) | 1,955,061.7 |
-| Chicks + direct expenses + consumed stock | 198,000 + 102,000 + 1,173,344.05 = 1,473,344.05 |
-| True profit (revenue - discounts - costs) | 480,217.65 |
-| P&L endpoint profit | 480,217.65 |
+| Chicks + direct expenses + consumed stock | 198,000 + 102,000 + 1,172,619.05 = 1,472,619.05 |
+| True profit (revenue - discounts - costs) | 480,942.65 |
+| P&L endpoint profit | 480,942.65 |
 | Receivable (customers still owe) / payable (suppliers) | 262,531.38 / 839,250 |
 | Feed left unused (warehouse + houses) | 1,574.7 kg |
 | Active alerts after scan | 2 |
@@ -246,13 +246,13 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS ledger vitamin: grower = model
 - PASS consumption vitamin: DB = model
 - PASS purchases: total = Σ lines - discount
-- PASS purchase SIM-INV-1-7209: paid <= total
-- PASS purchase SIM-INV-2-9d84: paid <= total
-- PASS purchase SIM-INV-1-328a: paid <= total
-- PASS purchase SIM-INV-1-877e: paid <= total
-- PASS purchase SIM-INV-14-328a: paid <= total
-- PASS purchase SIM-INV-34-328a: paid <= total
-- PASS purchase SIM-INV-46-328a: paid <= total
+- PASS purchase SIM-INV-1-b087: paid <= total
+- PASS purchase SIM-INV-2-3cfa: paid <= total
+- PASS purchase SIM-INV-1-b699: paid <= total
+- PASS purchase SIM-INV-1-dd6e: paid <= total
+- PASS purchase SIM-INV-14-b699: paid <= total
+- PASS purchase SIM-INV-34-b699: paid <= total
+- PASS purchase SIM-INV-46-b699: paid <= total
 - PASS sales revenue = model
 - PASS analytics: cumulative_died
 - PASS analytics: mortality rate

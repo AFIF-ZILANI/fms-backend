@@ -21,7 +21,10 @@ const avatarIds: string[] = [];
 const accountIds: string[] = [];
 
 const rowsFor = (table: string, record_id: string) =>
-    prisma.auditLog.findMany({ where: { table_name: table, record_id }, orderBy: { occurred_at: "asc" } });
+    prisma.auditLog.findMany({
+        where: { table_name: table, record_id },
+        orderBy: { occurred_at: "asc" },
+    });
 
 async function hire() {
     const input: CreateEmployeeInput = {
@@ -59,10 +62,14 @@ describe("audit writes", () => {
 
     afterAll(async () => {
         await purgeAuditLog({ where: { changed_by_id: { in: profileIds } } });
-        await prisma.performanceScoreEntry.deleteMany({ where: { employee_id: { in: employeeIds } } });
+        await prisma.performanceScoreEntry.deleteMany({
+            where: { employee_id: { in: employeeIds } },
+        });
         await prisma.device.deleteMany({ where: { profile_id: { in: profileIds } } });
         await prisma.pairingCode.deleteMany({ where: { profile_id: { in: profileIds } } });
-        await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: { in: employeeIds } } });
+        await prisma.employeePayoutAccount.deleteMany({
+            where: { employee_id: { in: employeeIds } },
+        });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
         await prisma.admins.deleteMany({ where: { id: { in: adminIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
@@ -95,7 +102,11 @@ describe("audit writes", () => {
         const { temp_password } = await AdminService.resetPassword(a!.id, actorId);
 
         const notes = (await rowsFor("Admins", a!.id)).map((r) => r.note);
-        expect(notes).toEqual(["Admin created, login created", "Admin deactivated", "Password reset"]);
+        expect(notes).toEqual([
+            "Admin created, login created",
+            "Admin deactivated",
+            "Password reset",
+        ]);
         expect(JSON.stringify(await rowsFor("Admins", a!.id))).not.toContain(temp_password);
     });
 
@@ -157,9 +168,13 @@ describe("audit writes", () => {
     test("terminating records who did it, and reinstating clears it", async () => {
         const e = await hire();
         await EmployeeService.terminate(e.id, actorId);
-        expect((await prisma.employees.findUniqueOrThrow({ where: { id: e.id } })).terminated_by_id).toBe(actorId);
+        expect(
+            (await prisma.employees.findUniqueOrThrow({ where: { id: e.id } })).terminated_by_id,
+        ).toBe(actorId);
         await EmployeeService.reinstate(e.id, actorId);
-        expect((await prisma.employees.findUniqueOrThrow({ where: { id: e.id } })).terminated_by_id).toBeNull();
+        expect(
+            (await prisma.employees.findUniqueOrThrow({ where: { id: e.id } })).terminated_by_id,
+        ).toBeNull();
     });
 
     test("closing or superseding a payout account records who closed it", async () => {
@@ -174,12 +189,20 @@ describe("audit writes", () => {
             });
         const first = await make("01711110001");
         const second = await make("01711110002"); // supersedes the first
-        const closedFirst = await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: first!.id } });
+        const closedFirst = await prisma.employeePayoutAccount.findUniqueOrThrow({
+            where: { id: first!.id },
+        });
         expect(closedFirst.closed_by_id).toBe(actorId);
-        expect((await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: second!.id } })).closed_by_id).toBeNull();
+        expect(
+            (await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: second!.id } }))
+                .closed_by_id,
+        ).toBeNull();
 
         await EmployeePayoutAccountService.close(second!.id, actorId);
-        expect((await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: second!.id } })).closed_by_id).toBe(actorId);
+        expect(
+            (await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: second!.id } }))
+                .closed_by_id,
+        ).toBe(actorId);
     });
 
     test("voiding and acknowledging a score entry record who did each", async () => {
@@ -196,8 +219,14 @@ describe("audit writes", () => {
             },
         });
         await PerformanceScoreEntryService.acknowledge(entry.id, e.profile_id); // the employee themselves
-        await PerformanceScoreEntryService.void(entry.id, { void_reason: "entered in error" }, actorId);
-        const after = await prisma.performanceScoreEntry.findUniqueOrThrow({ where: { id: entry.id } });
+        await PerformanceScoreEntryService.void(
+            entry.id,
+            { void_reason: "entered in error" },
+            actorId,
+        );
+        const after = await prisma.performanceScoreEntry.findUniqueOrThrow({
+            where: { id: entry.id },
+        });
         expect(after.acknowledged_by_id).toBe(e.profile_id);
         expect(after.voided_by_id).toBe(actorId);
     });
@@ -206,7 +235,10 @@ describe("audit writes", () => {
         const { code } = await DeviceService.createPairingCode(actorId);
         const paired = await DeviceService.redeemPairingCode(code, "Who revoked", "android");
         await DeviceService.revoke(paired.device_id, actorId);
-        expect((await prisma.device.findUniqueOrThrow({ where: { id: paired.device_id } })).revoked_by_id).toBe(actorId);
+        expect(
+            (await prisma.device.findUniqueOrThrow({ where: { id: paired.device_id } }))
+                .revoked_by_id,
+        ).toBe(actorId);
     });
 
     test("the audit log is append-only at the database: no edits, and deletes only by explicit opt-in", async () => {
@@ -215,12 +247,17 @@ describe("audit writes", () => {
 
         // A buggy service or a manual fix can't rewrite who did what...
         await expect(
-            (async () => prisma.auditLog.update({ where: { id: row.id }, data: { note: "rewritten" } }))(),
+            (async () =>
+                prisma.auditLog.update({ where: { id: row.id }, data: { note: "rewritten" } }))(),
         ).rejects.toThrow(/append-only/);
         // ...or remove it.
-        await expect((async () => prisma.auditLog.deleteMany({ where: { id: row.id } }))()).rejects.toThrow(/append-only/);
+        await expect(
+            (async () => prisma.auditLog.deleteMany({ where: { id: row.id } }))(),
+        ).rejects.toThrow(/append-only/);
         expect(await prisma.auditLog.count({ where: { id: row.id } })).toBe(1);
-        expect((await prisma.auditLog.findUniqueOrThrow({ where: { id: row.id } })).note).toBe(row.note);
+        expect((await prisma.auditLog.findUniqueOrThrow({ where: { id: row.id } })).note).toBe(
+            row.note,
+        );
 
         // Only a session that sets the flag for its own transaction can delete (test cleanup does).
         expect((await purgeAuditLog({ where: { id: row.id } })).count).toBe(1);
@@ -231,6 +268,9 @@ describe("audit writes", () => {
         const rows = await prisma.$queryRaw<{ tgname: string }[]>`
             SELECT tgname::text AS tgname FROM pg_trigger
             WHERE tgrelid = '"AuditLog"'::regclass AND NOT tgisinternal ORDER BY tgname`;
-        expect(rows.map((r) => r.tgname)).toEqual(["audit_log_append_only", "audit_log_no_truncate"]);
+        expect(rows.map((r) => r.tgname)).toEqual([
+            "audit_log_append_only",
+            "audit_log_no_truncate",
+        ]);
     });
 });

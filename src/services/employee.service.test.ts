@@ -18,7 +18,11 @@ const avatarIds: string[] = [];
 const profileIds: string[] = [];
 
 /** Remembers everything a test created so afterAll can unwind it in FK order. */
-function track(employee: { id: string; profile_id: string; profile: { avatar_id: string | null } }) {
+function track(employee: {
+    id: string;
+    profile_id: string;
+    profile: { avatar_id: string | null };
+}) {
     createdIds.push(employee.id);
     profileIds.push(employee.profile_id);
     if (employee.profile.avatar_id) avatarIds.push(employee.profile.avatar_id);
@@ -85,7 +89,9 @@ describe("EmployeeService", () => {
     });
 
     test("create then getById round-trips", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Test Worker", role: "WORKER", reference_salary: 15000 }));
+        const employee = await EmployeeService.create(
+            hire({ name: "Test Worker", role: "WORKER", reference_salary: 15000 }),
+        );
         track(employee!);
 
         const found = await EmployeeService.getById(employee!.id);
@@ -106,7 +112,9 @@ describe("EmployeeService", () => {
         expect(profile.role).toBe("EMPLOYEE");
         expect(profile.employee_role).toBe("WORKER");
         expect(profile.must_change_password).toBe(true);
-        expect("password_hash" in (await EmployeeService.getById(employee!.id)).profile).toBe(false);
+        expect("password_hash" in (await EmployeeService.getById(employee!.id)).profile).toBe(
+            false,
+        );
     });
 
     test("resetPassword gives a fresh temp password and drops the old one", async () => {
@@ -123,11 +131,20 @@ describe("EmployeeService", () => {
 
     test("duplicate mobile throws a conflict", async () => {
         const sharedMobile = mobile();
-        const first = await EmployeeService.create(hire({ name: "First", role: "WORKER", reference_salary: 10000, mobile: sharedMobile }));
+        const first = await EmployeeService.create(
+            hire({ name: "First", role: "WORKER", reference_salary: 10000, mobile: sharedMobile }),
+        );
         track(first!);
 
         await expect(
-            EmployeeService.create(hire({ name: "Second", role: "WORKER", reference_salary: 10000, mobile: sharedMobile })),
+            EmployeeService.create(
+                hire({
+                    name: "Second",
+                    role: "WORKER",
+                    reference_salary: 10000,
+                    mobile: sharedMobile,
+                }),
+            ),
         ).rejects.toMatchObject({ status: 409 });
     });
 
@@ -138,7 +155,9 @@ describe("EmployeeService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Updatable", role: "INTERN", reference_salary: 5000 }));
+        const employee = await EmployeeService.create(
+            hire({ name: "Updatable", role: "INTERN", reference_salary: 5000 }),
+        );
         track(employee!);
 
         await expect(EmployeeService.update(employee!.id, {})).rejects.toMatchObject({
@@ -147,7 +166,9 @@ describe("EmployeeService", () => {
     });
 
     test("update can promote role and change salary/rating", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Promotable", role: "WORKER", reference_salary: 12000 }));
+        const employee = await EmployeeService.create(
+            hire({ name: "Promotable", role: "WORKER", reference_salary: 12000 }),
+        );
         track(employee!);
 
         const promoted = await EmployeeService.update(employee!.id, {
@@ -169,7 +190,13 @@ describe("EmployeeService", () => {
 
         const { employees } = await EmployeeService.getAll({ page: 1, limit: 50, q: unique });
         const row = employees.find((e) => e.id === employee!.id)!;
-        for (const secret of ["nid_number", "date_of_birth", "emergency_phone", "emergency_name", "reference_phone"]) {
+        for (const secret of [
+            "nid_number",
+            "date_of_birth",
+            "emergency_phone",
+            "emergency_name",
+            "reference_phone",
+        ]) {
             expect(secret in row).toBe(false);
         }
         // What the roster and pickers do read is still there.
@@ -183,7 +210,9 @@ describe("EmployeeService", () => {
     });
 
     test("terminate and reinstate move employment and the login together", async () => {
-        const employee = await EmployeeService.create(hire({ name: "Togglable", role: "WORKER", reference_salary: 9000 }));
+        const employee = await EmployeeService.create(
+            hire({ name: "Togglable", role: "WORKER", reference_salary: 9000 }),
+        );
         track(employee!);
 
         const gone = await EmployeeService.terminate(employee!.id);
@@ -300,7 +329,9 @@ describe("EmployeeService", () => {
     });
 
     test("listing filters by role", async () => {
-        const employee = await EmployeeService.create(hire({ name: "FilterMe", role: "INTERN", reference_salary: 4000 }));
+        const employee = await EmployeeService.create(
+            hire({ name: "FilterMe", role: "INTERN", reference_salary: 4000 }),
+        );
         track(employee!);
 
         const { employees } = await EmployeeService.getAll({ page: 1, limit: 100, role: "INTERN" });
@@ -382,7 +413,9 @@ describe("EmployeeService", () => {
         track(employee!);
 
         await EmployeeService.terminate(employee!.id);
-        await expect(EmployeeService.terminate(employee!.id)).rejects.toMatchObject({ status: 400 });
+        await expect(EmployeeService.terminate(employee!.id)).rejects.toMatchObject({
+            status: 400,
+        });
     });
 
     test("reinstate brings them back as APPOINTED and active", async () => {
@@ -399,7 +432,9 @@ describe("EmployeeService", () => {
         const employee = await EmployeeService.create(hire({ name: "Still Here" }));
         track(employee!);
 
-        await expect(EmployeeService.reinstate(employee!.id)).rejects.toMatchObject({ status: 400 });
+        await expect(EmployeeService.reinstate(employee!.id)).rejects.toMatchObject({
+            status: 400,
+        });
     });
 
     test("leaving probation clears the probation end date", async () => {
@@ -462,7 +497,11 @@ describe("EmployeeService", () => {
         expect(byName.employees).toHaveLength(3);
 
         // Case-insensitive, so the search box doesn't care how it was typed.
-        const lowered = await EmployeeService.getAll({ page: 1, limit: 50, q: unique.toLowerCase() });
+        const lowered = await EmployeeService.getAll({
+            page: 1,
+            limit: 50,
+            q: unique.toLowerCase(),
+        });
         expect(lowered.employees).toHaveLength(3);
 
         const byMobile = await EmployeeService.getAll({
@@ -491,7 +530,10 @@ describe("EmployeeService", () => {
         }
         // An inactive profile with no employment change is what the filter is about; set it directly
         // (the API only moves the two together, via terminate).
-        await prisma.profiles.update({ where: { id: inactive!.profile_id }, data: { is_active: false } });
+        await prisma.profiles.update({
+            where: { id: inactive!.profile_id },
+            data: { is_active: false },
+        });
 
         const { employees } = await EmployeeService.getAll({
             page: 1,

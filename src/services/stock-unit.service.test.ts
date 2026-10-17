@@ -21,6 +21,13 @@ describe("StockUnitService", () => {
     // module's bind() action needs directly via Prisma, bypassing the
     // not-yet-built Purchases API. Legitimate test-fixture pattern for an
     // out-of-phase-order dependency, not a shortcut around real behavior.
+    /** A provisioned code bound to the shared lot -- relocating needs a bound unit. */
+    async function boundUnit() {
+        const [unit] = await StockUnitService.provision(1);
+        createdUnitIds.push(unit!.id);
+        return StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
+    }
+
     beforeAll(async () => {
         const profile = await prisma.profiles.create({
             data: {
@@ -79,6 +86,8 @@ describe("StockUnitService", () => {
         });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
         await prisma.stockTransfer.deleteMany({ where: { id: { in: createdTransferIds } } });
+        // write-offs from CONSUMED/DISPOSED units
+        await prisma.stockLedger.deleteMany({ where: { item_id: itemId } });
         await prisma.purchaseItem.deleteMany({ where: { purchase_id: purchaseId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });
         await prisma.item.delete({ where: { id: itemId } });
@@ -147,7 +156,9 @@ describe("StockUnitService", () => {
         createdUnitIds.push(...units.map((u) => u.id));
 
         await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id, unit_count: 2 });
-        expect((await prisma.purchaseItem.findUnique({ where: { id: lot.id } }))?.unit_count).toBe(2);
+        expect((await prisma.purchaseItem.findUnique({ where: { id: lot.id } }))?.unit_count).toBe(
+            2,
+        );
 
         // a different split once fixed is refused, and so is omitting it being harmless
         await expect(
@@ -178,8 +189,12 @@ describe("StockUnitService", () => {
         await StockUnitService.bind(units[1]!.id, { purchase_item_id: lot.id });
 
         // 2 linked of 3 stated: refused, and nothing is saved
-        await expect(PurchaseItemService.complete(lot.id, 3)).rejects.toMatchObject({ status: 400 });
-        expect((await prisma.purchaseItem.findUnique({ where: { id: lot.id } }))?.unit_count).toBeNull();
+        await expect(PurchaseItemService.complete(lot.id, 3)).rejects.toMatchObject({
+            status: 400,
+        });
+        expect(
+            (await prisma.purchaseItem.findUnique({ where: { id: lot.id } }))?.unit_count,
+        ).toBeNull();
 
         const done = await PurchaseItemService.complete(lot.id, 2);
         expect(done.unit_count).toBe(2);
@@ -188,7 +203,9 @@ describe("StockUnitService", () => {
             StockUnitService.bind(units[2]!.id, { purchase_item_id: lot.id }),
         ).rejects.toMatchObject({ status: 409 });
         // already has a count -- a split lot completes by itself, there is nothing to mark
-        await expect(PurchaseItemService.complete(lot.id, 2)).rejects.toMatchObject({ status: 409 });
+        await expect(PurchaseItemService.complete(lot.id, 2)).rejects.toMatchObject({
+            status: 409,
+        });
     });
 
     test("purchase-items reports when a line was last linked and how many since a given time", async () => {
@@ -268,7 +285,7 @@ describe("StockUnitService", () => {
     });
 
     test("relocate logs a house allocation", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const unit = await boundUnit();
         createdUnitIds.push(unit!.id);
 
         const relocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
@@ -277,7 +294,7 @@ describe("StockUnitService", () => {
     });
 
     test("ten relocations of one unit to the same house racing: one lands, the rest are conflicts", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const unit = await boundUnit();
         createdUnitIds.push(unit!.id);
 
         const move = () => StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
@@ -287,11 +304,13 @@ describe("StockUnitService", () => {
         for (const r of results) {
             if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
         }
-        expect(await prisma.stockHouseAllocation.count({ where: { stock_unit_id: unit!.id } })).toBe(1);
+        expect(
+            await prisma.stockHouseAllocation.count({ where: { stock_unit_id: unit!.id } }),
+        ).toBe(1);
     });
 
     test("relocate waits for the unit's lock, so a racing move reads the real current house", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const unit = await boundUnit();
         createdUnitIds.push(unit!.id);
 
         // Another writer holds this unit's lock for a moment.
@@ -310,7 +329,7 @@ describe("StockUnitService", () => {
     });
 
     test("relocate infers ALLOCATION on first move, REALLOCATION on a house->house move, RETURN to warehouse", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const unit = await boundUnit();
         createdUnitIds.push(unit!.id);
         const houseTwo = await prisma.houses.create({
             data: { name: "Seed House Two", type: "BROODER", number: houseNumber() },
@@ -319,7 +338,11 @@ describe("StockUnitService", () => {
         const allocated = await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
         expect(allocated.type).toBe("ALLOCATION");
 
-        const reallocated = await StockUnitService.relocate(unit!.id, houseTwo.id, crypto.randomUUID());
+        const reallocated = await StockUnitService.relocate(
+            unit!.id,
+            houseTwo.id,
+            crypto.randomUUID(),
+        );
         expect(reallocated.type).toBe("REALLOCATION");
         expect(reallocated.house_id).toBe(houseTwo.id);
 
@@ -336,10 +359,12 @@ describe("StockUnitService", () => {
     });
 
     test("relocate rejects a no-op move (same house, or already at the warehouse)", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const unit = await boundUnit();
         createdUnitIds.push(unit!.id);
 
-        await expect(StockUnitService.relocate(unit!.id, null, crypto.randomUUID())).rejects.toMatchObject({
+        await expect(
+            StockUnitService.relocate(unit!.id, null, crypto.randomUUID()),
+        ).rejects.toMatchObject({
             status: 409,
         });
 
@@ -485,7 +510,9 @@ describe("StockUnitService", () => {
             },
         });
         equipmentPurchaseItemId = equipmentPurchaseItem.id;
-        await StockUnitService.bind(equipmentUnit!.id, { purchase_item_id: equipmentPurchaseItem.id });
+        await StockUnitService.bind(equipmentUnit!.id, {
+            purchase_item_id: equipmentPurchaseItem.id,
+        });
         await StockUnitService.relocate(equipmentUnit!.id, houseId, crypto.randomUUID());
 
         const { stockUnits } = await StockUnitService.getAll({
@@ -510,16 +537,59 @@ describe("StockUnitService", () => {
         expect(equipmentOnly.some((u) => u.id === medicineUnit!.id)).toBe(false);
     });
 
-    test("setStatus sets an arbitrary status with no transition guard", async () => {
-        const [unit] = await StockUnitService.provision(1);
-        createdUnitIds.push(unit!.id);
-
-        const updated = await StockUnitService.setStatus(unit!.id, "CONSUMED");
-        expect(updated.status).toBe("CONSUMED");
+    test("setStatus: CONSUMED writes off the remainder and can then only be disposed; DISPOSED is final", async () => {
+        const unit = await boundUnit();
+        const before = await prisma.stockLedger.count({
+            where: { ref_id: unit.id, location_type: "DISPOSAL" },
+        });
+        expect((await StockUnitService.setStatus(unit.id, "CONSUMED")).status).toBe("CONSUMED");
+        expect(
+            await prisma.stockLedger.count({
+                where: { ref_id: unit.id, location_type: "DISPOSAL" },
+            }),
+        ).toBe(before + 1);
+        await expect(StockUnitService.setStatus(unit.id, "IN_STOCK")).rejects.toMatchObject({
+            status: 409,
+        });
+        expect((await StockUnitService.setStatus(unit.id, "DISPOSED")).status).toBe("DISPOSED");
+        // already written off as CONSUMED: disposing posts nothing more
+        expect(
+            await prisma.stockLedger.count({
+                where: { ref_id: unit.id, location_type: "DISPOSAL" },
+            }),
+        ).toBe(before + 1);
+        await expect(StockUnitService.setStatus(unit.id, "IN_USE")).rejects.toMatchObject({
+            status: 409,
+        });
+        await expect(
+            StockUnitService.setStatus((await boundUnit()).id, "UNASSIGNED"),
+        ).rejects.toMatchObject({ status: 400 });
     });
 
-    test("remove hard-deletes an unbound unit and purges its house allocations", async () => {
-        const [unit] = await StockUnitService.provision(1);
+    test("relocate refuses a blank code, a disposed unit, and an inactive house", async () => {
+        const [blank] = await StockUnitService.provision(1);
+        createdUnitIds.push(blank!.id);
+        await expect(
+            StockUnitService.relocate(blank!.id, houseId, crypto.randomUUID()),
+        ).rejects.toMatchObject({ status: 400 });
+        const gone = await boundUnit();
+        await StockUnitService.dispose(gone.id);
+        await expect(
+            StockUnitService.relocate(gone.id, houseId, crypto.randomUUID()),
+        ).rejects.toMatchObject({ status: 409 });
+        const live = await boundUnit();
+        await prisma.houses.update({ where: { id: houseId }, data: { is_active: false } });
+        try {
+            await expect(
+                StockUnitService.relocate(live.id, houseId, crypto.randomUUID()),
+            ).rejects.toMatchObject({ status: 400 });
+        } finally {
+            await prisma.houses.update({ where: { id: houseId }, data: { is_active: true } });
+        }
+    });
+
+    test("remove hard-deletes a never-used unit and purges its house allocations", async () => {
+        const unit = await boundUnit();
         await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
 
         await StockUnitService.remove(unit!.id);

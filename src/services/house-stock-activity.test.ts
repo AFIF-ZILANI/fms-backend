@@ -19,11 +19,23 @@ describe("house stock activity", () => {
     beforeAll(async () => {
         profileId = (
             await prisma.profiles.create({
-                data: { name: "Seed Admin", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+                data: {
+                    name: "Seed Admin",
+                    mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                    role: "ADMIN",
+                },
             })
         ).id;
-        houseId = (await prisma.houses.create({ data: { name: "Seed House", type: "BROODER", number: houseNumber() } })).id;
-        otherHouseId = (await prisma.houses.create({ data: { name: "Other House", type: "BROODER", number: houseNumber() } })).id;
+        houseId = (
+            await prisma.houses.create({
+                data: { name: "Seed House", type: "BROODER", number: houseNumber() },
+            })
+        ).id;
+        otherHouseId = (
+            await prisma.houses.create({
+                data: { name: "Other House", type: "BROODER", number: houseNumber() },
+            })
+        ).id;
 
         const mkItem = async (label: string) =>
             (
@@ -56,7 +68,15 @@ describe("house stock activity", () => {
             lotIds.push(
                 (
                     await prisma.purchaseItem.create({
-                        data: { purchase_id: purchaseId, item_id, quantity: 5, unit: "BOTTLE", base_quantity: 5, unit_price: 1, total_price: 5 },
+                        data: {
+                            purchase_id: purchaseId,
+                            item_id,
+                            quantity: 5,
+                            unit: "BOTTLE",
+                            base_quantity: 5,
+                            unit_price: 1,
+                            total_price: 5,
+                        },
                     })
                 ).id,
             );
@@ -75,7 +95,9 @@ describe("house stock activity", () => {
     });
 
     const allocate = async (lot: string, house: string, ageMs: number) => {
-        const unit = await prisma.stockUnit.create({ data: { purchase_item_id: lot, status: "IN_STOCK" } });
+        const unit = await prisma.stockUnit.create({
+            data: { purchase_item_id: lot, status: "IN_STOCK" },
+        });
         unitIds.push(unit.id);
         const row = await prisma.stockHouseAllocation.create({
             data: {
@@ -105,7 +127,11 @@ describe("house stock activity", () => {
         consumptionIds.push(row.id);
     };
 
-    const windows = { house_id: "", today_from: new Date(now - 6 * 3600_000), week_from: new Date(now - 7 * DAY) };
+    const windows = {
+        house_id: "",
+        today_from: new Date(now - 6 * 3600_000),
+        week_from: new Date(now - 7 * DAY),
+    };
 
     test("allocation summary counts this house only, by window, with distinct items and the latest", async () => {
         await allocate(lotIds[0]!, houseId, 3600_000); //          1 h ago, item A  (today)
@@ -123,7 +149,10 @@ describe("house stock activity", () => {
         const byItem = await StockHouseAllocationService.getAll({ ...base, item_id: itemB });
         expect(byItem.entries.length).toBe(1);
 
-        const recent = await StockHouseAllocationService.getAll({ ...base, occurred_from: windows.week_from });
+        const recent = await StockHouseAllocationService.getAll({
+            ...base,
+            occurred_from: windows.week_from,
+        });
         expect(recent.entries.length).toBe(2);
     });
 
@@ -138,16 +167,34 @@ describe("house stock activity", () => {
     });
 
     test("consumption list carries who recorded it", async () => {
-        const { consumptions } = await ConsumptionService.getAll({ page: 1, limit: 100, house_id: houseId });
+        const { consumptions } = await ConsumptionService.getAll({
+            page: 1,
+            limit: 100,
+            house_id: houseId,
+        });
         expect(consumptions[0]!.recorded_by.name).toBe("Seed Admin");
     });
 
     test("a house with nothing reports zeros and no last time", async () => {
-        const empty = await prisma.houses.create({ data: { name: "Empty", type: "BROODER", number: houseNumber() } });
+        const empty = await prisma.houses.create({
+            data: { name: "Empty", type: "BROODER", number: houseNumber() },
+        });
         try {
             const q = { ...windows, house_id: empty.id };
-            expect(await StockHouseAllocationService.summary(q)).toEqual({ total: 0, today: 0, week: 0, items: 0, last_at: null });
-            expect(await ConsumptionService.summary(q)).toEqual({ total: 0, today: 0, week: 0, items: 0, last_at: null });
+            expect(await StockHouseAllocationService.summary(q)).toEqual({
+                total: 0,
+                today: 0,
+                week: 0,
+                items: 0,
+                last_at: null,
+            });
+            expect(await ConsumptionService.summary(q)).toEqual({
+                total: 0,
+                today: 0,
+                week: 0,
+                items: 0,
+                last_at: null,
+            });
         } finally {
             await prisma.houses.delete({ where: { id: empty.id } });
         }

@@ -1,7 +1,11 @@
 import prisma from "@lib/db";
+import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
+import { assertHouseActive } from "@lib/active-guards";
+import { codedRemaining, isNonDepleting, lockLot } from "@lib/coded-stock";
+import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     BindStockUnitInput,
     ListStockUnitsQuery,
@@ -111,7 +115,9 @@ export const StockUnitService = {
                         where: { purchase_item_id: input.purchase_item_id },
                     });
                     if (linked >= cap) {
-                        throw AppError.conflict(`This lot is full — ${linked} of ${cap} units already linked`);
+                        throw AppError.conflict(
+                            `This lot is full — ${linked} of ${cap} units already linked`,
+                        );
                     }
                 }
 
@@ -153,6 +159,16 @@ export const StockUnitService = {
             include: { purchase_item: true },
         });
         if (!unit) throw AppError.notFound("StockUnit");
+        // A blank code is just a sticker until it's bound to a lot; a used-up or disposed unit isn't
+        // anywhere any more. Moving either would give it a location it can't have.
+        if (unit.status === "UNASSIGNED" || !unit.purchase_item) {
+            throw AppError.badRequest(
+                "This code isn't linked to a purchase lot yet -- bind it first",
+            );
+        }
+        if (unit.status === "DISPOSED" || unit.status === "CONSUMED") {
+            throw AppError.conflict(`StockUnit is ${unit.status.toLowerCase()}, it can't be moved`);
+        }
 
         if (stock_transfer_id !== undefined) {
             const transfer = await prisma.stockTransfer.findUnique({
@@ -171,6 +187,8 @@ export const StockUnitService = {
                 // The unit's current house is "its latest allocation", so two relocations racing
                 // would both read the same latest row. One lock per unit makes the second wait.
                 await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+                // A unit can leave a deactivated house (that's how it's emptied) but not go into one.
+                if (house_id !== null) await assertHouseActive(tx, house_id);
                 const latest = await tx.stockHouseAllocation.findFirst({
                     where: { stock_unit_id: id },
                     orderBy: { occurred_at: "desc" },
@@ -206,19 +224,39 @@ export const StockUnitService = {
         }
     },
 
+    /** DISPOSED is final. Whatever was still in the unit leaves stock with it (see writeOffRemainder). */
     async dispose(id: string) {
-        const unit = await prisma.stockUnit.findUnique({ where: { id } });
-        if (!unit) throw AppError.notFound("StockUnit");
-        if (unit.status === "DISPOSED") throw AppError.conflict("StockUnit is already disposed");
-        return prisma.stockUnit.update({ where: { id }, data: { status: "DISPOSED" } });
+        return prisma.$transaction(async (tx) => {
+            const unit = await lockedUnit(tx, id);
+            if (unit.status === "DISPOSED")
+                throw AppError.conflict("StockUnit is already disposed");
+            // A CONSUMED unit's remainder was already written off when it was marked used up.
+            if (unit.status !== "CONSUMED") await writeOffRemainder(tx, unit);
+            return tx.stockUnit.update({ where: { id }, data: { status: "DISPOSED" } });
+        });
     },
 
-    /** Free status set for the manual "change status" action -- no transition guards (unlike
-     *  bind/dispose), the operator picks the target status directly. */
+    /** The manual "change status" action. DISPOSED is final and goes through dispose(); CONSUMED can
+     *  only go on to DISPOSED, since its leftover has already left the ledger; UNASSIGNED only comes
+     *  from a blank code, never from a status pick. */
     async setStatus(id: string, status: SetStockUnitStatusInput["status"]) {
-        const unit = await prisma.stockUnit.findUnique({ where: { id } });
-        if (!unit) throw AppError.notFound("StockUnit");
-        return prisma.stockUnit.update({ where: { id }, data: { status } });
+        if (status === "DISPOSED") return this.dispose(id);
+        return prisma.$transaction(async (tx) => {
+            const unit = await lockedUnit(tx, id);
+            if (unit.status === "DISPOSED")
+                throw AppError.conflict("A disposed unit can't change status");
+            if (status === "UNASSIGNED" || unit.status === "UNASSIGNED") {
+                throw AppError.badRequest(
+                    "Bind the code to a lot instead of setting UNASSIGNED by hand",
+                );
+            }
+            if (unit.status === "CONSUMED" && status !== "CONSUMED") {
+                throw AppError.conflict("A used-up unit can only be disposed");
+            }
+            if (status === "CONSUMED" && unit.status !== "CONSUMED")
+                await writeOffRemainder(tx, unit);
+            return tx.stockUnit.update({ where: { id }, data: { status } });
+        });
     },
 
     /** Hard delete -- for mistakenly-provisioned/bound codes. Its house-allocation event log is
@@ -241,3 +279,47 @@ export const StockUnitService = {
         ]);
     },
 };
+
+async function lockedUnit(tx: Prisma.TransactionClient, id: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+    const unit = await tx.stockUnit.findUnique({
+        where: { id },
+        include: { purchase_item: { include: { item: { select: { category: true } } } } },
+    });
+    if (!unit) throw AppError.notFound("StockUnit");
+    return unit;
+}
+
+/** A unit leaving play (used up or disposed) takes what was still in it out of stock: a WASTAGE OUT of
+ *  the remainder at the DISPOSAL location (ref_id = the unit), so balances, stock value and the wastage
+ *  report all see it. Equipment is written off whole (1 of its base unit). */
+async function writeOffRemainder(
+    tx: Prisma.TransactionClient,
+    unit: Awaited<ReturnType<typeof lockedUnit>>,
+) {
+    const lot = unit.purchase_item;
+    if (!lot) return;
+    await lockLot(tx, lot.id);
+    let writeOff: Prisma.Decimal;
+    if (isNonDepleting(lot.item.category)) {
+        writeOff = new Prisma.Decimal(1);
+    } else {
+        const left = await codedRemaining(tx, unit.id, lot);
+        // An unsized lot: split what the lot has left across its units still in play.
+        const live = await tx.stockUnit.count({
+            where: { purchase_item_id: lot.id, status: { in: ["IN_STOCK", "IN_USE"] } },
+        });
+        writeOff = left.unit ?? (live > 0 ? left.lot.dividedBy(live) : new Prisma.Decimal(0));
+        if (writeOff.greaterThan(left.lot)) writeOff = left.lot;
+    }
+    if (!writeOff.greaterThan(0)) return;
+    await StockLedgerService.record(tx, {
+        item_id: lot.item_id,
+        quantity: writeOff,
+        direction: "OUT",
+        reason: "WASTAGE",
+        ref_type: "ADJUSTMENT",
+        ref_id: unit.id,
+        location_type: "DISPOSAL",
+    });
+}

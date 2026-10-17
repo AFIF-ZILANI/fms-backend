@@ -19,13 +19,17 @@ describe("WarehouseService", () => {
     });
 
     test("remove hard-deletes an unused warehouse", async () => {
-        const warehouse = await WarehouseService.create({ name: `Typo Store ${crypto.randomUUID()}` });
+        const warehouse = await WarehouseService.create({
+            name: `Typo Store ${crypto.randomUUID()}`,
+        });
         await WarehouseService.remove(warehouse.id);
         expect(await prisma.warehouses.findUnique({ where: { id: warehouse.id } })).toBeNull();
     });
 
     test("remove refuses a warehouse with stock history", async () => {
-        const warehouse = await WarehouseService.create({ name: `Used Store ${crypto.randomUUID()}` });
+        const warehouse = await WarehouseService.create({
+            name: `Used Store ${crypto.randomUUID()}`,
+        });
         createdIds.push(warehouse.id);
         const item = await prisma.item.create({
             data: {
@@ -80,7 +84,9 @@ describe("WarehouseService", () => {
     });
 
     test("getStock returns nonzero item balances at this warehouse only", async () => {
-        const warehouse = await WarehouseService.create({ name: `Stock Test Warehouse ${crypto.randomUUID()}` });
+        const warehouse = await WarehouseService.create({
+            name: `Stock Test Warehouse ${crypto.randomUUID()}`,
+        });
         createdIds.push(warehouse.id);
         const item = await prisma.item.create({
             data: {
@@ -92,9 +98,15 @@ describe("WarehouseService", () => {
         });
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 300, direction: "IN", reason: "PURCHASE",
-                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "WAREHOUSE", location_id: warehouse.id,
+                item_id: item.id,
+                quantity: 300,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE",
+                location_id: warehouse.id,
             },
         });
 

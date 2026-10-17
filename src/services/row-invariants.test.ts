@@ -33,17 +33,34 @@ async function newEmployee(name: string) {
 
 describe("row invariants", () => {
     beforeAll(async () => {
-        const admin = await prisma.profiles.create({ data: { name: "Invariant Admin", mobile: mobile(), role: "ADMIN" } });
+        const admin = await prisma.profiles.create({
+            data: { name: "Invariant Admin", mobile: mobile(), role: "ADMIN" },
+        });
         adminId = admin.id;
         profileIds.push(admin.id);
         await prisma.admins.create({ data: { profile_id: admin.id } });
         itemId = (
             await prisma.item.create({
-                data: { name: `Inv Item ${crypto.randomUUID()}`, normalized_key: `inv item ${crypto.randomUUID()}`, category: "FEED", unit: "BAG" },
+                data: {
+                    name: `Inv Item ${crypto.randomUUID()}`,
+                    normalized_key: `inv item ${crypto.randomUUID()}`,
+                    category: "FEED",
+                    unit: "BAG",
+                },
             })
         ).id;
-        warehouseId = (await prisma.warehouses.create({ data: { name: `Inv WH ${crypto.randomUUID()}` } })).id;
-        houseId = (await prisma.houses.create({ data: { name: "Inv House", type: "BROODER", number: Math.floor(Math.random() * 1e6) } })).id;
+        warehouseId = (
+            await prisma.warehouses.create({ data: { name: `Inv WH ${crypto.randomUUID()}` } })
+        ).id;
+        houseId = (
+            await prisma.houses.create({
+                data: {
+                    name: "Inv House",
+                    type: "BROODER",
+                    number: Math.floor(Math.random() * 1e6),
+                },
+            })
+        ).id;
         employeeId = await newEmployee("Inv Employee");
         otherEmployeeId = await newEmployee("Inv Other");
     });
@@ -51,8 +68,12 @@ describe("row invariants", () => {
     afterAll(async () => {
         // Payout accounts are audit-logged against the admin, and a profile with audit rows can't go.
         await purgeAuditLog({ where: { changed_by_id: adminId } });
-        await prisma.performanceScoreEntry.deleteMany({ where: { employee_id: { in: employeeIds } } });
-        await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: { in: employeeIds } } });
+        await prisma.performanceScoreEntry.deleteMany({
+            where: { employee_id: { in: employeeIds } },
+        });
+        await prisma.employeePayoutAccount.deleteMany({
+            where: { employee_id: { in: employeeIds } },
+        });
         await prisma.inventoryAdjustment.deleteMany({ where: { item_id: itemId } });
         await prisma.stockLedger.deleteMany({ where: { item_id: itemId } });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
@@ -88,29 +109,52 @@ describe("row invariants", () => {
             SELECT conname, convalidated FROM pg_constraint WHERE contype = 'c' AND conname = ANY(${wanted})`;
         expect(rows.map((r) => r.conname).sort()).toEqual([...wanted].sort());
         // NOT VALID: one old score entry predates the notice rule; every new or changed row is still checked.
-        expect(rows.filter((r) => !r.convalidated).map((r) => r.conname)).toEqual(["PSE_notice_required"]);
+        expect(rows.filter((r) => !r.convalidated).map((r) => r.conname)).toEqual([
+            "PSE_notice_required",
+        ]);
     });
 
     test("an employee's reference is an employee or an outsider, never both", async () => {
         await refused(() =>
             prisma.employees.update({
                 where: { id: employeeId },
-                data: { reference_employee_id: otherEmployeeId, reference_name: "Outsider", reference_phone: "+8801700000000" },
+                data: {
+                    reference_employee_id: otherEmployeeId,
+                    reference_name: "Outsider",
+                    reference_phone: "+8801700000000",
+                },
             }),
         );
         // The service clears the outsider's details when an employee is named, so switching works.
-        await EmployeeService.update(employeeId, { reference_name: "Someone", reference_phone: "+8801711111111" } as never);
-        const switched = await EmployeeService.update(employeeId, { reference_employee_id: otherEmployeeId } as never);
+        await EmployeeService.update(employeeId, {
+            reference_name: "Someone",
+            reference_phone: "+8801711111111",
+        } as never);
+        const switched = await EmployeeService.update(employeeId, {
+            reference_employee_id: otherEmployeeId,
+        } as never);
         expect(switched.reference_employee_id).toBe(otherEmployeeId);
         expect(switched.reference_name).toBeNull();
         expect(switched.reference_phone).toBeNull();
     });
 
     test("score entries: OTHER needs an approver, a notice at -4 or worse, and a voided one needs its reason", async () => {
-        const base = { employee_id: employeeId, given_by_id: adminId, reason: "inv", incident_date: new Date(), idempotency_key: "" };
+        const base = {
+            employee_id: employeeId,
+            given_by_id: adminId,
+            reason: "inv",
+            incident_date: new Date(),
+            idempotency_key: "",
+        };
         const mk = (over: Record<string, unknown>) =>
             prisma.performanceScoreEntry.create({
-                data: { ...base, idempotency_key: crypto.randomUUID(), criterion: "NEGLIGENT_LOSS", points: -1, ...over } as never,
+                data: {
+                    ...base,
+                    idempotency_key: crypto.randomUUID(),
+                    criterion: "NEGLIGENT_LOSS",
+                    points: -1,
+                    ...over,
+                } as never,
             });
 
         await refused(() => mk({ criterion: "OTHER", points: 2 })); // no approver
@@ -133,7 +177,9 @@ describe("row invariants", () => {
             recorded_by_id: adminId,
         };
         const mk = (over: Record<string, unknown>) =>
-            prisma.inventoryAdjustment.create({ data: { ...base, idempotency_key: crypto.randomUUID(), ...over } as never });
+            prisma.inventoryAdjustment.create({
+                data: { ...base, idempotency_key: crypto.randomUUID(), ...over } as never,
+            });
 
         await refused(() => mk({ warehouse_id: warehouseId, adjustment_quantity: 99 })); // wrong delta
         await refused(() => mk({})); // no location
@@ -144,12 +190,26 @@ describe("row invariants", () => {
     test("money and quantities that move must be positive", async () => {
         await refused(() =>
             prisma.stockLedger.create({
-                data: { item_id: itemId, quantity: 0, direction: "IN", reason: "PURCHASE", ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID() },
+                data: {
+                    item_id: itemId,
+                    quantity: 0,
+                    direction: "IN",
+                    reason: "PURCHASE",
+                    ref_type: "PURCHASE",
+                    ref_id: crypto.randomUUID(),
+                    idempotency_key: crypto.randomUUID(),
+                },
             }),
         );
         await refused(() =>
             prisma.expense.create({
-                data: { category: "SALARY", cost_type: "SHARED_PERIOD", amount: 0, date: new Date(), recorded_by_id: adminId },
+                data: {
+                    category: "SALARY",
+                    cost_type: "SHARED_PERIOD",
+                    amount: 0,
+                    date: new Date(),
+                    recorded_by_id: adminId,
+                },
             }),
         );
     });
@@ -165,20 +225,39 @@ describe("row invariants", () => {
             });
         const first = await create("01700000001");
         const second = await create("01700000002"); // closes the first, opens the second
-        expect((await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: first!.id } })).active_to).not.toBeNull();
+        expect(
+            (await prisma.employeePayoutAccount.findUniqueOrThrow({ where: { id: first!.id } }))
+                .active_to,
+        ).not.toBeNull();
         expect(second!.active_to).toBeNull();
 
         // A direct second open row -- what a race would produce -- is refused by the index.
         await refused(() =>
             prisma.employeePayoutAccount.create({
-                data: { employee_id: employeeId, method: "BKASH", account_name: "x", account_number: "01700000003", verified_by_id: adminId, verified_at: new Date() },
+                data: {
+                    employee_id: employeeId,
+                    method: "BKASH",
+                    account_name: "x",
+                    account_number: "01700000003",
+                    verified_by_id: adminId,
+                    verified_at: new Date(),
+                },
             }),
         );
 
         // Two creates racing through the service: exactly one opens, and the other fails cleanly.
-        const results = await Promise.allSettled([create("01700000004"), create("01700000005"), create("01700000006")]);
-        expect(await prisma.employeePayoutAccount.count({ where: { employee_id: employeeId, active_to: null } })).toBe(1);
-        for (const r of results) if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
+        const results = await Promise.allSettled([
+            create("01700000004"),
+            create("01700000005"),
+            create("01700000006"),
+        ]);
+        expect(
+            await prisma.employeePayoutAccount.count({
+                where: { employee_id: employeeId, active_to: null },
+            }),
+        ).toBe(1);
+        for (const r of results)
+            if (r.status === "rejected") expect(r.reason).toMatchObject({ status: 409 });
     });
 
     test("confirming an ingested sale with a sex split that doesn't add up is a validation error, not a database one", () => {
@@ -193,8 +272,12 @@ describe("row invariants", () => {
             net_weight: 19,
             price_per_kg: 100,
         };
-        expect(confirmIngestedSchema.safeParse({ ...base, male_count: 6, female_count: 3 }).success).toBe(false);
-        expect(confirmIngestedSchema.safeParse({ ...base, male_count: 6, female_count: 4 }).success).toBe(true);
+        expect(
+            confirmIngestedSchema.safeParse({ ...base, male_count: 6, female_count: 3 }).success,
+        ).toBe(false);
+        expect(
+            confirmIngestedSchema.safeParse({ ...base, male_count: 6, female_count: 4 }).success,
+        ).toBe(true);
         expect(confirmIngestedSchema.safeParse({ ...base, male_count: 6 }).success).toBe(true); // only one given
     });
 });

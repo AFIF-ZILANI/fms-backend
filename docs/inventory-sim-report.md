@@ -2,19 +2,11 @@
 
 Driven through the HTTP API as admin / manager / worker against the running batch `SIM3-2026-09-16`, then audited against the database. Took 1s.
 
-**Checks: 181/188 passed, 7 failed.** Findings: 5 bugs, 1 gaps, 3 notes.
+**Checks: 195/195 passed, 0 failed.** Findings: 0 bugs, 0 gaps, 0 notes.
 
 ## Findings
 
-- **BUG** relocate an UNASSIGNED blank code -> 4xx: a blank code with no lot was moved into a house and now has a location (got 200, wanted 400/409).
-- **BUG** A coded draw has no size check: 50,000 ML (50 L) was drawn from one 1 L bottle of a 3 L lot and the system accepted it. The ledger now holds a negative balance for the item (see section 12). StockUnit has no remaining quantity, so only the aggregate path can overdraw-check.
-- **BUG** Disposing a QR-coded unit posts nothing to the stock ledger. The ledger still counts the disposed vial's doses as on hand, so stock balance, low-stock alerts and stock value all stay too high, and the wastage report never sees it. (ledger location type DISPOSAL exists in the schema but nothing writes it.)
-- **BUG** relocate a DISPOSED unit -> 4xx: a disposed vial can still be moved into a house (got 200, wanted 400/409).
-- **NOTE** PATCH /stock-units/:id/status has no transition rules: a DISPOSED or CONSUMED unit can be put back to IN_STOCK with no trail and no ledger effect.
-- **NOTE** Hard-deleting a bound unit does not reduce the ledger IN created by its purchase, and the lot keeps unit_count=2 with only 1 unit linked, so the lot can never be 'complete' again unless a new code is bound.
-- **GAP** A negative item balance (the over-drawn antibiotic) raises no alert unless the item happens to have a reorder level: a negative ledger balance is a data-integrity signal and should alert regardless.
-- **BUG** relocate a unit into a deactivated house -> 4xx: unit moved into an inactive house (got 200, wanted 400/409).
-- **NOTE** Stock value counts disposed vials: item balance is a ledger sum and disposal writes no ledger row, so the doses in a disposed vial still carry value.
+- none
 
 ## By section
 
@@ -23,25 +15,19 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 | 1 catalog | 15 | 0 |
 | 2 purchases | 23 | 0 |
 | 3 coded units | 17 | 0 |
-| 4 allocation | 27 | 1 |
-| 5 consumption | 22 | 1 |
+| 4 allocation | 28 | 0 |
+| 5 consumption | 24 | 0 |
 | 6 adjustments | 16 | 0 |
-| 7 disposal | 9 | 2 |
+| 7 disposal | 17 | 0 |
 | 8 assets | 14 | 0 |
-| 9 alerts | 5 | 1 |
+| 9 alerts | 6 | 0 |
 | 10 concurrency | 5 | 0 |
-| 11 item lifecycle | 11 | 1 |
-| 12 reports | 17 | 1 |
+| 11 item lifecycle | 12 | 0 |
+| 12 reports | 18 | 0 |
 
 ## Failed checks
 
-- [4 allocation] relocate an UNASSIGNED blank code -> 4xx status 200 {"success":true,"message":"Stock unit relocated","data":{"id":"2170cffd-0f6d-4875-b53c-7b3cfa67ef82","stock_unit_id":"fc8bb396-8dfa-49e6-8c3f-a79b90649b8c","hou
-- [5 consumption] coded draw larger than the bottle/lot is refused status 201
-- [7 disposal] disposal reduces item stock (ledger OUT/WASTAGE/DISPOSAL row written) ledger rows 6 -> 6
-- [7 disposal] relocate a DISPOSED unit -> 4xx status 200 {"success":true,"message":"Stock unit relocated","data":{"id":"9c9082c7-9048-4c8c-a581-e729ec672ebf","stock_unit_id":"c6aac406-39fa-4b88-bddd-74974c228da8","hou
-- [9 alerts] a negative item balance is surfaced by a scan (needs a reorder level to be set) the over-drawn antibiotic has no reorder level, so nothing flags its negative balance
-- [11 item lifecycle] relocate a unit into a deactivated house -> 4xx status 200 {"success":true,"message":"Stock unit relocated","data":{"id":"51f5ed72-be78-487e-8474-c3fb675a993f","stock_unit_id":"8914d4a0-23c8-4ee5-bece-abda92c291aa","hou
-- [12 reports] no item has a negative total balance e28976=-47.3
+- none
 
 ## All checks
 
@@ -106,7 +92,7 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [4 allocation] vial 2 house B -> warehouse is a RETURN
 - PASS [4 allocation] relocate to where it already is -> 409
 - PASS [4 allocation] relocate unknown unit -> 404
-- **FAIL** [4 allocation] relocate an UNASSIGNED blank code -> 4xx -- status 200 {"success":true,"message":"Stock unit relocated","data":{"id":"2170cffd-0f6d-4875-b53c-7b3cfa67ef82","stock_unit_id":"fc8bb396-8dfa-49e6-8c3f-a79b90649b8c","hou
+- PASS [4 allocation] relocate an UNASSIGNED blank code -> 4xx
 - PASS [4 allocation] replayed relocation key is refused
 - PASS [4 allocation] allocation log lists house A moves
 - PASS [4 allocation] allocation filter by type=RETURN
@@ -147,8 +133,9 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [5 consumption] unit of a different item -> 400
 - PASS [5 consumption] unknown unit -> 404
 - PASS [5 consumption] antibiotic 300 ML (usable derived unit) from bottle
-- **FAIL** [5 consumption] coded draw larger than the bottle/lot is refused -- status 201
+- PASS [5 consumption] coded draw larger than the bottle/lot is refused
 - PASS [5 consumption] equipment draw (1 unit, non-depleting)
+- PASS [5 consumption] equipment draw posts no ledger OUT
 - PASS [5 consumption] consumption summary counts today's draws
 - PASS [5 consumption] consumption list filters by item
 - PASS [6 adjustments] count correction down: server reads the real balance, ignores the client's quantity_before
@@ -168,16 +155,22 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [6 adjustments] adjusting a QR-coded item's warehouse count works
 - PASS [6 adjustments] adjustment list filters by item
 - PASS [7 disposal] dispose a vial
+- PASS [7 disposal] disposal writes off the vial's 5,000 doses as WASTAGE at DISPOSAL
 - PASS [7 disposal] dispose twice -> 409
 - PASS [7 disposal] draw from a disposed vial -> 409
-- **FAIL** [7 disposal] disposal reduces item stock (ledger OUT/WASTAGE/DISPOSAL row written) -- ledger rows 6 -> 6
+- PASS [7 disposal] disposal reduces item stock (ledger OUT/WASTAGE/DISPOSAL row written)
+- PASS [7 disposal] marking a vial CONSUMED writes off its unused remainder
+- PASS [7 disposal] a CONSUMED unit can't go back to IN_STOCK -> 409
 - PASS [7 disposal] draw from a CONSUMED vial -> 409
-- **FAIL** [7 disposal] relocate a DISPOSED unit -> 4xx -- status 200 {"success":true,"message":"Stock unit relocated","data":{"id":"9c9082c7-9048-4c8c-a581-e729ec672ebf","stock_unit_id":"c6aac406-39fa-4b88-bddd-74974c228da8","hou
-- PASS [7 disposal] status can be set freely (DISPOSED -> IN_STOCK)
+- PASS [7 disposal] relocate a DISPOSED unit -> 4xx
+- PASS [7 disposal] DISPOSED is final: back to IN_STOCK -> 409
+- PASS [7 disposal] UNASSIGNED can't be set by hand -> 400
 - PASS [7 disposal] consumed-from unit can't be hard-deleted -> 409
 - PASS [7 disposal] a blank code can be deleted
 - PASS [7 disposal] a bound but never-used unit can be deleted
 - PASS [7 disposal] deleting a bound unit leaves the lot's unit_count alone (lot now 1 of 2 linked)
+- PASS [7 disposal] bind a replacement code into the freed slot
+- PASS [7 disposal] lot is whole again (2 of 2 linked)
 - PASS [8 assets] asset registered on a heater unit
 - PASS [8 assets] second asset on the same unit -> 409
 - PASS [8 assets] asset on an unknown unit -> 4xx
@@ -197,7 +190,7 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [9 alerts] scan raises LOW_STOCK for the feed
 - PASS [9 alerts] scan raises an expiry alert for the vaccine lot expiring in 12 days
 - PASS [9 alerts] low-stock alert clears when the level is satisfied
-- **FAIL** [9 alerts] a negative item balance is surfaced by a scan (needs a reorder level to be set) -- the over-drawn antibiotic has no reorder level, so nothing flags its negative balance
+- PASS [9 alerts] a negative item balance is surfaced by a scan (needs a reorder level to be set)
 - PASS [10 concurrency] parallel draws of 30 kg against 337 kg: exactly 11 succeed
 - PASS [10 concurrency] no negative feed balance after the race
 - PASS [10 concurrency] parallel transfers: only what the annex holds leaves it
@@ -214,9 +207,9 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [11 item lifecycle] tracking mode can't change after purchase -> 409
 - PASS [11 item lifecycle] transfer into a deactivated house -> 4xx
 - PASS [11 item lifecycle] consume in a deactivated house -> 4xx
-- **FAIL** [11 item lifecycle] relocate a unit into a deactivated house -> 4xx -- status 200 {"success":true,"message":"Stock unit relocated","data":{"id":"51f5ed72-be78-487e-8474-c3fb675a993f","stock_unit_id":"8914d4a0-23c8-4ee5-bece-abda92c291aa","hou
+- PASS [11 item lifecycle] relocate a unit into a deactivated house -> 4xx
 - PASS [12 reports] ledger matches the model at every item/location (14 cells)
-- **FAIL** [12 reports] no item has a negative total balance -- e28976=-47.3
+- PASS [12 reports] no item has a negative total balance
 - PASS [12 reports] warehouse stock endpoint = model (feed)
 - PASS [12 reports] stock-by-location = model (feed at house A)
 - PASS [12 reports] house stock endpoint = model (feed)

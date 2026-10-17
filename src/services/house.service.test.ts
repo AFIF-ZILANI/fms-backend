@@ -12,7 +12,9 @@ const createdProfileIds: string[] = [];
 describe("HouseService", () => {
     afterAll(async () => {
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
-        await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
+        await prisma.batchHouseAllocation.deleteMany({
+            where: { batch_id: { in: createdBatchIds } },
+        });
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: createdIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: createdProfileIds } } });
@@ -35,7 +37,11 @@ describe("HouseService", () => {
     });
 
     test("create without capacity leaves it null", async () => {
-        const house = await HouseService.create({ name: "Shed B", type: "GROWER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed B",
+            type: "GROWER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id);
         expect(house.capacity).toBeNull();
     });
@@ -47,14 +53,22 @@ describe("HouseService", () => {
     });
 
     test("update with no fields throws bad-request", async () => {
-        const house = await HouseService.create({ name: "Shed C", type: "LAYER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed C",
+            type: "LAYER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id);
 
         await expect(HouseService.update(house.id, {})).rejects.toMatchObject({ status: 400 });
     });
 
     test("update changes fields", async () => {
-        const house = await HouseService.create({ name: "Shed D", type: "BROODER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed D",
+            type: "BROODER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id);
 
         const updated = await HouseService.update(house.id, { capacity: 3000 });
@@ -63,7 +77,11 @@ describe("HouseService", () => {
     });
 
     test("setActive toggles is_active", async () => {
-        const house = await HouseService.create({ name: "Shed E", type: "GROWER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed E",
+            type: "GROWER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id);
 
         const deactivated = await HouseService.setActive(house.id, false);
@@ -74,7 +92,11 @@ describe("HouseService", () => {
     });
 
     test("listing filters by type", async () => {
-        const house = await HouseService.create({ name: "Shed F", type: "LAYER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed F",
+            type: "LAYER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id);
 
         const { houses } = await HouseService.getAll({ page: 1, limit: 100, type: "LAYER" });
@@ -83,12 +105,24 @@ describe("HouseService", () => {
     });
 
     test("listing filters by is_available", async () => {
-        const empty = await HouseService.create({ name: "Shed G", type: "BROODER", number: houseNumber() });
-        const occupied = await HouseService.create({ name: "Shed H", type: "BROODER", number: houseNumber() });
+        const empty = await HouseService.create({
+            name: "Shed G",
+            type: "BROODER",
+            number: houseNumber(),
+        });
+        const occupied = await HouseService.create({
+            name: "Shed H",
+            type: "BROODER",
+            number: houseNumber(),
+        });
         createdIds.push(empty.id, occupied.id);
 
         const profile = await prisma.profiles.create({
-            data: { name: "House Test Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+            data: {
+                name: "House Test Recorder",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
         });
         createdProfileIds.push(profile.id);
         const batch = await BatchService.create({
@@ -106,18 +140,34 @@ describe("HouseService", () => {
         expect(available.houses.some((h) => h.id === empty.id)).toBe(true);
         expect(available.houses.some((h) => h.id === occupied.id)).toBe(false);
 
-        const unavailable = await HouseService.getAll({ page: 1, limit: 100, is_available: "false" });
+        const unavailable = await HouseService.getAll({
+            page: 1,
+            limit: 100,
+            is_available: "false",
+        });
         expect(unavailable.houses.some((h) => h.id === occupied.id)).toBe(true);
         expect(unavailable.houses.some((h) => h.id === empty.id)).toBe(false);
     });
 
     test("listing carries occupants: placed vs alive, since, and expected free date", async () => {
-        const house = await HouseService.create({ name: "Shed Occ", type: "BROODER", number: houseNumber() });
-        const empty = await HouseService.create({ name: "Shed Empty", type: "BROODER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed Occ",
+            type: "BROODER",
+            number: houseNumber(),
+        });
+        const empty = await HouseService.create({
+            name: "Shed Empty",
+            type: "BROODER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id, empty.id);
 
         const profile = await prisma.profiles.create({
-            data: { name: "House Occ Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+            data: {
+                name: "House Occ Recorder",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
         });
         createdProfileIds.push(profile.id);
         const sellingDate = new Date(Date.now() + 30 * 86400_000);
@@ -145,7 +195,9 @@ describe("HouseService", () => {
         expect(occupied.occupants[0]!.placed).toBe(500);
         expect(occupied.occupants[0]!.alive).toBe(480);
         expect(occupied.occupants[0]!.batch_status).toBe("RUNNING");
-        expect(new Date(occupied.occupants[0]!.expected_selling_date).getTime()).toBe(sellingDate.getTime());
+        expect(new Date(occupied.occupants[0]!.expected_selling_date).getTime()).toBe(
+            sellingDate.getTime(),
+        );
         expect(occupied.last_vacated_at).toBeNull();
 
         const neverUsed = houses.find((h) => h.id === empty.id)!;
@@ -154,7 +206,11 @@ describe("HouseService", () => {
     });
 
     test("phase defaults to READY and update sets it", async () => {
-        const house = await HouseService.create({ name: "Shed Phase", type: "BROODER", number: houseNumber() });
+        const house = await HouseService.create({
+            name: "Shed Phase",
+            type: "BROODER",
+            number: houseNumber(),
+        });
         createdIds.push(house.id);
         expect(house.phase).toBe("READY");
 
@@ -167,28 +223,48 @@ describe("HouseService", () => {
     });
 
     test("remove deletes an untouched house but refuses one with history", async () => {
-        const clean = await HouseService.create({ name: "Shed Del", type: "GROWER", number: houseNumber() });
+        const clean = await HouseService.create({
+            name: "Shed Del",
+            type: "GROWER",
+            number: houseNumber(),
+        });
         await HouseService.remove(clean.id);
         await expect(HouseService.getById(clean.id)).rejects.toMatchObject({ status: 404 });
 
         // Attached via a real relation (FK would allow the delete on some of these).
         const profile = await prisma.profiles.create({
-            data: { name: "House Delete Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+            data: {
+                name: "House Delete Recorder",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
         });
         createdProfileIds.push(profile.id);
-        const weighed = await HouseService.create({ name: "Shed Weighed", type: "GROWER", number: houseNumber() });
+        const weighed = await HouseService.create({
+            name: "Shed Weighed",
+            type: "GROWER",
+            number: houseNumber(),
+        });
         createdIds.push(weighed.id);
         await prisma.weightRecords.create({
             data: {
-                house_id: weighed.id, average_wt_grams: 800, sample_size: 10,
-                date: new Date(), measured_by_id: profile.id, idempotency_key: crypto.randomUUID(),
+                house_id: weighed.id,
+                average_wt_grams: 800,
+                sample_size: 10,
+                date: new Date(),
+                measured_by_id: profile.id,
+                idempotency_key: crypto.randomUUID(),
             },
         });
         await expect(HouseService.remove(weighed.id)).rejects.toMatchObject({ status: 409 });
         await prisma.weightRecords.deleteMany({ where: { house_id: weighed.id } });
 
         // Attached only through the polymorphic stock ledger -- no FK at all.
-        const stocked = await HouseService.create({ name: "Shed Stocked", type: "GROWER", number: houseNumber() });
+        const stocked = await HouseService.create({
+            name: "Shed Stocked",
+            type: "GROWER",
+            number: houseNumber(),
+        });
         createdIds.push(stocked.id);
         const item = await prisma.item.create({
             data: {
@@ -200,9 +276,15 @@ describe("HouseService", () => {
         });
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 5, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: stocked.id,
+                item_id: item.id,
+                quantity: 5,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: stocked.id,
             },
         });
         await expect(HouseService.remove(stocked.id)).rejects.toMatchObject({ status: 409 });
@@ -227,9 +309,15 @@ describe("HouseService", () => {
         });
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 60, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: house.id,
+                item_id: item.id,
+                quantity: 60,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: house.id,
             },
         });
 

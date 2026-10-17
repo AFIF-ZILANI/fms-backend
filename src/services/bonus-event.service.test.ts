@@ -90,7 +90,12 @@ describe("festival bonus", () => {
             select: { id: true },
         });
         const payouts = await prisma.employeePayout.findMany({
-            where: { OR: [{ bonus_id: { in: bonuses.map((b) => b.id) } }, { payroll_record_id: { in: recordIds } }] },
+            where: {
+                OR: [
+                    { bonus_id: { in: bonuses.map((b) => b.id) } },
+                    { payroll_record_id: { in: recordIds } },
+                ],
+            },
             select: { id: true },
         });
         await prisma.payment.deleteMany({ where: { ref_id: { in: payouts.map((p) => p.id) } } });
@@ -101,17 +106,40 @@ describe("festival bonus", () => {
         await prisma.bonus.deleteMany({ where: { event_id: { in: eventIds } } });
         await prisma.bonusEvent.deleteMany({ where: { id: { in: eventIds } } });
         await prisma.payrollRecord.deleteMany({ where: { id: { in: recordIds } } });
-        await prisma.employeePayoutAccount.deleteMany({ where: { employee_id: { in: employeeIds } } });
+        await prisma.employeePayoutAccount.deleteMany({
+            where: { employee_id: { in: employeeIds } },
+        });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
     });
 
     test("the proposal ticks, prorates and lists with a reason -- and drops the terminated", async () => {
-        const full = await newEmployee({ name: "Full Service", religion: "ISLAM", joined: "2025-01-01" });
-        const short = await newEmployee({ name: "Short Service", religion: "ISLAM", joined: "2025-11-15" });
-        const other = await newEmployee({ name: "Other Faith", religion: "HINDU", joined: "2025-01-01" });
-        const unknown = await newEmployee({ name: "No Religion", religion: null, joined: "2025-01-01" });
-        const gone = await newEmployee({ name: "Left Farm", religion: "ISLAM", joined: "2025-01-01", status: "TERMINATED" });
+        const full = await newEmployee({
+            name: "Full Service",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+        });
+        const short = await newEmployee({
+            name: "Short Service",
+            religion: "ISLAM",
+            joined: "2025-11-15",
+        });
+        const other = await newEmployee({
+            name: "Other Faith",
+            religion: "HINDU",
+            joined: "2025-01-01",
+        });
+        const unknown = await newEmployee({
+            name: "No Religion",
+            religion: null,
+            joined: "2025-01-01",
+        });
+        const gone = await newEmployee({
+            name: "Left Farm",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+            status: "TERMINATED",
+        });
         const event = await newEvent();
 
         const { rows } = await BonusEventService.proposal(event.id);
@@ -130,7 +158,11 @@ describe("festival bonus", () => {
     test("GET proposal writes nothing", async () => {
         await newEmployee({ name: "Read Only", religion: "ISLAM", joined: "2025-01-01" });
         const event = await newEvent();
-        const counts = async () => [await prisma.bonus.count(), await prisma.bonusEvent.count(), await prisma.auditLog.count()];
+        const counts = async () => [
+            await prisma.bonus.count(),
+            await prisma.bonusEvent.count(),
+            await prisma.auditLog.count(),
+        ];
 
         const before = await counts();
         await BonusEventService.proposal(event.id);
@@ -139,7 +171,12 @@ describe("festival bonus", () => {
     });
 
     test("granting snapshots salary and service months from the server, keeps the owner's adjusted amount", async () => {
-        const e = await newEmployee({ name: "Adjusted", religion: "ISLAM", joined: "2025-01-01", salary: 20000 });
+        const e = await newEmployee({
+            name: "Adjusted",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+            salary: 20000,
+        });
         const event = await newEvent({ multiplier: 1.5 });
 
         const [bonus] = (await BonusEventService.grant(
@@ -158,10 +195,19 @@ describe("festival bonus", () => {
 
     test("one bonus per employee per event; terminated, unknown and repeated employees are refused", async () => {
         const e = await newEmployee({ name: "Once Only", religion: "ISLAM", joined: "2025-01-01" });
-        const gone = await newEmployee({ name: "Gone", religion: "ISLAM", joined: "2025-01-01", status: "TERMINATED" });
+        const gone = await newEmployee({
+            name: "Gone",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+            status: "TERMINATED",
+        });
         const event = await newEvent();
         const grant = (ids: string[]) =>
-            BonusEventService.grant(event.id, { bonuses: ids.map((employee_id) => ({ employee_id, amount: 100 })) }, actorId);
+            BonusEventService.grant(
+                event.id,
+                { bonuses: ids.map((employee_id) => ({ employee_id, amount: 100 })) },
+                actorId,
+            );
 
         await grant([e.id]);
         await expect(grant([e.id])).rejects.toMatchObject({ status: 409 });
@@ -171,7 +217,11 @@ describe("festival bonus", () => {
     });
 
     test("a bonus is paid through the payout path: FESTIVAL_BONUS expense, one Payment, proof required", async () => {
-        const e = await newEmployee({ name: "Paid Bonus", religion: "ISLAM", joined: "2025-01-01" });
+        const e = await newEmployee({
+            name: "Paid Bonus",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+        });
         await EmployeePayoutAccountService.create({
             employee_id: e.id,
             method: "BKASH",
@@ -180,13 +230,19 @@ describe("festival bonus", () => {
             verified_by_id: actorId,
         });
         const event = await newEvent();
-        const [bonus] = (await BonusEventService.grant(event.id, { bonuses: [{ employee_id: e.id, amount: 15000 }] }, actorId))!;
+        const [bonus] = (await BonusEventService.grant(
+            event.id,
+            { bonuses: [{ employee_id: e.id, amount: 15000 }] },
+            actorId,
+        ))!;
 
         const payout = await PayrollPayoutService.create({ bonus_id: bonus!.id });
         expect(payout!.amount.toString()).toBe("15000");
         expect(payout!.payroll_record_id).toBeNull();
         expect(payout!.bonus_id).toBe(bonus!.id);
-        await expect(PayrollPayoutService.create({ bonus_id: bonus!.id })).rejects.toMatchObject({ status: 409 });
+        await expect(PayrollPayoutService.create({ bonus_id: bonus!.id })).rejects.toMatchObject({
+            status: 409,
+        });
 
         // The inherited rule: no confirmation without the transfer reference.
         expect(markPaidSchema.safeParse({ from_instrument_id: instrumentId }).success).toBe(false);
@@ -196,9 +252,16 @@ describe("festival bonus", () => {
             from_instrument_id: instrumentId,
             paid_by_id: actorId,
         });
-        const expenses = await prisma.expense.findMany({ where: { remarks: { contains: payout!.id } } });
-        expect(expenses.map((x) => x.category).sort()).toEqual(["FESTIVAL_BONUS", "SALARY_TRANSFER_FEE"]);
-        expect(expenses.find((x) => x.category === "FESTIVAL_BONUS")!.amount.toString()).toBe("15000");
+        const expenses = await prisma.expense.findMany({
+            where: { remarks: { contains: payout!.id } },
+        });
+        expect(expenses.map((x) => x.category).sort()).toEqual([
+            "FESTIVAL_BONUS",
+            "SALARY_TRANSFER_FEE",
+        ]);
+        expect(expenses.find((x) => x.category === "FESTIVAL_BONUS")!.amount.toString()).toBe(
+            "15000",
+        );
         const payments = await prisma.payment.findMany({ where: { ref_id: payout!.id } });
         expect(payments).toHaveLength(1);
         expect(payments[0]).toMatchObject({ ref_type: "PAYROLL", direction: "OUTGOING" });
@@ -218,7 +281,11 @@ describe("festival bonus", () => {
     });
 
     test("the database refuses a payout linked to both a record and a bonus, or to neither", async () => {
-        const e = await newEmployee({ name: "Check Constraint", religion: "ISLAM", joined: "2025-01-01" });
+        const e = await newEmployee({
+            name: "Check Constraint",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+        });
         const record = await prisma.payrollRecord.create({
             data: {
                 employee_id: e.id,
@@ -233,7 +300,11 @@ describe("festival bonus", () => {
         });
         recordIds.push(record.id);
         const event = await newEvent();
-        const [bonus] = (await BonusEventService.grant(event.id, { bonuses: [{ employee_id: e.id, amount: 100 }] }, actorId))!;
+        const [bonus] = (await BonusEventService.grant(
+            event.id,
+            { bonuses: [{ employee_id: e.id, amount: 100 }] },
+            actorId,
+        ))!;
         const base = { method: "BKASH" as const, account_number: "01700000000", amount: 100 };
 
         await expect(
@@ -251,12 +322,18 @@ describe("festival bonus", () => {
         const { createPayrollPayoutSchema } = await import("@validators/payroll-payout.validator");
         const id = crypto.randomUUID();
         expect(createPayrollPayoutSchema.safeParse({}).success).toBe(false);
-        expect(createPayrollPayoutSchema.safeParse({ payroll_record_id: id, bonus_id: id }).success).toBe(false);
+        expect(
+            createPayrollPayoutSchema.safeParse({ payroll_record_id: id, bonus_id: id }).success,
+        ).toBe(false);
         expect(createPayrollPayoutSchema.safeParse({ bonus_id: id }).success).toBe(true);
     });
 
     test("religion shows on the employee's own record, nowhere else", async () => {
-        const e = await newEmployee({ name: "Private Faith", religion: "ISLAM", joined: "2025-01-01" });
+        const e = await newEmployee({
+            name: "Private Faith",
+            religion: "ISLAM",
+            joined: "2025-01-01",
+        });
         const record = await prisma.payrollRecord.create({
             data: {
                 employee_id: e.id,

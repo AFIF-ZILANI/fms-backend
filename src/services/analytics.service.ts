@@ -4,6 +4,7 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemBalances } from "@lib/stock-balance";
 import { getItemAvgCosts } from "@lib/stock-value";
+import { isNonDepleting } from "@lib/coded-stock";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
 /** kg in one of these weight units. */
@@ -11,9 +12,14 @@ const KG_PER_UNIT: Record<string, number> = { KG: 1, G: 0.001, MON_40KG: 40, MET
 
 /** kg in one base unit of an item, or null when the item has no weight conversion (a BAG item with no
  * KG ItemUnit). factor_to_base is "1 of unit = factor base units", so kg/base = kg/unit / factor. */
-export function kgPerBaseUnit(baseUnit: string, itemUnits: { unit: string; factor_to_base: Prisma.Decimal }[]) {
+export function kgPerBaseUnit(
+    baseUnit: string,
+    itemUnits: { unit: string; factor_to_base: Prisma.Decimal }[],
+) {
     if (KG_PER_UNIT[baseUnit] !== undefined) return KG_PER_UNIT[baseUnit];
-    const weighted = itemUnits.find((u) => KG_PER_UNIT[u.unit] !== undefined && !u.factor_to_base.isZero());
+    const weighted = itemUnits.find(
+        (u) => KG_PER_UNIT[u.unit] !== undefined && !u.factor_to_base.isZero(),
+    );
     return weighted ? KG_PER_UNIT[weighted.unit]! / weighted.factor_to_base.toNumber() : null;
 }
 
@@ -33,7 +39,9 @@ export const AnalyticsService = {
                 prisma.houses.findMany({
                     where: { is_active: true },
                     select: {
-                        _count: { select: { batchHouseBalances: { where: { quantity: { gt: 0 } } } } },
+                        _count: {
+                            select: { batchHouseBalances: { where: { quantity: { gt: 0 } } } },
+                        },
                     },
                 }),
                 prisma.employees.count({ where: { profile: { is_active: true } } }),
@@ -103,50 +111,63 @@ export const AnalyticsService = {
         });
         const batchIds = batches.map((b) => b.id);
 
-        const [mortalityByBatch, weightRecords, consumptions, soldByBatch, batchPurchases, directExpenses, depreciation] =
-            await Promise.all([
-                prisma.mortalityLog.groupBy({
-                    by: ["batch_id"],
-                    where: { batch_id: { in: batchIds } },
-                    _sum: { count_died: true },
-                }),
-                prisma.weightRecords.findMany({
-                    where: { batch_id: { in: batchIds } },
-                    // Several houses can be weighed on one day now that date is a day, not a timestamp;
-                    // the most recently entered sample wins the tie.
-                    orderBy: [{ date: "desc" }, { created_at: "desc" }],
-                    select: { batch_id: true, average_wt_grams: true, date: true },
-                }),
-                prisma.consumption.findMany({
-                    where: { batch_id: { in: batchIds } },
-                    select: {
-                        batch_id: true,
-                        item_id: true,
-                        base_quantity: true,
-                        item: { select: { category: true, unit: true, itemUnits: { select: { unit: true, factor_to_base: true } } } },
+        const [
+            mortalityByBatch,
+            weightRecords,
+            consumptions,
+            soldByBatch,
+            batchPurchases,
+            directExpenses,
+            depreciation,
+        ] = await Promise.all([
+            prisma.mortalityLog.groupBy({
+                by: ["batch_id"],
+                where: { batch_id: { in: batchIds } },
+                _sum: { count_died: true },
+            }),
+            prisma.weightRecords.findMany({
+                where: { batch_id: { in: batchIds } },
+                // Several houses can be weighed on one day now that date is a day, not a timestamp;
+                // the most recently entered sample wins the tie.
+                orderBy: [{ date: "desc" }, { created_at: "desc" }],
+                select: { batch_id: true, average_wt_grams: true, date: true },
+            }),
+            prisma.consumption.findMany({
+                where: { batch_id: { in: batchIds } },
+                select: {
+                    batch_id: true,
+                    item_id: true,
+                    base_quantity: true,
+                    item: {
+                        select: {
+                            category: true,
+                            unit: true,
+                            itemUnits: { select: { unit: true, factor_to_base: true } },
+                        },
                     },
-                }),
-                prisma.birdSale.groupBy({
-                    by: ["batch_id"],
-                    where: { batch_id: { in: batchIds } },
-                    _sum: { net_weight: true },
-                }),
-                prisma.purchaseItem.groupBy({
-                    by: ["batch_id", "item_id"],
-                    where: { batch_id: { in: batchIds } },
-                    _sum: { total_price: true },
-                }),
-                prisma.expense.groupBy({
-                    by: ["batch_id"],
-                    where: { batch_id: { in: batchIds }, cost_type: "DIRECT" },
-                    _sum: { amount: true },
-                }),
-                prisma.assetDepreciation.groupBy({
-                    by: ["batch_id"],
-                    where: { batch_id: { in: batchIds } },
-                    _sum: { amount: true },
-                }),
-            ]);
+                },
+            }),
+            prisma.birdSale.groupBy({
+                by: ["batch_id"],
+                where: { batch_id: { in: batchIds } },
+                _sum: { net_weight: true },
+            }),
+            prisma.purchaseItem.groupBy({
+                by: ["batch_id", "item_id"],
+                where: { batch_id: { in: batchIds } },
+                _sum: { total_price: true },
+            }),
+            prisma.expense.groupBy({
+                by: ["batch_id"],
+                where: { batch_id: { in: batchIds }, cost_type: "DIRECT" },
+                _sum: { amount: true },
+            }),
+            prisma.assetDepreciation.groupBy({
+                by: ["batch_id"],
+                where: { batch_id: { in: batchIds } },
+                _sum: { amount: true },
+            }),
+        ]);
         const avgCosts = await getItemAvgCosts([...new Set(consumptions.map((c) => c.item_id))]);
 
         // Cost to date = what batchPnl counts (batch-linked purchases, direct expenses, depreciation)
@@ -156,7 +177,8 @@ export const AnalyticsService = {
         const zero = new Prisma.Decimal(0);
         const costByBatch = new Map<string, Prisma.Decimal>();
         const addCost = (batchId: string | null, amount: Prisma.Decimal | null) => {
-            if (batchId && amount) costByBatch.set(batchId, (costByBatch.get(batchId) ?? zero).plus(amount));
+            if (batchId && amount)
+                costByBatch.set(batchId, (costByBatch.get(batchId) ?? zero).plus(amount));
         };
         const purchasedOnBatch = new Set<string>();
         for (const p of batchPurchases) {
@@ -173,7 +195,12 @@ export const AnalyticsService = {
             if (!c.batch_id) continue;
             // ponytail: unpurchased item = unknown cost, skipped (same rule as getItemAvgCosts' callers).
             const avgCost = avgCosts.get(c.item_id);
-            if (avgCost && !purchasedOnBatch.has(`${c.batch_id}|${c.item_id}`)) {
+            // Equipment reaches a batch through depreciation, not through its draws.
+            if (
+                avgCost &&
+                !purchasedOnBatch.has(`${c.batch_id}|${c.item_id}`) &&
+                !isNonDepleting(c.item.category)
+            ) {
                 addCost(c.batch_id, c.base_quantity.times(avgCost));
             }
             if (c.item.category !== "FEED") continue;
@@ -181,12 +208,18 @@ export const AnalyticsService = {
             const soFar = feedKgByBatch.has(c.batch_id) ? feedKgByBatch.get(c.batch_id)! : 0;
             feedKgByBatch.set(
                 c.batch_id,
-                kgPerUnit === null || soFar === null ? null : soFar + c.base_quantity.toNumber() * kgPerUnit,
+                kgPerUnit === null || soFar === null
+                    ? null
+                    : soFar + c.base_quantity.toNumber() * kgPerUnit,
             );
         }
 
-        const soldKgByBatch = new Map(soldByBatch.map((s) => [s.batch_id, s._sum.net_weight?.toNumber() ?? 0]));
-        const diedByBatch = new Map(mortalityByBatch.map((m) => [m.batch_id, m._sum.count_died ?? 0]));
+        const soldKgByBatch = new Map(
+            soldByBatch.map((s) => [s.batch_id, s._sum.net_weight?.toNumber() ?? 0]),
+        );
+        const diedByBatch = new Map(
+            mortalityByBatch.map((m) => [m.batch_id, m._sum.count_died ?? 0]),
+        );
         const latestWeightByBatch = new Map<string, (typeof weightRecords)[number]>();
         for (const record of weightRecords) {
             if (record.batch_id && !latestWeightByBatch.has(record.batch_id)) {
@@ -202,10 +235,13 @@ export const AnalyticsService = {
             // there's no honest figure, so everything weight-based stays null.
             // ponytail: one house's latest sample stands in for the whole batch; weight by house balance if houses diverge.
             const producedKg = latestWeight
-                ? (latestWeight.average_wt_grams.toNumber() * liveCount) / 1000 + (soldKgByBatch.get(batch.id) ?? 0)
+                ? (latestWeight.average_wt_grams.toNumber() * liveCount) / 1000 +
+                  (soldKgByBatch.get(batch.id) ?? 0)
                 : null;
             const gainKg =
-                producedKg === null ? null : producedKg - (batch.initial_chick_count * batch.init_chicks_avg_wt) / 1000;
+                producedKg === null
+                    ? null
+                    : producedKg - (batch.initial_chick_count * batch.init_chicks_avg_wt) / 1000;
             const feedKg = feedKgByBatch.has(batch.id) ? feedKgByBatch.get(batch.id)! : 0;
             const cost = costByBatch.get(batch.id) ?? zero;
             return {
@@ -213,7 +249,8 @@ export const AnalyticsService = {
                 live_count: liveCount,
                 initial_chick_count: batch.initial_chick_count,
                 cumulative_died: died,
-                cumulative_mortality_rate: batch.initial_chick_count > 0 ? died / batch.initial_chick_count : 0,
+                cumulative_mortality_rate:
+                    batch.initial_chick_count > 0 ? died / batch.initial_chick_count : 0,
                 age_days: Math.floor((Date.now() - batch.starting_date.getTime()) / 86_400_000),
                 expected_selling_date: batch.expected_selling_date,
                 actual_end_date: batch.actual_end_date,
@@ -223,7 +260,10 @@ export const AnalyticsService = {
                 weight_gain_kg: gainKg,
                 fcr: feedKg && gainKg && gainKg > 0 ? feedKg / gainKg : null,
                 cost_to_date: cost.toString(),
-                cost_per_kg: producedKg && producedKg > 0 && !cost.isZero() ? cost.div(producedKg).toString() : null,
+                cost_per_kg:
+                    producedKg && producedKg > 0 && !cost.isZero()
+                        ? cost.div(producedKg).toString()
+                        : null,
             };
         });
     },
@@ -272,19 +312,29 @@ export const AnalyticsService = {
 
         // Stock the batch used up (feed, bedding, medicine) at average purchase cost -- the same rule
         // batchesPerformance.cost_to_date uses. Items bought straight onto the batch are already in
-        // purchase_cost.
+        // purchase_cost; equipment is in depreciation_share.
         const [used, onBatch] = await Promise.all([
             prisma.consumption.findMany({
                 where: { batch_id: batchId },
-                select: { item_id: true, base_quantity: true },
+                select: {
+                    item_id: true,
+                    base_quantity: true,
+                    item: { select: { category: true } },
+                },
             }),
-            prisma.purchaseItem.findMany({ where: { batch_id: batchId }, select: { item_id: true }, distinct: ["item_id"] }),
+            prisma.purchaseItem.findMany({
+                where: { batch_id: batchId },
+                select: { item_id: true },
+                distinct: ["item_id"],
+            }),
         ]);
         const avgCosts = await getItemAvgCosts([...new Set(used.map((c) => c.item_id))]);
         const boughtOnBatch = new Set(onBatch.map((p) => p.item_id));
         const consumption_cost = used.reduce((sum, c) => {
             const avg = avgCosts.get(c.item_id);
-            return avg && !boughtOnBatch.has(c.item_id) ? sum.plus(c.base_quantity.times(avg)) : sum;
+            return avg && !boughtOnBatch.has(c.item_id) && !isNonDepleting(c.item.category)
+                ? sum.plus(c.base_quantity.times(avg))
+                : sum;
         }, new Prisma.Decimal(0));
 
         const profit = revenue
@@ -319,33 +369,33 @@ export const AnalyticsService = {
             birdSalesDue,
             paidByType,
             instruments,
-        ] =
-            await Promise.all([
-                prisma.sale.aggregate({
-                    where: { sale_date: { gte: monthStart, lt: monthEnd } },
-                    _sum: { total: true },
-                }),
-                prisma.birdSale.aggregate({
-                    where: { sale_date: { gte: monthStart, lt: monthEnd } },
-                    _sum: { total_amount: true, discount_amount: true },
-                }),
-                prisma.expense.aggregate({
-                    where: { date: { gte: monthStart, lt: monthEnd } },
-                    _sum: { amount: true },
-                }),
-                prisma.purchase.aggregate({ _sum: { due_amount: true } }),
-                prisma.sale.aggregate({ _sum: { due_amount: true } }),
-                prisma.birdSale.aggregate({ _sum: { due_amount: true } }),
-                // due_amount is the create-time snapshot; what has been paid since lives in Payment.
-                prisma.payment.groupBy({
-                    by: ["ref_type"],
-                    where: { ref_type: { in: ["PURCHASE", "SALE", "BIRD_SALE"] } },
-                    _sum: { amount: true },
-                }),
-                prisma.paymentInstrument.findMany({ where: { is_active: true } }),
-            ]);
+        ] = await Promise.all([
+            prisma.sale.aggregate({
+                where: { sale_date: { gte: monthStart, lt: monthEnd } },
+                _sum: { total: true },
+            }),
+            prisma.birdSale.aggregate({
+                where: { sale_date: { gte: monthStart, lt: monthEnd } },
+                _sum: { total_amount: true, discount_amount: true },
+            }),
+            prisma.expense.aggregate({
+                where: { date: { gte: monthStart, lt: monthEnd } },
+                _sum: { amount: true },
+            }),
+            prisma.purchase.aggregate({ _sum: { due_amount: true } }),
+            prisma.sale.aggregate({ _sum: { due_amount: true } }),
+            prisma.birdSale.aggregate({ _sum: { due_amount: true } }),
+            // due_amount is the create-time snapshot; what has been paid since lives in Payment.
+            prisma.payment.groupBy({
+                by: ["ref_type"],
+                where: { ref_type: { in: ["PURCHASE", "SALE", "BIRD_SALE"] } },
+                _sum: { amount: true },
+            }),
+            prisma.paymentInstrument.findMany({ where: { is_active: true } }),
+        ]);
         const zeroDec = new Prisma.Decimal(0);
-        const paid = (t: string) => paidByType.find((r) => r.ref_type === t)?._sum.amount ?? zeroDec;
+        const paid = (t: string) =>
+            paidByType.find((r) => r.ref_type === t)?._sum.amount ?? zeroDec;
 
         const revenue = (saleRevenue._sum.total ?? new Prisma.Decimal(0)).plus(
             (birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0)).minus(
@@ -412,7 +462,12 @@ export const AnalyticsService = {
                 starting_date: { lte: window.lte },
                 OR: [{ actual_end_date: null }, { actual_end_date: { gte: window.gte } }],
             },
-            select: { id: true, initial_chick_count: true, starting_date: true, actual_end_date: true },
+            select: {
+                id: true,
+                initial_chick_count: true,
+                starting_date: true,
+                actual_end_date: true,
+            },
         });
         const ids = batches.map((b) => b.id);
         const [logs, sales] = await Promise.all([
@@ -427,7 +482,11 @@ export const AnalyticsService = {
         ]);
         const removals = [
             ...logs.map((l) => ({ batch_id: l.batch_id, at: l.date.getTime(), n: l.count_died })),
-            ...sales.map((s) => ({ batch_id: s.batch_id, at: s.sale_date.getTime(), n: s.birds_count })),
+            ...sales.map((s) => ({
+                batch_id: s.batch_id,
+                at: s.sale_date.getTime(),
+                n: s.birds_count,
+            })),
         ];
 
         // ponytail: O(days x events) rescan, fine at farm volumes; prefix-sum per batch if it gets slow.
@@ -436,10 +495,17 @@ export const AnalyticsService = {
             const dayEnd = t + 86_400_000;
             const active = new Set(
                 batches
-                    .filter((b) => b.starting_date.getTime() < dayEnd && (!b.actual_end_date || b.actual_end_date.getTime() >= t))
+                    .filter(
+                        (b) =>
+                            b.starting_date.getTime() < dayEnd &&
+                            (!b.actual_end_date || b.actual_end_date.getTime() >= t),
+                    )
                     .map((b) => b.id),
             );
-            let alive = batches.reduce((sum, b) => (active.has(b.id) ? sum + b.initial_chick_count : sum), 0);
+            let alive = batches.reduce(
+                (sum, b) => (active.has(b.id) ? sum + b.initial_chick_count : sum),
+                0,
+            );
             for (const r of removals) if (active.has(r.batch_id) && r.at < t) alive -= r.n;
             const died = logs.reduce((sum, l) => {
                 const at = l.date.getTime();
@@ -468,7 +534,12 @@ export const AnalyticsService = {
             select: {
                 date: true,
                 base_quantity: true,
-                item: { select: { unit: true, itemUnits: { select: { unit: true, factor_to_base: true } } } },
+                item: {
+                    select: {
+                        unit: true,
+                        itemUnits: { select: { unit: true, factor_to_base: true } },
+                    },
+                },
             },
         });
 
@@ -477,7 +548,8 @@ export const AnalyticsService = {
             const dateKey = row.date.toISOString().slice(0, 10);
             const kgPerUnit = kgPerBaseUnit(row.item.unit, row.item.itemUnits);
             const key = `${dateKey}|${kgPerUnit === null ? row.item.unit : "KG"}`;
-            const amount = kgPerUnit === null ? row.base_quantity : row.base_quantity.times(kgPerUnit);
+            const amount =
+                kgPerUnit === null ? row.base_quantity : row.base_quantity.times(kgPerUnit);
             byKey.set(key, (byKey.get(key) ?? new Prisma.Decimal(0)).plus(amount));
         }
 
@@ -500,13 +572,21 @@ export const AnalyticsService = {
         const window = trendWindow(days);
         const rows = await prisma.birdSale.findMany({
             where: { sale_date: window },
-            select: { sale_date: true, total_amount: true, discount_amount: true, net_weight: true },
+            select: {
+                sale_date: true,
+                total_amount: true,
+                discount_amount: true,
+                net_weight: true,
+            },
         });
 
         const byDate = new Map<string, { revenue: Prisma.Decimal; weight: Prisma.Decimal }>();
         for (const row of rows) {
             const dateKey = row.sale_date.toISOString().slice(0, 10);
-            const existing = byDate.get(dateKey) ?? { revenue: new Prisma.Decimal(0), weight: new Prisma.Decimal(0) };
+            const existing = byDate.get(dateKey) ?? {
+                revenue: new Prisma.Decimal(0),
+                weight: new Prisma.Decimal(0),
+            };
             byDate.set(dateKey, {
                 revenue: existing.revenue.plus(row.total_amount).minus(row.discount_amount),
                 weight: existing.weight.plus(row.net_weight),
@@ -517,7 +597,10 @@ export const AnalyticsService = {
             .map(([date, { revenue, weight }]) => ({
                 date,
                 revenue: revenue.toString(),
-                avg_price_per_kg: (weight.isZero() ? new Prisma.Decimal(0) : revenue.div(weight)).toString(),
+                avg_price_per_kg: (weight.isZero()
+                    ? new Prisma.Decimal(0)
+                    : revenue.div(weight)
+                ).toString(),
             }))
             .sort((a, b) => a.date.localeCompare(b.date));
     },
@@ -542,13 +625,19 @@ export const AnalyticsService = {
         const byCategory = new Map<string, Prisma.Decimal>();
         for (const row of saleItems) {
             const category = row.item.category;
-            byCategory.set(category, (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price));
+            byCategory.set(
+                category,
+                (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price),
+            );
         }
         const birdRevenue = (birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0)).minus(
             birdSaleRevenue._sum.discount_amount ?? new Prisma.Decimal(0),
         );
         if (!birdRevenue.isZero()) {
-            byCategory.set("BIRD", (byCategory.get("BIRD") ?? new Prisma.Decimal(0)).plus(birdRevenue));
+            byCategory.set(
+                "BIRD",
+                (byCategory.get("BIRD") ?? new Prisma.Decimal(0)).plus(birdRevenue),
+            );
         }
 
         return Array.from(byCategory.entries())
@@ -566,7 +655,12 @@ export const AnalyticsService = {
         const grouped = await prisma.birdSale.groupBy({
             by: ["grade"],
             where: { sale_date: window },
-            _sum: { birds_count: true, total_amount: true, discount_amount: true, net_weight: true },
+            _sum: {
+                birds_count: true,
+                total_amount: true,
+                discount_amount: true,
+                net_weight: true,
+            },
         });
 
         // net_weight rides along so avg price/kg is revenue/weight over this
@@ -576,7 +670,9 @@ export const AnalyticsService = {
             .map((row) => ({
                 grade: row.grade,
                 birds_count: row._sum.birds_count ?? 0,
-                revenue: (row._sum.total_amount ?? new Prisma.Decimal(0)).minus(row._sum.discount_amount ?? new Prisma.Decimal(0)).toString(),
+                revenue: (row._sum.total_amount ?? new Prisma.Decimal(0))
+                    .minus(row._sum.discount_amount ?? new Prisma.Decimal(0))
+                    .toString(),
                 net_weight: (row._sum.net_weight ?? new Prisma.Decimal(0)).toString(),
             }))
             .sort((a, b) => b.birds_count - a.birds_count);
@@ -657,7 +753,10 @@ export const AnalyticsService = {
         const byCategory = new Map<string, Prisma.Decimal>();
         for (const row of purchaseItems) {
             const category = row.item.category;
-            byCategory.set(category, (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price));
+            byCategory.set(
+                category,
+                (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price),
+            );
         }
 
         return Array.from(byCategory.entries())
@@ -680,7 +779,10 @@ export const AnalyticsService = {
         const byDate = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
             const dateKey = row.purchase_date.toISOString().slice(0, 10);
-            byDate.set(dateKey, (byDate.get(dateKey) ?? new Prisma.Decimal(0)).plus(row.total_amount));
+            byDate.set(
+                dateKey,
+                (byDate.get(dateKey) ?? new Prisma.Decimal(0)).plus(row.total_amount),
+            );
         }
 
         return Array.from(byDate.entries())
@@ -690,8 +792,12 @@ export const AnalyticsService = {
 
     async expenseBreakdown(month?: Date) {
         const resolvedMonth = month ?? new Date();
-        const monthStart = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1));
-        const monthEnd = new Date(Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth() + 1, 1));
+        const monthStart = new Date(
+            Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth(), 1),
+        );
+        const monthEnd = new Date(
+            Date.UTC(resolvedMonth.getUTCFullYear(), resolvedMonth.getUTCMonth() + 1, 1),
+        );
 
         const grouped = await prisma.expense.groupBy({
             by: ["category"],
@@ -712,7 +818,9 @@ export const AnalyticsService = {
         const windows = Array.from({ length: months }, (_, i) => {
             const monthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
             const monthStart = monthDate;
-            const monthEnd = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1));
+            const monthEnd = new Date(
+                Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1),
+            );
             return { label: monthStart.toISOString().slice(0, 7), monthStart, monthEnd };
         });
 
@@ -767,7 +875,10 @@ export const AnalyticsService = {
             select: { id: true, category: true },
         });
         const itemIds = items.map((i) => i.id);
-        const [balances, avgCosts] = await Promise.all([getItemBalances(itemIds), getItemAvgCosts(itemIds)]);
+        const [balances, avgCosts] = await Promise.all([
+            getItemBalances(itemIds),
+            getItemAvgCosts(itemIds),
+        ]);
 
         const byCategory = new Map<string, Prisma.Decimal>();
         for (const item of items) {
@@ -775,7 +886,10 @@ export const AnalyticsService = {
             const avgCost = avgCosts.get(item.id);
             if (!avgCost || balance.lessThanOrEqualTo(0)) continue;
             const value = balance.times(avgCost);
-            byCategory.set(item.category, (byCategory.get(item.category) ?? new Prisma.Decimal(0)).plus(value));
+            byCategory.set(
+                item.category,
+                (byCategory.get(item.category) ?? new Prisma.Decimal(0)).plus(value),
+            );
         }
 
         return Array.from(byCategory.entries())
@@ -799,7 +913,10 @@ export const AnalyticsService = {
         for (const row of rows) {
             const dateKey = row.occurred_at.toISOString().slice(0, 10);
             const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
-            const bucket = byDate.get(dateKey) ?? { in: new Prisma.Decimal(0), out: new Prisma.Decimal(0) };
+            const bucket = byDate.get(dateKey) ?? {
+                in: new Prisma.Decimal(0),
+                out: new Prisma.Decimal(0),
+            };
             if (row.direction === "IN") bucket.in = bucket.in.plus(value);
             else bucket.out = bucket.out.plus(value);
             byDate.set(dateKey, bucket);
@@ -825,7 +942,10 @@ export const AnalyticsService = {
             const value = row.base_quantity.times(
                 avgCosts.get(row.item_id) ?? new Prisma.Decimal(0),
             );
-            byCategory.set(row.item.category, (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value));
+            byCategory.set(
+                row.item.category,
+                (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value),
+            );
         }
 
         return Array.from(byCategory.entries())
@@ -871,7 +991,10 @@ export const AnalyticsService = {
         const byCategory = new Map<string, Prisma.Decimal>();
         for (const row of rows) {
             const value = row.quantity.times(avgCosts.get(row.item_id) ?? new Prisma.Decimal(0));
-            byCategory.set(row.item.category, (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value));
+            byCategory.set(
+                row.item.category,
+                (byCategory.get(row.item.category) ?? new Prisma.Decimal(0)).plus(value),
+            );
         }
 
         return Array.from(byCategory.entries())

@@ -14,7 +14,9 @@ const createdEmployeeIds: string[] = [];
 describe("AlertService", () => {
     afterAll(async () => {
         await prisma.alerts.deleteMany({
-            where: { OR: [{ id: { in: createdAlertIds } }, { related_id: { in: createdEmployeeIds } }] },
+            where: {
+                OR: [{ id: { in: createdAlertIds } }, { related_id: { in: createdEmployeeIds } }],
+            },
         });
         await prisma.stockLedger.deleteMany({ where: { item_id: { in: createdItemIds } } });
         await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
@@ -153,22 +155,44 @@ describe("AlertService", () => {
         });
         // Raised per house now, so the person in the shed knows which one to look at.
         // After the evening cut-off the daily-log check also raises an alert about this house, so pick by family.
-        const match = alerts.find((a) => a.related_id === house.id && a.dedupe_key?.startsWith("MORTALITY:"));
+        const match = alerts.find(
+            (a) => a.related_id === house.id && a.dedupe_key?.startsWith("MORTALITY:"),
+        );
         expect(match).toBeDefined();
         expect(match!.level).toBe("CRITICAL");
         expect(match!.audience).toEqual(["WORKER", "MANAGER"]);
         createdAlertIds.push(match!.id);
 
         // A worker sees it; a manager-only alert (low stock) stays out of a worker's list.
-        const worker = { profile_id: "w", role: "EMPLOYEE", employee_role: "WORKER", employee_id: "e" } as const;
+        const worker = {
+            profile_id: "w",
+            role: "EMPLOYEE",
+            employee_role: "WORKER",
+            employee_id: "e",
+        } as const;
         const manager = { ...worker, employee_role: "MANAGER" } as const;
-        const workerList = await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, worker);
+        const workerList = await AlertService.getAll(
+            { page: 1, limit: 100, status: "ACTIVE" },
+            worker,
+        );
         expect(workerList.alerts.some((a) => a.id === match!.id)).toBe(true);
         expect(workerList.alerts.every((a) => a.audience.includes("WORKER"))).toBe(true);
-        const managerOnly = await AlertService.create({ title: "Mgr only", type: "SYSTEM", level: "INFO" });
+        const managerOnly = await AlertService.create({
+            title: "Mgr only",
+            type: "SYSTEM",
+            level: "INFO",
+        });
         createdAlertIds.push(managerOnly.id);
-        expect((await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, worker)).alerts.some((a) => a.id === managerOnly.id)).toBe(false);
-        expect((await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, manager)).alerts.some((a) => a.id === managerOnly.id)).toBe(true);
+        expect(
+            (
+                await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, worker)
+            ).alerts.some((a) => a.id === managerOnly.id),
+        ).toBe(false);
+        expect(
+            (
+                await AlertService.getAll({ page: 1, limit: 100, status: "ACTIVE" }, manager)
+            ).alerts.some((a) => a.id === managerOnly.id),
+        ).toBe(true);
         await expect(AlertService.getById(managerOnly.id, worker)).rejects.toBeInstanceOf(AppError);
 
         // The condition clears (the deaths are gone): the next scan resolves the alert by itself.
@@ -303,16 +327,20 @@ describe("AlertService", () => {
             type: "EMPLOYEE",
             status: "ACTIVE",
         });
-        expect(alerts.some((a) => a.related_id === employee.id && a.title.includes("probation"))).toBe(
-            false,
-        );
+        expect(
+            alerts.some((a) => a.related_id === employee.id && a.title.includes("probation")),
+        ).toBe(false);
     });
 
     /** An active, probation-overdue employee with a bad month: two separate conditions at once. None of
      * the checks involved depend on the day of the month. */
     async function newTroubledEmployee() {
         const profile = await prisma.profiles.create({
-            data: { name: "Two Conditions", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "EMPLOYEE" },
+            data: {
+                name: "Two Conditions",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "EMPLOYEE",
+            },
         });
         createdProfileIds.push(profile.id);
         const employee = await prisma.employees.create({
@@ -326,7 +354,11 @@ describe("AlertService", () => {
         });
         createdEmployeeIds.push(employee.id);
         const giver = await prisma.profiles.create({
-            data: { name: "Two Giver", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+            data: {
+                name: "Two Giver",
+                mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                role: "ADMIN",
+            },
         });
         createdProfileIds.push(giver.id);
         await prisma.performanceScoreEntry.create({
@@ -345,7 +377,10 @@ describe("AlertService", () => {
     }
 
     const activeFor = (employeeId: string) =>
-        prisma.alerts.findMany({ where: { related_id: employeeId, status: "ACTIVE" }, orderBy: { dedupe_key: "asc" } });
+        prisma.alerts.findMany({
+            where: { related_id: employeeId, status: "ACTIVE" },
+            orderBy: { dedupe_key: "asc" },
+        });
 
     test("two conditions about one employee each get their own alert (neither hides the other)", async () => {
         const employee = await newTroubledEmployee();
@@ -369,12 +404,16 @@ describe("AlertService", () => {
     test("resolving an alert lets the next scan raise the condition again", async () => {
         const employee = await newTroubledEmployee();
         await AlertService.runScan();
-        const first = (await activeFor(employee.id)).find((a) => a.dedupe_key === `NEG_PERF:${employee.id}`)!;
+        const first = (await activeFor(employee.id)).find(
+            (a) => a.dedupe_key === `NEG_PERF:${employee.id}`,
+        )!;
 
         await prisma.alerts.update({ where: { id: first.id }, data: { status: "RESOLVED" } });
         await AlertService.runScan();
 
-        const again = (await activeFor(employee.id)).find((a) => a.dedupe_key === `NEG_PERF:${employee.id}`);
+        const again = (await activeFor(employee.id)).find(
+            (a) => a.dedupe_key === `NEG_PERF:${employee.id}`,
+        );
         expect(again).toBeDefined();
         expect(again!.id).not.toBe(first.id);
     });

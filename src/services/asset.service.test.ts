@@ -3,11 +3,13 @@ import prisma from "@lib/db";
 import { AssetService } from "./asset.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
-import { houseNumber } from "@lib/test-fixtures";
+import { houseNumber, boundStockUnit, removeBoundStockUnit } from "@lib/test-fixtures";
+import { getDefaultActorId } from "@lib/current-actor";
 
 const createdAssetIds: string[] = [];
 const createdUnitIds: string[] = [];
 const createdHouseIds: string[] = [];
+let fixture: Awaited<ReturnType<typeof boundStockUnit>> | undefined;
 
 describe("AssetService", () => {
     afterAll(async () => {
@@ -16,6 +18,7 @@ describe("AssetService", () => {
             where: { stock_unit_id: { in: createdUnitIds } },
         });
         await prisma.stockUnit.deleteMany({ where: { id: { in: createdUnitIds } } });
+        if (fixture) await removeBoundStockUnit(fixture);
         await prisma.houses.deleteMany({ where: { id: { in: createdHouseIds } } });
     });
 
@@ -44,8 +47,9 @@ describe("AssetService", () => {
         });
         createdHouseIds.push(house.id);
 
-        const [unit] = await StockUnitService.provision(1);
-        createdUnitIds.push(unit!.id);
+        // relocating needs a code bound to a lot
+        fixture = await boundStockUnit(await getDefaultActorId());
+        const unit = { id: fixture.unitId };
 
         await StockUnitService.relocate(unit!.id, house.id, crypto.randomUUID());
 

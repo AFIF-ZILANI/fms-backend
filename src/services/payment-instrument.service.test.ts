@@ -33,7 +33,9 @@ describe("PaymentInstrumentService", () => {
             label: `Typo Wallet ${crypto.randomUUID()}`,
         });
         await PaymentInstrumentService.remove(instrument.id);
-        expect(await prisma.paymentInstrument.findUnique({ where: { id: instrument.id } })).toBeNull();
+        expect(
+            await prisma.paymentInstrument.findUnique({ where: { id: instrument.id } }),
+        ).toBeNull();
     });
 
     test("remove refuses an instrument with payment history", async () => {
@@ -58,8 +60,12 @@ describe("PaymentInstrumentService", () => {
             },
         });
 
-        await expect(PaymentInstrumentService.remove(instrument.id)).rejects.toBeInstanceOf(AppError);
-        expect(await prisma.paymentInstrument.findUnique({ where: { id: instrument.id } })).not.toBeNull();
+        await expect(PaymentInstrumentService.remove(instrument.id)).rejects.toBeInstanceOf(
+            AppError,
+        );
+        expect(
+            await prisma.paymentInstrument.findUnique({ where: { id: instrument.id } }),
+        ).not.toBeNull();
 
         await prisma.payment.delete({ where: { id: payment.id } });
     });

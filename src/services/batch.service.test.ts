@@ -119,7 +119,9 @@ describe("BatchService", () => {
         });
         createdBatchIds.push(batch!.id);
 
-        await expect(BatchService.close(batch!.id, { status: "CLOSED", recorded_by_id: profileId })).rejects.toMatchObject({
+        await expect(
+            BatchService.close(batch!.id, { status: "CLOSED", recorded_by_id: profileId }),
+        ).rejects.toMatchObject({
             status: 409,
         });
     });
@@ -136,7 +138,11 @@ describe("BatchService", () => {
         });
         createdBatchIds.push(batch!.id);
 
-        const closed = await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+        const closed = await BatchService.close(batch!.id, {
+            status: "CLOSED",
+            force: true,
+            recorded_by_id: profileId,
+        });
         expect(closed.status).toBe("CLOSED");
         expect(closed.actual_end_date).not.toBeNull();
 
@@ -204,7 +210,11 @@ describe("BatchService", () => {
         });
         createdBatchIds.push(batch!.id);
         const close = () =>
-            BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+            BatchService.close(batch!.id, {
+                status: "CLOSED",
+                force: true,
+                recorded_by_id: profileId,
+            });
 
         const results = await Promise.allSettled([close(), close()]);
         expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
@@ -229,7 +239,11 @@ describe("BatchService", () => {
             recorded_by_id: profileId,
         });
         createdBatchIds.push(batch!.id);
-        await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+        await BatchService.close(batch!.id, {
+            status: "CLOSED",
+            force: true,
+            recorded_by_id: profileId,
+        });
 
         await expect(BatchService.update(batch!.id, { breed: "TIGER" })).rejects.toMatchObject({
             status: 409,

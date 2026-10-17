@@ -92,13 +92,14 @@ async function raise(raised: Raised, draft: AlertDraft) {
 
 async function checkLowStock(): Promise<Raised> {
     const raised: Raised = new Set();
-    const items = await prisma.item.findMany({
-        where: { is_active: true, reorder_level: { not: null } },
-    });
+    // Every active item, not just those with a reorder level: a negative balance means the books are
+    // wrong (more drawn than ever came in) and needs a look whether or not anyone set a level.
+    const items = await prisma.item.findMany({ where: { is_active: true } });
     const balances = await getItemBalances(items.map((i) => i.id));
     for (const item of items) {
         const balance = balances.get(item.id) ?? new Prisma.Decimal(0);
-        if (balance.lessThan(item.reorder_level!)) {
+        const negative = balance.isNegative();
+        if (negative || (item.reorder_level !== null && balance.lessThan(item.reorder_level))) {
             // ponytail: this string is a live FK code (ItemCategory.code) a user can rename via Settings,
             // which silently breaks this comparison with no error -- needs a stable-key mechanism if this keeps mattering.
             const type =
@@ -107,10 +108,12 @@ async function checkLowStock(): Promise<Raised> {
             await raise(raised, {
                 type,
                 level: empty ? "CRITICAL" : "WARNING",
-                title: empty
-                    ? `${item.name} is out of stock`
-                    : `${item.name} is below reorder level`,
-                description: `Current balance ${balance.toString()}, reorder level ${item.reorder_level!.toString()}`,
+                title: negative
+                    ? `${item.name} has a negative stock balance`
+                    : empty
+                      ? `${item.name} is out of stock`
+                      : `${item.name} is below reorder level`,
+                description: `Current balance ${balance.toString()}${item.reorder_level !== null ? `, reorder level ${item.reorder_level.toString()}` : ""}`,
                 related_id: item.id,
                 audience: AUDIENCE.MANAGER,
                 key: `LOW_STOCK:${item.id}`,

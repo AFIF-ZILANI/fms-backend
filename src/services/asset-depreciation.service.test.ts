@@ -127,7 +127,11 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
             recorded_by_id: profileId,
         });
 
-        await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+        await BatchService.close(batch!.id, {
+            status: "CLOSED",
+            force: true,
+            recorded_by_id: profileId,
+        });
 
         const { depreciations } = await AssetDepreciationService.getAll({
             page: 1,
@@ -151,7 +155,11 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
         });
         createdBatchIds.push(batch!.id);
 
-        await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+        await BatchService.close(batch!.id, {
+            status: "CLOSED",
+            force: true,
+            recorded_by_id: profileId,
+        });
 
         const { depreciations } = await AssetDepreciationService.getAll({
             page: 1,
@@ -184,11 +192,19 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
             recorded_by_id: profileId,
         });
 
-        await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+        await BatchService.close(batch!.id, {
+            status: "CLOSED",
+            force: true,
+            recorded_by_id: profileId,
+        });
         // second close attempt is rejected (not RUNNING anymore) -- confirms
         // the trigger only ever fires once per real close, by construction
         await expect(
-            BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: profileId }),
+            BatchService.close(batch!.id, {
+                status: "CLOSED",
+                force: true,
+                recorded_by_id: profileId,
+            }),
         ).rejects.toMatchObject({
             status: 409,
         });

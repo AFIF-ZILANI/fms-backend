@@ -445,9 +445,9 @@ for (let day = 1; day <= DAYS; day++) {
     if (day === 22) await vaccinate(day, "Newcastle Lasota", "nd", vials.nd[1]!, "ND Lasota"), notes.push("ND Lasota");
     if (day === 36) await vaccinate(day, "Newcastle booster", "nd", vials.nd[2]!, "ND booster"), notes.push("ND booster");
 
-    // CRD outbreak treatment: day 30-34 antibiotic (300 ml/day), electrolyte support day 31-33
+    // CRD outbreak treatment: day 30-34 antibiotic (200 ml/day = one 1 L bottle), electrolyte support day 31-33
     if (day >= CFG.ob + 1 && day <= CFG.ob + 5) {
-        await doseMed(day, "abx", "Enrofloxacin 10%", 300, "ML", vials.abx[0]);
+        await doseMed(day, "abx", "Enrofloxacin 10%", 200, "ML", vials.abx[0]);
         if (day >= CFG.ob + 2 && day <= CFG.ob + 4) await doseMed(day, "vitamin", "Vitamin-C + Electrolyte", 0.5, "KG");
         notes.push("antibiotic course");
     }

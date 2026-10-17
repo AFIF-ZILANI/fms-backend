@@ -185,7 +185,11 @@ describe("BirdSaleService", () => {
         });
         createdSaleIds.push(oldHighSale!.id);
 
-        const { birdSales: gradeFiltered } = await BirdSaleService.getAll({ page: 1, limit: 100, grade: "CULL" });
+        const { birdSales: gradeFiltered } = await BirdSaleService.getAll({
+            page: 1,
+            limit: 100,
+            grade: "CULL",
+        });
         expect(gradeFiltered.some((s) => s.id === cullSale!.id)).toBe(true);
         expect(gradeFiltered.some((s) => s.id === oldHighSale!.id)).toBe(false);
 
@@ -221,7 +225,10 @@ describe("BirdSaleService", () => {
         const after = await BirdSaleService.summary({});
         expect(after.count - before.count).toBe(1);
         expect(after.total_birds - before.total_birds).toBe(10);
-        expect(parseFloat(after.total_revenue) - parseFloat(before.total_revenue)).toBeCloseTo(100, 2);
+        expect(parseFloat(after.total_revenue) - parseFloat(before.total_revenue)).toBeCloseTo(
+            100,
+            2,
+        );
         expect(parseFloat(after.total_due) - parseFloat(before.total_due)).toBeCloseTo(60, 2);
     });
 });

@@ -34,8 +34,12 @@ async function balance(batchId: string, houseId: string) {
 describe("BatchHouseAllocationService", () => {
     beforeAll(async () => {
         const [a, b, profile] = await Promise.all([
-            prisma.houses.create({ data: { name: "Alloc House A", type: "BROODER", number: houseNumber() } }),
-            prisma.houses.create({ data: { name: "Alloc House B", type: "GROWER", number: houseNumber() } }),
+            prisma.houses.create({
+                data: { name: "Alloc House A", type: "BROODER", number: houseNumber() },
+            }),
+            prisma.houses.create({
+                data: { name: "Alloc House B", type: "GROWER", number: houseNumber() },
+            }),
             prisma.profiles.create({
                 data: {
                     name: "Alloc Recorder",
@@ -134,7 +138,11 @@ describe("BatchHouseAllocationService", () => {
 
     test("allocation on a non-RUNNING batch throws a conflict", async () => {
         const batch = await newRunningBatch(150);
-        await BatchService.close(batch.id, { status: "CLOSED", force: true, recorded_by_id: profileId });
+        await BatchService.close(batch.id, {
+            status: "CLOSED",
+            force: true,
+            recorded_by_id: profileId,
+        });
 
         await expect(
             BatchHouseAllocationService.create({

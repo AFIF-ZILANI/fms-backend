@@ -321,7 +321,8 @@ if (big.status === 201) {
 check("coded draw larger than the bottle/lot is refused", big.status >= 400, `status ${big.status}`);
 const ceq = await use("worker", it.heater, houseA.id, 1, "UNIT", { stock_unit_id: ht[0] });
 check("equipment draw (1 unit, non-depleting)", ceq.status === 201);
-if (ceq.status === 201) mv(it.heater, null, null, -1);
+// equipment is non-depleting: a draw records usage and moves no stock
+check("equipment draw posts no ledger OUT", (await prisma.stockLedger.count({ where: { ref_type: "CONSUMPTION", ref_id: ceq.data?.id } })) === 0);
 const csum = (await api("admin", "GET", `/consumptions/summary?house_id=${houseA.id}&today_from=${ago(1).toISOString()}&week_from=${ago(7).toISOString()}`)).data;
 check("consumption summary counts today's draws", csum?.today >= 8, JSON.stringify(csum));
 check("consumption list filters by item", ((await api("admin", "GET", `/consumptions?item_id=${it.feed}&limit=100`)).data ?? []).every((c: any) => c.item_id === it.feed));
@@ -370,6 +371,9 @@ const before = await prisma.stockLedger.count({ where: { item_id: it.vacc } });
 const bv = itemTotal(it.vacc);
 const d1 = await api("admin", "POST", `/stock-units/${v[3]}/dispose`);
 check("dispose a vial", d1.status === 200 && d1.data?.status === "DISPOSED", `${d1.status}`);
+const wo = await prisma.stockLedger.findFirst({ where: { ref_id: v[3]!, location_type: "DISPOSAL" } });
+check("disposal writes off the vial's 5,000 doses as WASTAGE at DISPOSAL", wo?.direction === "OUT" && wo.reason === "WASTAGE" && Number(wo.quantity) === 5000, `${wo?.reason} ${wo?.quantity}`);
+if (wo) mv(it.vacc, "DISPOSAL", null, -Number(wo.quantity));
 probe("dispose twice -> 409", await api("admin", "POST", `/stock-units/${v[3]}/dispose`), 409, "double disposal");
 probe("draw from a disposed vial -> 409", await use("worker", it.vacc, houseA.id, 10, "DOSE", { stock_unit_id: v[3] }), 409, "disposed unit consumed");
 const afterCount = await prisma.stockLedger.count({ where: { item_id: it.vacc } });
@@ -377,13 +381,16 @@ if (afterCount === before) {
     finding("BUG", "Disposing a QR-coded unit posts nothing to the stock ledger. The ledger still counts the disposed vial's doses as on hand, so stock balance, low-stock alerts and stock value all stay too high, and the wastage report never sees it. (ledger location type DISPOSAL exists in the schema but nothing writes it.)");
 }
 check("disposal reduces item stock (ledger OUT/WASTAGE/DISPOSAL row written)", afterCount > before, `ledger rows ${before} -> ${afterCount}`);
-await api("admin", "PATCH", `/stock-units/${v[2]}/status`, { status: "CONSUMED" });
+const cons = await api("admin", "PATCH", `/stock-units/${v[2]}/status`, { status: "CONSUMED" });
+const wo2 = await prisma.stockLedger.findFirst({ where: { ref_id: v[2]!, location_type: "DISPOSAL" } });
+check("marking a vial CONSUMED writes off its unused remainder", cons.status === 200 && Number(wo2?.quantity) === 5000, `${cons.status} ${wo2?.quantity}`);
+if (wo2) mv(it.vacc, "DISPOSAL", null, -Number(wo2.quantity));
+probe("a CONSUMED unit can't go back to IN_STOCK -> 409", await api("admin", "PATCH", `/stock-units/${v[2]}/status`, { status: "IN_STOCK" }), 409, "used-up unit reopened");
 probe("draw from a CONSUMED vial -> 409", await use("worker", it.vacc, houseA.id, 10, "DOSE", { stock_unit_id: v[2] }), 409, "consumed unit drawn again");
 const reDisposed = await reloc(v[3]!, houseB.id);
 probe("relocate a DISPOSED unit -> 4xx", reDisposed, [400, 409], "a disposed vial can still be moved into a house");
-const ss = await api("admin", "PATCH", `/stock-units/${v[3]}/status`, { status: "IN_STOCK" });
-check("status can be set freely (DISPOSED -> IN_STOCK)", ss.status === 200);
-if (ss.status === 200) finding("NOTE", "PATCH /stock-units/:id/status has no transition rules: a DISPOSED or CONSUMED unit can be put back to IN_STOCK with no trail and no ledger effect.");
+probe("DISPOSED is final: back to IN_STOCK -> 409", await api("admin", "PATCH", `/stock-units/${v[3]}/status`, { status: "IN_STOCK" }), 409, "disposed unit revived with no trail");
+probe("UNASSIGNED can't be set by hand -> 400", await api("admin", "PATCH", `/stock-units/${v[0]}/status`, { status: "UNASSIGNED" }), 400, "bound unit un-bound by a status pick");
 await api("admin", "POST", `/stock-units/${v[3]}/dispose`);
 check("consumed-from unit can't be hard-deleted -> 409", (await api("admin", "DELETE", `/stock-units/${v[0]}`)).status === 409);
 const spareUnit = pool.shift()!;
@@ -392,7 +399,10 @@ const mistake = bound.heater2[1]!;
 check("a bound but never-used unit can be deleted", [200, 204].includes((await api("admin", "DELETE", `/stock-units/${mistake}`)).status));
 const lotAfter = await prisma.purchaseItem.findUniqueOrThrow({ where: { id: heaterLot2 } });
 check("deleting a bound unit leaves the lot's unit_count alone (lot now 1 of 2 linked)", lotAfter.unit_count === 2 && (await prisma.stockUnit.count({ where: { purchase_item_id: heaterLot2 } })) === 1);
-finding("NOTE", "Hard-deleting a bound unit does not reduce the ledger IN created by its purchase, and the lot keeps unit_count=2 with only 1 unit linked, so the lot can never be 'complete' again unless a new code is bound.");
+// a code deleted by mistake: the bottle still exists, so its slot is refilled by binding a fresh code
+const [fresh] = (await must("admin", "POST", "/stock-units", { count: 1 }, "replacement code")) ?? [];
+probe("bind a replacement code into the freed slot", await bind(fresh?.id, heaterLot2), 200, "freed lot slot could not be refilled");
+check("lot is whole again (2 of 2 linked)", (await prisma.stockUnit.count({ where: { purchase_item_id: heaterLot2 } })) === 2);
 
 // ═══ 8. assets + depreciation ═══════════════════════════════════════════════
 section = "8 assets";
@@ -413,7 +423,6 @@ await reloc(ht[0]!, houseB.id); await reloc(ht[1]!, houseB.id);
 for (const u of [ht[0]!, ht[1]!]) {
     const r = await api("worker", "POST", "/consumptions", { batch_id: demo?.id, house_id: houseB.id, item_id: it.heater, quantity: 1, unit: "UNIT", stock_unit_id: u, date: ago(0, 9) });
     check("heater drawn for the demo batch", r.status === 201, `${r.status}`);
-    if (r.status === 201) mv(it.heater, null, null, -1);
 }
 const closed = await must("admin", "POST", `/batches/${demo?.id}/close`, { status: "CLOSED", force: true }, "close demo batch");
 check("demo batch force-closed", closed?.status === "CLOSED");
@@ -479,7 +488,7 @@ probe("tracking mode can't change after purchase -> 409", await api("admin", "PA
 const house = await api("admin", "POST", `/houses/${houseB.id}/deactivate`);
 probe("transfer into a deactivated house -> 4xx", await xfer(it.feed, W1, B, 1), [400, 409], "stock sent to an inactive house");
 probe("consume in a deactivated house -> 4xx", await use("worker", it.feed, houseB.id, 1, "KG"), [400, 409], "inactive house consumed stock");
-probe("relocate a unit into a deactivated house -> 4xx", await reloc(v[2]!, houseB.id), [400, 409], "unit moved into an inactive house");
+probe("relocate a unit into a deactivated house -> 4xx", await reloc(dr[2]!, houseB.id), [400, 409], "unit moved into an inactive house");
 await api("admin", "POST", `/houses/${houseB.id}/reactivate`);
 void house;
 

@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { StockUnitService } from "./stock-unit.service";
+import { boundStockUnit, removeBoundStockUnit } from "@lib/test-fixtures";
 
 // History-bearing foreign keys are RESTRICT: the database, not a count in a service, is what stops a
 // delete that would erase or null out history -- including one that races the service's own check.
@@ -14,6 +15,7 @@ let profileId: string;
 let adminProfileId: string;
 let batchId: string;
 let unitId: string;
+let fixture: Awaited<ReturnType<typeof boundStockUnit>>;
 
 /** Prisma's lazy query isn't a real promise, which `expect(...).rejects` needs. */
 const refused = (fn: () => PromiseLike<unknown>) => expect((async () => fn())()).rejects.toThrow();
@@ -22,10 +24,21 @@ describe("history foreign keys refuse deletes", () => {
     beforeAll(async () => {
         const [item, warehouse, house, profile, admin] = await Promise.all([
             prisma.item.create({
-                data: { name: `FK Item ${crypto.randomUUID()}`, normalized_key: `fk item ${crypto.randomUUID()}`, category: "FEED", unit: "BAG" },
+                data: {
+                    name: `FK Item ${crypto.randomUUID()}`,
+                    normalized_key: `fk item ${crypto.randomUUID()}`,
+                    category: "FEED",
+                    unit: "BAG",
+                },
             }),
             prisma.warehouses.create({ data: { name: `FK Warehouse ${crypto.randomUUID()}` } }),
-            prisma.houses.create({ data: { name: "FK House", type: "BROODER", number: Math.floor(Math.random() * 1e6) } }),
+            prisma.houses.create({
+                data: {
+                    name: "FK House",
+                    type: "BROODER",
+                    number: Math.floor(Math.random() * 1e6),
+                },
+            }),
             prisma.profiles.create({ data: { name: "FK Actor", mobile: mobile(), role: "ADMIN" } }),
             prisma.profiles.create({ data: { name: "FK Admin", mobile: mobile(), role: "ADMIN" } }),
         ]);
@@ -62,14 +75,13 @@ describe("history foreign keys refuse deletes", () => {
             recorded_by_id: profileId,
         });
         batchId = batch!.id;
-        const [unit] = await StockUnitService.provision(1);
-        unitId = unit!.id;
+        fixture = await boundStockUnit(profileId);
+        unitId = fixture.unitId;
         await StockUnitService.relocate(unitId, houseId, crypto.randomUUID());
     });
 
     afterAll(async () => {
-        await prisma.stockHouseAllocation.deleteMany({ where: { stock_unit_id: unitId } });
-        await prisma.stockUnit.deleteMany({ where: { id: unitId } });
+        await removeBoundStockUnit(fixture);
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: batchId } });
         await prisma.batches.deleteMany({ where: { id: batchId } });
@@ -90,13 +102,19 @@ describe("history foreign keys refuse deletes", () => {
 
     test("a batch with bird movements can't be deleted", async () => {
         await refused(() => prisma.batches.delete({ where: { id: batchId } }));
-        expect(await prisma.batchHouseAllocation.count({ where: { batch_id: batchId } })).toBeGreaterThan(0);
+        expect(
+            await prisma.batchHouseAllocation.count({ where: { batch_id: batchId } }),
+        ).toBeGreaterThan(0);
     });
 
     test("a house a coded unit was moved to can't be deleted -- the move isn't silently nulled into 'back at the warehouse'", async () => {
         // A house of its own, so the stock allocation is the only thing standing in the way.
         const lone = await prisma.houses.create({
-            data: { name: "FK Lone House", type: "BROODER", number: Math.floor(Math.random() * 1e6) },
+            data: {
+                name: "FK Lone House",
+                type: "BROODER",
+                number: Math.floor(Math.random() * 1e6),
+            },
         });
         try {
             await StockUnitService.relocate(unitId, lone.id, crypto.randomUUID());

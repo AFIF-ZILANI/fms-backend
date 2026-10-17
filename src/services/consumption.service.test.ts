@@ -70,11 +70,11 @@ describe("ConsumptionService", () => {
             data: {
                 purchase_id: purchase.id,
                 item_id: medicineItem.id,
-                quantity: 1,
+                quantity: 1000,
                 unit: "BOTTLE",
-                base_quantity: 1,
+                base_quantity: 1000,
                 unit_price: 50,
-                total_price: 50,
+                total_price: 50000,
             },
         });
         purchaseItemId = purchaseItem.id;
@@ -110,9 +110,15 @@ describe("ConsumptionService", () => {
         // Simulate a prior transfer having landed 25 BAG at this house.
         await prisma.stockLedger.create({
             data: {
-                item_id: feedItemId, quantity: 25, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: houseId,
+                item_id: feedItemId,
+                quantity: 25,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: houseId,
             },
         });
 
@@ -164,29 +170,44 @@ describe("ConsumptionService", () => {
         expect(ledgerEntry?.location_type).toBeNull();
     });
 
-    test("coded draws no longer track per-unit quantity: repeated draws stay IN_USE", async () => {
-        // ponytail: qty columns were dropped, so there is no per-unit remaining/overdraw
-        // guard and no auto-CONSUMED. A unit just stays IN_USE until manually consumed/disposed.
-        const [unit] = await StockUnitService.provision(1);
-        createdStockUnitIds.push(unit!.id);
-        await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
-        await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
-
-        for (const qty of [40, 40]) {
-            const consumption = await ConsumptionService.create({
+    test("a coded draw can't take more than is left in its unit or its lot", async () => {
+        const lot = await prisma.purchaseItem.create({
+            data: {
+                purchase_id: purchaseId,
+                item_id: medicineItemId,
+                quantity: 2,
+                unit: "BOTTLE",
+                base_quantity: 2,
+                unit_price: 50,
+                total_price: 100,
+                unit_count: 2,
+            },
+        });
+        const units = await StockUnitService.provision(2);
+        createdStockUnitIds.push(...units.map((u) => u.id));
+        for (const u of units) {
+            await StockUnitService.bind(u.id, { purchase_item_id: lot.id });
+            await StockUnitService.relocate(u.id, houseId, crypto.randomUUID());
+        }
+        const draw = (unitId: string, quantity: number) =>
+            ConsumptionService.create({
                 house_id: houseId,
                 item_id: medicineItemId,
-                stock_unit_id: unit!.id,
-                quantity: qty,
+                stock_unit_id: unitId,
+                quantity,
                 unit: "BOTTLE",
                 date: new Date(),
                 recorded_by_id: profileId,
             });
-            createdConsumptionIds.push(consumption!.id);
-        }
 
-        const updatedUnit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
-        expect(updatedUnit.status).toBe("IN_USE");
+        // each unit is 1 bottle (2 / unit_count 2)
+        createdConsumptionIds.push((await draw(units[0]!.id, 0.6))!.id);
+        await expect(draw(units[0]!.id, 0.5)).rejects.toMatchObject({ status: 409 });
+        createdConsumptionIds.push((await draw(units[0]!.id, 0.4))!.id);
+        expect(
+            (await prisma.stockUnit.findUniqueOrThrow({ where: { id: units[0]!.id } })).status,
+        ).toBe("IN_USE");
+        await expect(draw(units[1]!.id, 1.5)).rejects.toMatchObject({ status: 409 });
     });
 
     test("a coded draw naming another item's unit is refused, and nothing is written", async () => {
@@ -250,13 +271,21 @@ describe("ConsumptionService", () => {
             });
 
         // never moved: it is still in the warehouse
-        await expect(draw()).rejects.toMatchObject({ status: 409, message: expect.stringContaining("warehouse") });
+        await expect(draw()).rejects.toMatchObject({
+            status: 409,
+            message: expect.stringContaining("warehouse"),
+        });
 
         // moved into another house: still not here
-        const other = await prisma.houses.create({ data: { name: "Other", type: "BROODER", number: houseNumber() } });
+        const other = await prisma.houses.create({
+            data: { name: "Other", type: "BROODER", number: houseNumber() },
+        });
         try {
             await StockUnitService.relocate(unit!.id, other.id, crypto.randomUUID());
-            await expect(draw()).rejects.toMatchObject({ status: 409, message: expect.stringContaining("Other") });
+            await expect(draw()).rejects.toMatchObject({
+                status: 409,
+                message: expect.stringContaining("Other"),
+            });
 
             // moved here: now it can be used, and nothing was written by the refused draws
             await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
@@ -292,9 +321,15 @@ describe("ConsumptionService", () => {
         // Simulate a prior transfer having landed 5 BAG at this house.
         await prisma.stockLedger.create({
             data: {
-                item_id: feedItemId, quantity: 5, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: houseId,
+                item_id: feedItemId,
+                quantity: 5,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: houseId,
             },
         });
 
@@ -308,7 +343,12 @@ describe("ConsumptionService", () => {
         });
         createdConsumptionIds.push(consumption!.id);
 
-        const { consumptions } = await ConsumptionService.getAll({ page: 1, limit: 100 });
+        // Scoped to this house: the shared dev database holds far more than one page of consumption.
+        const { consumptions } = await ConsumptionService.getAll({
+            page: 1,
+            limit: 100,
+            house_id: houseId,
+        });
         const found = consumptions.find((c) => c.id === consumption!.id);
         expect(found).toBeDefined();
         expect(found!.item.name).toBe(
@@ -319,6 +359,7 @@ describe("ConsumptionService", () => {
         const { consumptions: inRange } = await ConsumptionService.getAll({
             page: 1,
             limit: 100,
+            house_id: houseId,
             occurred_from: new Date("2026-01-01T00:00:00Z"),
             occurred_to: new Date("2026-01-31T00:00:00Z"),
         });
@@ -327,6 +368,7 @@ describe("ConsumptionService", () => {
         const { consumptions: outOfRange } = await ConsumptionService.getAll({
             page: 1,
             limit: 100,
+            house_id: houseId,
             occurred_from: new Date("2026-02-01T00:00:00Z"),
         });
         expect(outOfRange.some((c) => c.id === consumption!.id)).toBe(false);
@@ -350,9 +392,15 @@ describe("ConsumptionService", () => {
         // Simulate a prior transfer having landed 100 KG (2 BAG) at this house.
         await prisma.stockLedger.create({
             data: {
-                item_id: kgItem.id, quantity: 100, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: houseId,
+                item_id: kgItem.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: houseId,
             },
         });
 
@@ -480,7 +528,11 @@ describe("ConsumptionService aggregate house-balance validation", () => {
         });
         createdItemIds.push(item.id);
         const house = await prisma.houses.create({
-            data: { name: "House Balance Test House", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+            data: {
+                name: "House Balance Test House",
+                type: "GROWER",
+                number: Math.floor(Math.random() * 100000),
+            },
         });
         createdHouseIds.push(house.id);
 
@@ -507,16 +559,26 @@ describe("ConsumptionService aggregate house-balance validation", () => {
         });
         createdItemIds.push(item.id);
         const house = await prisma.houses.create({
-            data: { name: "House Balance Ok Test House", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+            data: {
+                name: "House Balance Ok Test House",
+                type: "GROWER",
+                number: Math.floor(Math.random() * 100000),
+            },
         });
         createdHouseIds.push(house.id);
 
         // Simulate a prior transfer having landed 50 G at this house.
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 50, direction: "IN", reason: "TRANSFER",
-                ref_type: "TRANSFER", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: house.id,
+                item_id: item.id,
+                quantity: 50,
+                direction: "IN",
+                reason: "TRANSFER",
+                ref_type: "TRANSFER",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: house.id,
             },
         });
 

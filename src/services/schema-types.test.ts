@@ -22,18 +22,34 @@ describe("column types and keys", () => {
 
     test("a house number is unique within a type, but may repeat across types", async () => {
         const n = houseNumber();
-        const brooder = await HouseService.create({ name: "Dup Brooder", type: "BROODER", number: n });
+        const brooder = await HouseService.create({
+            name: "Dup Brooder",
+            type: "BROODER",
+            number: n,
+        });
         houseIds.push(brooder.id);
 
         // Brooder 1 and Grower 1 are different sheds on this farm...
-        const grower = await HouseService.create({ name: "Same number, other type", type: "GROWER", number: n });
+        const grower = await HouseService.create({
+            name: "Same number, other type",
+            type: "GROWER",
+            number: n,
+        });
         houseIds.push(grower.id);
 
         // ...but two Brooder Ns are not, whether created or renumbered into.
-        await expect(HouseService.create({ name: "Dup again", type: "BROODER", number: n })).rejects.toMatchObject({ status: 409 });
-        const other = await HouseService.create({ name: "Other", type: "BROODER", number: houseNumber() });
+        await expect(
+            HouseService.create({ name: "Dup again", type: "BROODER", number: n }),
+        ).rejects.toMatchObject({ status: 409 });
+        const other = await HouseService.create({
+            name: "Other",
+            type: "BROODER",
+            number: houseNumber(),
+        });
         houseIds.push(other.id);
-        await expect(HouseService.update(other.id, { number: n })).rejects.toMatchObject({ status: 409 });
+        await expect(HouseService.update(other.id, { number: n })).rejects.toMatchObject({
+            status: 409,
+        });
         // Changing the type into a free slot is fine.
         await HouseService.update(other.id, { type: "LAYER" });
     });
@@ -48,21 +64,38 @@ describe("column types and keys", () => {
             { typname: "IngestStatus", labels: ["PENDING", "CONFIRMED", "DISMISSED"] },
         ]);
         // A value outside the enum can't be stored, even by hand.
-        await refused(() => prisma.$executeRaw`UPDATE "IngestedSale" SET status = 'BOGUS'::"IngestStatus" WHERE false`);
+        await refused(
+            () =>
+                prisma.$executeRaw`UPDATE "IngestedSale" SET status = 'BOGUS'::"IngestStatus" WHERE false`,
+        );
     });
 
     test("a purchase has to name its warehouse", async () => {
-        const profile = await prisma.profiles.findFirstOrThrow({ where: { role: "ADMIN" }, select: { id: true } });
+        const profile = await prisma.profiles.findFirstOrThrow({
+            where: { role: "ADMIN" },
+            select: { id: true },
+        });
         await refused(() =>
             prisma.purchase.create({
-                data: { purchase_date: new Date(), total_amount: 1, paid_amount: 1, due_amount: 0, recorded_by_id: profile.id } as never,
+                data: {
+                    purchase_date: new Date(),
+                    total_amount: 1,
+                    paid_amount: 1,
+                    due_amount: 0,
+                    recorded_by_id: profile.id,
+                } as never,
             }),
         );
     });
 
     test("a per-unit cost keeps its fractions of a taka", async () => {
         const item = await prisma.item.create({
-            data: { name: `Cost Item ${crypto.randomUUID()}`, normalized_key: `cost item ${crypto.randomUUID()}`, category: "MEDICINE", unit: "G" },
+            data: {
+                name: `Cost Item ${crypto.randomUUID()}`,
+                normalized_key: `cost item ${crypto.randomUUID()}`,
+                category: "MEDICINE",
+                unit: "G",
+            },
         });
         itemIds.push(item.id);
         const row = await prisma.stockLedger.create({
@@ -77,7 +110,11 @@ describe("column types and keys", () => {
                 unit_cost: "0.0125", // a gram of a bulk medicine; Decimal(10,2) stored this as 0.01
             },
         });
-        expect((await prisma.stockLedger.findUniqueOrThrow({ where: { id: row.id } })).unit_cost?.toString()).toBe("0.0125");
+        expect(
+            (
+                await prisma.stockLedger.findUniqueOrThrow({ where: { id: row.id } })
+            ).unit_cost?.toString(),
+        ).toBe("0.0125");
     });
 
     test("an alert keeps the time it was issued and resolved, not just the date", async () => {

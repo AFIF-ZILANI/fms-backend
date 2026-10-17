@@ -34,11 +34,19 @@ describe("TransferService", () => {
         });
         createdWarehouseIds.push(warehouse.id);
         const house = await prisma.houses.create({
-            data: { name: "Transfer Test House", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+            data: {
+                name: "Transfer Test House",
+                type: "GROWER",
+                number: Math.floor(Math.random() * 100000),
+            },
         });
         createdHouseIds.push(house.id);
         const houseTwo = await prisma.houses.create({
-            data: { name: "Transfer Test House Two", type: "GROWER", number: Math.floor(Math.random() * 100000) },
+            data: {
+                name: "Transfer Test House Two",
+                type: "GROWER",
+                number: Math.floor(Math.random() * 100000),
+            },
         });
         createdHouseIds.push(houseTwo.id);
         const profile = await prisma.profiles.create({
@@ -56,9 +64,15 @@ describe("TransferService", () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
-                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "WAREHOUSE", location_id: warehouse.id,
+                item_id: item.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE",
+                location_id: warehouse.id,
             },
         });
         const move = () =>
@@ -90,9 +104,15 @@ describe("TransferService", () => {
         const { item, warehouse, profile } = await makeFixtures();
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
-                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "WAREHOUSE", location_id: warehouse.id,
+                item_id: item.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE",
+                location_id: warehouse.id,
             },
         });
 
@@ -117,9 +137,15 @@ describe("TransferService", () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
-                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "WAREHOUSE", location_id: warehouse.id,
+                item_id: item.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "WAREHOUSE",
+                location_id: warehouse.id,
             },
         });
 
@@ -153,9 +179,15 @@ describe("TransferService", () => {
         const { item, house, houseTwo, profile } = await makeFixtures();
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
-                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: house.id,
+                item_id: item.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: house.id,
             },
         });
 
@@ -186,9 +218,15 @@ describe("TransferService", () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.stockLedger.create({
             data: {
-                item_id: item.id, quantity: 100, direction: "IN", reason: "PURCHASE",
-                ref_type: "PURCHASE", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
-                location_type: "HOUSE", location_id: house.id,
+                item_id: item.id,
+                quantity: 100,
+                direction: "IN",
+                reason: "PURCHASE",
+                ref_type: "PURCHASE",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+                location_type: "HOUSE",
+                location_id: house.id,
             },
         });
 
@@ -286,7 +324,13 @@ describe("TransferService", () => {
     test("rejects a unit that isn't usable for the item", async () => {
         const { item, warehouse, house, profile } = await makeFixtures();
         await prisma.itemUnit.create({
-            data: { item_id: item.id, unit: "BAG", factor_to_base: 25000, is_purchasable: true, is_usable: false },
+            data: {
+                item_id: item.id,
+                unit: "BAG",
+                factor_to_base: 25000,
+                is_purchasable: true,
+                is_usable: false,
+            },
         });
         await expect(
             TransferService.create({

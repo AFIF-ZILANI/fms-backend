@@ -21,7 +21,8 @@ let warehouseId: string;
 const saleIds: string[] = [];
 const purchaseIds: string[] = [];
 
-const balance = async () => (await PaymentInstrumentService.getBalance(walletId)).balance.toNumber();
+const balance = async () =>
+    (await PaymentInstrumentService.getBalance(walletId)).balance.toNumber();
 const sale = (over: Record<string, unknown> = {}) =>
     SaleService.create({
         sale_date: new Date(),
@@ -34,18 +35,62 @@ const sale = (over: Record<string, unknown> = {}) =>
 
 describe("paid when recorded", () => {
     beforeAll(async () => {
-        profileId = (await prisma.profiles.create({ data: { name: "Paid At Create", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" } })).id;
-        walletId = (await prisma.paymentInstrument.create({ data: { owner_type: "ADMIN", owner_id: profileId, type: "CASH", label: "Paid-at-create wallet" } })).id;
-        itemId = (await prisma.item.create({ data: { name: `PAC Item ${crypto.randomUUID()}`, normalized_key: `pac item ${crypto.randomUUID()}`, category: "FEED", unit: "BAG" } })).id;
+        profileId = (
+            await prisma.profiles.create({
+                data: {
+                    name: "Paid At Create",
+                    mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                    role: "ADMIN",
+                },
+            })
+        ).id;
+        walletId = (
+            await prisma.paymentInstrument.create({
+                data: {
+                    owner_type: "ADMIN",
+                    owner_id: profileId,
+                    type: "CASH",
+                    label: "Paid-at-create wallet",
+                },
+            })
+        ).id;
+        itemId = (
+            await prisma.item.create({
+                data: {
+                    name: `PAC Item ${crypto.randomUUID()}`,
+                    normalized_key: `pac item ${crypto.randomUUID()}`,
+                    category: "FEED",
+                    unit: "BAG",
+                },
+            })
+        ).id;
         warehouseId = await sharedWarehouseId();
         await seedStock(itemId, warehouseId, 1000);
-        houseId = (await prisma.houses.create({ data: { name: "PAC House", type: "GROWER", number: houseNumber() } })).id;
-        batchId = (await prisma.batches.create({ data: { batch_code: `PAC-${crypto.randomUUID()}`, breed: "CLASSIC", expected_selling_date: new Date(Date.now() + 30 * 86_400_000), initial_chick_count: 200, init_chicks_avg_wt: 40 } })).id;
-        await prisma.batchHouseBalance.create({ data: { batch_id: batchId, house_id: houseId, quantity: 200 } });
+        houseId = (
+            await prisma.houses.create({
+                data: { name: "PAC House", type: "GROWER", number: houseNumber() },
+            })
+        ).id;
+        batchId = (
+            await prisma.batches.create({
+                data: {
+                    batch_code: `PAC-${crypto.randomUUID()}`,
+                    breed: "CLASSIC",
+                    expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
+                    initial_chick_count: 200,
+                    init_chicks_avg_wt: 40,
+                },
+            })
+        ).id;
+        await prisma.batchHouseBalance.create({
+            data: { batch_id: batchId, house_id: houseId, quantity: 200 },
+        });
     });
 
     afterAll(async () => {
-        await prisma.payment.deleteMany({ where: { OR: [{ from_instrument_id: walletId }, { to_instrument_id: walletId }] } });
+        await prisma.payment.deleteMany({
+            where: { OR: [{ from_instrument_id: walletId }, { to_instrument_id: walletId }] },
+        });
         await prisma.birdSale.deleteMany({ where: { batch_id: batchId } });
         // Children first, or the delete trips a foreign key and the rest of the cleanup never runs.
         await prisma.saleItem.deleteMany({ where: { sale_id: { in: saleIds } } });
@@ -105,17 +150,35 @@ describe("paid when recorded", () => {
         expect((await PaymentService.outstandingForRef("SALE", s!.id)).toNumber()).toBe(60);
 
         const later = (amount: number) =>
-            PaymentService.create({ amount, payment_date: new Date(), ref_type: "SALE", ref_id: s!.id, to_instrument_id: walletId });
+            PaymentService.create({
+                amount,
+                payment_date: new Date(),
+                ref_type: "SALE",
+                ref_id: s!.id,
+                to_instrument_id: walletId,
+            });
         await expect(later(61)).rejects.toMatchObject({ status: 400 });
         await later(60);
         expect((await PaymentService.outstandingForRef("SALE", s!.id)).toNumber()).toBe(0);
     });
 
     test("an inactive or unknown account is refused", async () => {
-        const dead = await prisma.paymentInstrument.create({ data: { owner_type: "ADMIN", owner_id: profileId, type: "CASH", label: "PAC dead wallet", is_active: false } });
+        const dead = await prisma.paymentInstrument.create({
+            data: {
+                owner_type: "ADMIN",
+                owner_id: profileId,
+                type: "CASH",
+                label: "PAC dead wallet",
+                is_active: false,
+            },
+        });
         try {
-            await expect(sale({ paid_amount: 5, paid_to_instrument_id: dead.id })).rejects.toMatchObject({ status: 400 });
-            await expect(sale({ paid_amount: 5, paid_to_instrument_id: crypto.randomUUID() })).rejects.toMatchObject({ status: 400 });
+            await expect(
+                sale({ paid_amount: 5, paid_to_instrument_id: dead.id }),
+            ).rejects.toMatchObject({ status: 400 });
+            await expect(
+                sale({ paid_amount: 5, paid_to_instrument_id: crypto.randomUUID() }),
+            ).rejects.toMatchObject({ status: 400 });
         } finally {
             await prisma.paymentInstrument.deleteMany({ where: { id: dead.id } });
         }
@@ -144,17 +207,48 @@ describe("paid when recorded", () => {
         expect((await PaymentService.outstandingForRef("BIRD_SALE", b!.id)).toNumber()).toBe(80);
 
         await expect(
-            BirdSaleService.create({ batch_id: batchId, house_id: houseId, sale_date: new Date(), grade: "HIGH", birds_count: 1, dholta_in_g: 0, total_katha: 1, total_weight: 2, net_weight: 2, price_per_kg: 10, paid_amount: 5, recorded_by_id: profileId }),
+            BirdSaleService.create({
+                batch_id: batchId,
+                house_id: houseId,
+                sale_date: new Date(),
+                grade: "HIGH",
+                birds_count: 1,
+                dholta_in_g: 0,
+                total_katha: 1,
+                total_weight: 2,
+                net_weight: 2,
+                price_per_kg: 10,
+                paid_amount: 5,
+                recorded_by_id: profileId,
+            }),
         ).rejects.toMatchObject({ status: 400 });
     });
 
     test("a payment names an account: outgoing needs its source, incoming may name only where it landed", async () => {
         const base = { amount: 10, payment_date: "2027-01-01", ref_id: crypto.randomUUID() };
         // Out of the farm: must say where from.
-        expect(createPaymentSchema.safeParse({ ...base, ref_type: "PURCHASE", to_instrument_id: crypto.randomUUID() }).success).toBe(false);
-        expect(createPaymentSchema.safeParse({ ...base, ref_type: "PURCHASE", from_instrument_id: crypto.randomUUID() }).success).toBe(true);
+        expect(
+            createPaymentSchema.safeParse({
+                ...base,
+                ref_type: "PURCHASE",
+                to_instrument_id: crypto.randomUUID(),
+            }).success,
+        ).toBe(false);
+        expect(
+            createPaymentSchema.safeParse({
+                ...base,
+                ref_type: "PURCHASE",
+                from_instrument_id: crypto.randomUUID(),
+            }).success,
+        ).toBe(true);
         // Into the farm: a customer has no account of ours to leave, so naming where it landed is enough.
-        expect(createPaymentSchema.safeParse({ ...base, ref_type: "SALE", to_instrument_id: crypto.randomUUID() }).success).toBe(true);
+        expect(
+            createPaymentSchema.safeParse({
+                ...base,
+                ref_type: "SALE",
+                to_instrument_id: crypto.randomUUID(),
+            }).success,
+        ).toBe(true);
         // Neither side named is meaningless.
         expect(createPaymentSchema.safeParse({ ...base, ref_type: "SALE" }).success).toBe(false);
     });
@@ -162,10 +256,20 @@ describe("paid when recorded", () => {
     test("the database refuses a payment that names no account, or an outgoing one with no source", async () => {
         const row = (over: Record<string, unknown>) =>
             prisma.payment.create({
-                data: { amount: 5, payment_date: new Date(), ref_type: "SALE", ref_id: crypto.randomUUID(), direction: "INCOMING", ...over } as never,
+                data: {
+                    amount: 5,
+                    payment_date: new Date(),
+                    ref_type: "SALE",
+                    ref_id: crypto.randomUUID(),
+                    direction: "INCOMING",
+                    ...over,
+                } as never,
             });
         await expect((async () => row({}))()).rejects.toThrow();
-        await expect((async () => row({ direction: "OUTGOING", ref_type: "PURCHASE", to_instrument_id: walletId }))()).rejects.toThrow();
+        await expect(
+            (async () =>
+                row({ direction: "OUTGOING", ref_type: "PURCHASE", to_instrument_id: walletId }))(),
+        ).rejects.toThrow();
         const ok = await row({ to_instrument_id: walletId });
         await prisma.payment.delete({ where: { id: ok.id } });
     });
