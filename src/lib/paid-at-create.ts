@@ -1,7 +1,7 @@
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 
-type Ref = "SALE" | "BIRD_SALE" | "PURCHASE";
+type Ref = "SALE" | "BIRD_SALE" | "PURCHASE" | "EXPENSE";
 
 /**
  * A sale or purchase can be recorded with money already paid. That cash has to land somewhere the books
@@ -15,11 +15,18 @@ type Ref = "SALE" | "BIRD_SALE" | "PURCHASE";
  */
 
 /** Fail early, before any write, when money was paid but no account was named. */
-export function requirePaidInstrument(paid: Prisma.Decimal, instrument_id: string | undefined, field: string, ref: Ref) {
+export function requirePaidInstrument(
+    paid: Prisma.Decimal,
+    instrument_id: string | undefined,
+    field: string,
+    ref: Ref,
+) {
     if (paid.greaterThan(0) && instrument_id === undefined) {
-        const verb = ref === "PURCHASE" ? "paid from" : "paid into";
+        const verb = ref === "PURCHASE" || ref === "EXPENSE" ? "paid from" : "paid into";
         throw AppError.badRequest(`Say which account this was ${verb}`, {
-            fields: { [field]: `Choose the account the money was ${verb === "paid from" ? "paid from" : "paid into"}` },
+            fields: {
+                [field]: `Choose the account the money was ${verb === "paid from" ? "paid from" : "paid into"}`,
+            },
         });
     }
 }
@@ -27,16 +34,27 @@ export function requirePaidInstrument(paid: Prisma.Decimal, instrument_id: strin
 /** Write the Payment for the amount paid at creation. No-op when nothing was paid. */
 export async function recordPaidAtCreate(
     tx: Prisma.TransactionClient,
-    p: { ref_type: Ref; ref_id: string; amount: Prisma.Decimal; instrument_id: string | undefined; date: Date; actor_id: string },
+    p: {
+        ref_type: Ref;
+        ref_id: string;
+        amount: Prisma.Decimal;
+        instrument_id: string | undefined;
+        date: Date;
+        actor_id: string;
+    },
 ) {
     if (!p.amount.greaterThan(0)) return;
     const instrument = p.instrument_id
-        ? await tx.paymentInstrument.findUnique({ where: { id: p.instrument_id }, select: { is_active: true, label: true } })
+        ? await tx.paymentInstrument.findUnique({
+              where: { id: p.instrument_id },
+              select: { is_active: true, label: true },
+          })
         : null;
     if (!instrument) throw AppError.badRequest("The account named does not exist");
-    if (!instrument.is_active) throw AppError.badRequest(`${instrument.label} is inactive -- pick an active account`);
+    if (!instrument.is_active)
+        throw AppError.badRequest(`${instrument.label} is inactive -- pick an active account`);
 
-    const incoming = p.ref_type !== "PURCHASE";
+    const incoming = p.ref_type === "SALE" || p.ref_type === "BIRD_SALE";
     await tx.payment.create({
         data: {
             amount: p.amount,
@@ -45,7 +63,9 @@ export async function recordPaidAtCreate(
             ref_type: p.ref_type,
             ref_id: p.ref_id,
             // Money in names where it landed; money out names where it came from.
-            ...(incoming ? { to_instrument_id: p.instrument_id! } : { from_instrument_id: p.instrument_id! }),
+            ...(incoming
+                ? { to_instrument_id: p.instrument_id! }
+                : { from_instrument_id: p.instrument_id! }),
             handled_by_id: p.actor_id,
             note: "Paid when recorded",
         },

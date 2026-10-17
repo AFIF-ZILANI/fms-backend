@@ -15,7 +15,8 @@ export const createBirdSaleSchema = z
         // see full-schema-analysis.md: don't touch business meaning we
         // don't have full context on.
         dholta_in_g: z.coerce.number().nonnegative(),
-        total_katha: z.coerce.number().int().nonnegative(),
+        // crates; fractional when the last crate is part-filled and wasn't rounded
+        total_katha: z.coerce.number().nonnegative(),
         avg_wt_per_katha_kg: z.coerce.number().positive().optional(),
         total_weight: z.coerce.number().positive("Total weight must be positive"),
         net_weight: z.coerce.number().positive("Net weight must be positive"),
@@ -27,7 +28,19 @@ export const createBirdSaleSchema = z
         // optional, not .default(0): a default makes the parsed output type
         // required, which would force every in-process caller to pass it.
         discount_amount: z.coerce.number().nonnegative().optional(),
+        // Outside help hired for the loading (catchers, carriers). Booked as a DIRECT LABOR expense on
+        // the batch in the same transaction, and paid from labour_paid_from_instrument_id when given.
+        labour_cost: z.coerce.number().positive().optional(),
+        labour_paid_from_instrument_id: z.string().uuid().optional(),
     })
+    .refine(
+        (data) =>
+            data.labour_cost !== undefined || data.labour_paid_from_instrument_id === undefined,
+        {
+            message: "Enter the labour cost before saying which account paid it",
+            path: ["labour_cost"],
+        },
+    )
     .refine(
         (data) =>
             data.male_count === undefined ||

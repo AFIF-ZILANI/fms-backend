@@ -1274,7 +1274,7 @@ model BirdSale {
   female_count        Int?
   birds_count         Int
   dholta_in_g         Decimal    @db.Decimal(10, 2)
-  total_katha         Int
+  total_katha         Decimal    @db.Decimal(10, 2) // crates; fractional when the last crate is part-filled and the operator didn't round
   avg_wt_per_katha_kg Decimal?   @db.Decimal(10, 2)
   total_weight        Decimal    @db.Decimal(10, 2)
   net_weight          Decimal    @db.Decimal(10, 2)

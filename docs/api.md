@@ -963,9 +963,14 @@ of only three things allowed to (with `MortalityLog` and
   male_count?, female_count?, birds_count,
   dholta_in_g, total_katha, avg_wt_per_katha_kg?,
   total_weight, net_weight, avg_weight_g?,
-  price_per_kg, paid_amount? (default 0), recorded_by_id
+  price_per_kg, paid_amount? (default 0), paid_to_instrument_id?,
+  discount_amount?, labour_cost?, labour_paid_from_instrument_id?
 }
 ```
+`total_katha` is the crate count and may be fractional (a part-filled last
+crate the operator didn't round). `labour_cost` books a DIRECT `LABOR`
+expense on the batch in the same transaction, paid from
+`labour_paid_from_instrument_id` when given (400 if that is sent without a cost).
 **Only `total_amount` (`= net_weight × price_per_kg`) and `due_amount` are
 server-computed.** Every regional field (`dholta_in_g`, `total_katha`,
 `avg_wt_per_katha_kg`, `avg_weight_g`) is stored exactly as sent — the API

@@ -62,7 +62,7 @@ export const confirmIngestedSchema = z
     male_count: z.coerce.number().int().nonnegative().optional(),
     female_count: z.coerce.number().int().nonnegative().optional(),
     dholta_in_g: z.coerce.number().nonnegative(),
-    total_katha: z.coerce.number().int().nonnegative(),
+    total_katha: z.coerce.number().nonnegative(),
     avg_wt_per_katha_kg: z.coerce.number().positive().optional(),
     total_weight: z.coerce.number().positive(),
     net_weight: z.coerce.number().positive(),

@@ -43,7 +43,14 @@ describe("BirdSaleService", () => {
     });
 
     afterAll(async () => {
-        await prisma.payment.deleteMany({ where: { ref_id: { in: createdSaleIds } } });
+        const labour = await prisma.expense.findMany({
+            where: { batch_id: { in: createdBatchIds } },
+            select: { id: true },
+        });
+        await prisma.payment.deleteMany({
+            where: { ref_id: { in: [...createdSaleIds, ...labour.map((e) => e.id)] } },
+        });
+        await prisma.expense.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
         await prisma.birdSale.deleteMany({ where: { id: { in: createdSaleIds } } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
         await prisma.batchHouseAllocation.deleteMany({
@@ -80,6 +87,72 @@ describe("BirdSaleService", () => {
             where: { batch_id_house_id: { batch_id: batch.id, house_id: houseId } },
         });
         expect(balance?.quantity).toBe(800);
+    });
+
+    test("a part-filled last crate is stored as a fractional crate count", async () => {
+        const batch = await newRunningBatch(100);
+        const sale = await BirdSaleService.create({
+            batch_id: batch.id,
+            house_id: houseId,
+            sale_date: new Date(),
+            grade: "HIGH",
+            birds_count: 50,
+            dholta_in_g: 400,
+            total_katha: 6.25,
+            total_weight: 100,
+            net_weight: 97.5,
+            price_per_kg: 200,
+            paid_amount: 0,
+            recorded_by_id: profileId,
+        });
+        createdSaleIds.push(sale!.id);
+        expect(sale!.total_katha.toNumber()).toBe(6.25);
+    });
+
+    test("labour_cost books a DIRECT LABOR expense on the batch, paid from the account given", async () => {
+        const batch = await newRunningBatch(100);
+        const account = await sharedInstrumentId();
+        const sale = await BirdSaleService.create({
+            batch_id: batch.id,
+            house_id: houseId,
+            sale_date: new Date(),
+            grade: "LOW",
+            birds_count: 20,
+            dholta_in_g: 0,
+            total_katha: 2,
+            total_weight: 30,
+            net_weight: 30,
+            price_per_kg: 180,
+            paid_amount: 0,
+            labour_cost: 1200,
+            labour_paid_from_instrument_id: account,
+            recorded_by_id: profileId,
+        });
+        createdSaleIds.push(sale!.id);
+        const [expense] = await prisma.expense.findMany({ where: { batch_id: batch.id } });
+        expect(expense).toMatchObject({ category: "LABOR", cost_type: "DIRECT" });
+        expect(expense!.amount.toNumber()).toBe(1200);
+        const paid = await prisma.payment.findFirstOrThrow({
+            where: { ref_type: "EXPENSE", ref_id: expense!.id },
+        });
+        expect(paid).toMatchObject({ direction: "OUTGOING", from_instrument_id: account });
+    });
+
+    test("labour paid from an account with no labour cost is refused by the validator", () => {
+        const r = createBirdSaleSchema.safeParse({
+            batch_id: crypto.randomUUID(),
+            house_id: crypto.randomUUID(),
+            sale_date: "2026-10-01",
+            grade: "HIGH",
+            birds_count: 1,
+            dholta_in_g: 0,
+            total_katha: 1,
+            total_weight: 1,
+            net_weight: 1,
+            price_per_kg: 1,
+            labour_paid_from_instrument_id: crypto.randomUUID(),
+        });
+        expect(r.success).toBe(false);
     });
 
     test("selling more birds than the house balance throws a conflict and doesn't write a row", async () => {

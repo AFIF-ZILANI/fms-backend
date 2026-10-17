@@ -112,7 +112,12 @@ export const BirdSaleService = {
                 "paid_amount and discount cannot exceed the computed total_amount",
             );
         }
-        requirePaidInstrument(paid_amount, data.paid_to_instrument_id, "paid_to_instrument_id", "BIRD_SALE");
+        requirePaidInstrument(
+            paid_amount,
+            data.paid_to_instrument_id,
+            "paid_to_instrument_id",
+            "BIRD_SALE",
+        );
 
         // One conditional UPDATE is the guard and the decrement (see MortalityLog).
         const { count } = await tx.batchHouseBalance.updateMany({
@@ -162,6 +167,30 @@ export const BirdSaleService = {
             date: data.sale_date,
             actor_id: data.recorded_by_id,
         });
+
+        if (data.labour_cost !== undefined) {
+            const labour = await tx.expense.create({
+                data: {
+                    batch_id: data.batch_id,
+                    category: "LABOR",
+                    cost_type: "DIRECT",
+                    amount: data.labour_cost,
+                    date: data.sale_date,
+                    remarks: `Loading labour for bird sale ${birdSale.id.slice(0, 8)} (${data.birds_count} birds)`,
+                    recorded_by_id: data.recorded_by_id,
+                },
+            });
+            await recordPaidAtCreate(tx, {
+                ref_type: "EXPENSE",
+                ref_id: labour.id,
+                amount: data.labour_paid_from_instrument_id
+                    ? new Prisma.Decimal(data.labour_cost)
+                    : new Prisma.Decimal(0),
+                instrument_id: data.labour_paid_from_instrument_id,
+                date: data.sale_date,
+                actor_id: data.recorded_by_id,
+            });
+        }
 
         await markEmptiedHousesCleaning(tx, [data.house_id]);
 
