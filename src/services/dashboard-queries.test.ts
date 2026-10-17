@@ -26,8 +26,6 @@ describe("dashboard and summary queries", () => {
         actorId = actor.id;
         const instrument = await prisma.paymentInstrument.create({
             data: {
-                owner_type: "ADMIN",
-                owner_id: actorId,
                 type: "MFS",
                 label: "Dash wallet",
                 mfs_type: "BKASH",
@@ -39,7 +37,11 @@ describe("dashboard and summary queries", () => {
     });
 
     afterAll(async () => {
-        await prisma.payment.deleteMany({ where: { from_instrument_id: instrumentId } });
+        await prisma.payment.deleteMany({
+            where: {
+                OR: [{ from_instrument_id: instrumentId }, { to_instrument_id: instrumentId }],
+            },
+        });
         await prisma.paymentInstrument.deleteMany({ where: { id: instrumentId } });
         await prisma.expense.deleteMany({ where: { id: { in: expenseIds } } });
         await prisma.expenseCategoryLookup.deleteMany({ where: { code: CATEGORY } });
@@ -78,7 +80,7 @@ describe("dashboard and summary queries", () => {
             payment_date: new Date(),
             ref_type: "SALE",
             ref_id: sale.id,
-            from_instrument_id: instrumentId,
+            to_instrument_id: instrumentId,
         });
         await PaymentService.create({
             amount: 70,
@@ -183,7 +185,7 @@ describe("dashboard and summary queries", () => {
             payment_date: new Date(),
             ref_type: "SALE",
             ref_id: sale.id,
-            from_instrument_id: instrumentId,
+            to_instrument_id: instrumentId,
         });
 
         const all = await SaleService.summary({} as never);

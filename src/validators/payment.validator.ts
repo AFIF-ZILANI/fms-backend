@@ -18,27 +18,48 @@ const OUTGOING_REFS = ["PURCHASE", "EXPENSE"];
 
 export const createPaymentSchema = z
     .object({
-    amount: z.coerce.number().positive("Amount must be positive"),
-    payment_date: z.coerce.date(),
-    // ref_id is a polymorphic reference (resolved via ref_type), not a real
-    // FK -- same pattern as StockLedger.ref_type/ref_id. Not validated
-    // against the target table.
-    ref_type: creatableRefType,
-    ref_id: z.string().uuid(),
-    // Where the money came from / where it landed. Either can be untracked (a customer paying us has no
-    // instrument of ours to leave), but a payment names at least one, and one going out names its source.
-    from_instrument_id: z.string().uuid().optional(),
-    to_instrument_id: z.string().uuid().optional(),
-    transaction_ref: z.string().optional(),
-    note: z.string().optional(),
+        amount: z.coerce.number().positive("Amount must be positive"),
+        payment_date: z.coerce.date(),
+        // ref_id is a polymorphic reference (resolved via ref_type), not a real
+        // FK -- same pattern as StockLedger.ref_type/ref_id. Not validated
+        // against the target table.
+        ref_type: creatableRefType,
+        ref_id: z.string().uuid(),
+        // The farm account on the side the money moved: money in names where it landed (to_instrument_id),
+        // money out names where it left from (from_instrument_id). Never both -- the other party is on the bill.
+        from_instrument_id: z.string().uuid().optional(),
+        to_instrument_id: z.string().uuid().optional(),
+        transaction_ref: z.string().optional(),
+        note: z.string().optional(),
     })
-    .refine(
-        (d) => !OUTGOING_REFS.includes(d.ref_type) || d.from_instrument_id !== undefined,
-        { message: "Say which account this was paid from", path: ["from_instrument_id"] },
-    )
-    .refine((d) => d.from_instrument_id !== undefined || d.to_instrument_id !== undefined, {
-        message: "Name the account the money left or the one it landed in",
-        path: ["to_instrument_id"],
+    .superRefine((d, ctx) => {
+        if (OUTGOING_REFS.includes(d.ref_type)) {
+            if (d.from_instrument_id === undefined)
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["from_instrument_id"],
+                    message: "Say which account this was paid from",
+                });
+            if (d.to_instrument_id !== undefined)
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["to_instrument_id"],
+                    message: "Money paid out names only the account it left",
+                });
+        } else {
+            if (d.to_instrument_id === undefined)
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["to_instrument_id"],
+                    message: "Say which account this was received into",
+                });
+            if (d.from_instrument_id !== undefined)
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["from_instrument_id"],
+                    message: "Money received names only the account it landed in",
+                });
+        }
     });
 
 export const listPaymentsQuerySchema = paginationQuerySchema.extend({

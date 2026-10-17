@@ -12,8 +12,6 @@ describe("PaymentInstrumentService", () => {
 
     test("create then getById round-trips", async () => {
         const instrument = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "BANK_TRANSFER",
             label: "Farm Main Account",
             bank_name: "City Bank",
@@ -27,8 +25,6 @@ describe("PaymentInstrumentService", () => {
 
     test("remove hard-deletes an unused instrument", async () => {
         const instrument = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "CASH",
             label: `Typo Wallet ${crypto.randomUUID()}`,
         });
@@ -40,8 +36,6 @@ describe("PaymentInstrumentService", () => {
 
     test("remove refuses an instrument with payment history", async () => {
         const instrument = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "CASH",
             label: `Used Wallet ${crypto.randomUUID()}`,
         });
@@ -56,7 +50,7 @@ describe("PaymentInstrumentService", () => {
                 direction: "INCOMING",
                 ref_type: "SALE",
                 ref_id: crypto.randomUUID(),
-                from_instrument_id: instrument.id,
+                to_instrument_id: instrument.id,
             },
         });
 
@@ -72,8 +66,6 @@ describe("PaymentInstrumentService", () => {
 
     test("once money has moved through an instrument its account can't be repointed", async () => {
         const instrument = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "BANK_TRANSFER",
             label: `Locked Bank ${crypto.randomUUID()}`,
             account_no: "1111111111",
@@ -116,8 +108,6 @@ describe("PaymentInstrumentService", () => {
 
     test("setActive toggles is_active", async () => {
         const instrument = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "CASH",
             label: "Petty Cash",
         });
@@ -129,8 +119,6 @@ describe("PaymentInstrumentService", () => {
 
     test("getBalance with no payments returns zero", async () => {
         const instrument = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "CASH",
             label: "Empty Account",
         });

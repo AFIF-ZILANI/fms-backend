@@ -73,8 +73,6 @@ describe("festival bonus", () => {
         profileIds.push(actor.id);
         const instrument = await prisma.paymentInstrument.create({
             data: {
-                owner_type: "ADMIN",
-                owner_id: actorId,
                 type: "MFS",
                 label: "Bonus test wallet",
                 mfs_type: "BKASH",

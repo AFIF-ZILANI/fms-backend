@@ -11,8 +11,6 @@ import type {
 export const PaymentInstrumentService = {
     async getAll(query: ListPaymentInstrumentsQuery) {
         const where = {
-            ...(query.owner_type !== undefined && { owner_type: query.owner_type }),
-            ...(query.owner_id !== undefined && { owner_id: query.owner_id }),
             ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
         };
         const [instruments, total] = await Promise.all([
@@ -35,8 +33,6 @@ export const PaymentInstrumentService = {
     async create(data: CreatePaymentInstrumentInput) {
         return prisma.paymentInstrument.create({
             data: {
-                owner_type: data.owner_type,
-                owner_id: data.owner_id,
                 type: data.type,
                 label: data.label,
                 ...(data.bank_name !== undefined && { bank_name: data.bank_name }),
@@ -65,7 +61,10 @@ export const PaymentInstrumentService = {
         const changesIdentity =
             (account_no !== undefined && account_no !== instrument.account_no) ||
             (mobile_no !== undefined && mobile_no !== instrument.mobile_no);
-        if (changesIdentity && instrument._count.payments_from + instrument._count.payments_to > 0) {
+        if (
+            changesIdentity &&
+            instrument._count.payments_from + instrument._count.payments_to > 0
+        ) {
             throw AppError.conflict(
                 "This account has payment history -- create a new instrument and deactivate this one",
             );

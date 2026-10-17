@@ -55,8 +55,6 @@ describe("Payout APIs", () => {
 
         const instrument = await prisma.paymentInstrument.create({
             data: {
-                owner_type: "ADMIN",
-                owner_id: approverId,
                 type: "MFS",
                 label: "Test payroll wallet",
                 mfs_type: "BKASH",

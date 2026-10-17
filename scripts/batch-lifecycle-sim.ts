@@ -149,7 +149,6 @@ const brooder = await prisma.houses.findFirstOrThrow({ where: { type: "BROODER",
 const grower = await prisma.houses.findFirstOrThrow({ where: { type: "GROWER", number: CFG.grower } });
 const H = { B: brooder.id, G: grower.id };
 const warehouse = await prisma.warehouses.findFirstOrThrow({ where: { name: "Main Warehouse Kunduna" } });
-const cash = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "Cash", owner_type: "ADMIN" } });
 const bank = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "ZEROD FARMS BANK" } });
 // a house coming out of a previous batch is CLEANING; the operator marks it READY before chicks arrive
 for (const h of [brooder, grower]) {
@@ -759,11 +758,6 @@ check("dashboard: payables rose by exactly the unpaid purchases", d("outstanding
 const simPays = await prisma.payment.findMany({ where: { created_at: { gte: new Date(t0) } } });
 const cashDelta = r2(sum(simPays, (p) => (p.direction === "INCOMING" ? 1 : -1) * Number(p.amount)));
 check("dashboard: cash position moved by Σ(in - out) payments", d("cash_position") === cashDelta, `${d("cash_position")} vs ${cashDelta}`);
-const probeExpense = SIM !== 1 ? null : await must("admin", "POST", "/expenses", { category: "MISC", cost_type: "SHARED_PERIOD", amount: 1, date: T(62, 17), remarks: "SIM probe: pay from an inactive account" }, "probe expense");
-const inactivePay = SIM !== 1 ? { status: 400 } : await api("admin", "POST", "/payments", { amount: 1, payment_date: T(62, 17), ref_type: "EXPENSE", ref_id: probeExpense?.id ?? crypto.randomUUID(), from_instrument_id: cash.id });
-check("probe: payment from an INACTIVE account is refused", inactivePay.status === 400, `status ${inactivePay.status} (purchase/sale paid-at-create refuses inactive accounts; POST /payments does not)`);
-if (inactivePay.status < 300 && SIM === 1)
-    finding("BUG", `POST /payments accepts an inactive payment account ("${cash.label}", is_active=false) that purchase/sale paid-at-create rejects (lib/paid-at-create.ts). The money then drops out of the dashboard cash position, which only sums active instruments -- seen as a 102,000 gap in a first run that paid expenses from it. Added a 1-taka payment to demonstrate.`);
 const topList = (await api("admin", "GET", "/analytics/sales/top-outstanding-customers?limit=10")).data ?? [];
 for (const k of ["A", "B", "C"] as const) {
     let owed = 0;

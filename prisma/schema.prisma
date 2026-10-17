@@ -1325,11 +1325,9 @@ model Payment {
   direction          PaymentType
   ref_type           PaymentRefType
   ref_id             String
-  // Money moves out of from_instrument and into to_instrument. Either side can be untracked: an incoming
-  // payment from a customer has no instrument of ours to leave, so it names only where it landed
-  // (to); an outgoing payment to a supplier whose account isn't tracked names only where it came from
-  // (from). At least one is always set, and an OUTGOING payment always has a source (CHECKs in the
-  // optional_payment_source migration).
+  // Exactly one of the farm's accounts, on the side the money moved: INCOMING names where it landed
+  // (to_instrument), OUTGOING names where it left from (from_instrument); the other side is the
+  // customer/supplier/employee on the bill, never an account here (CHECK Payment_one_farm_account).
   from_instrument_id String?
   from_instrument    PaymentInstrument? @relation("PaymentFrom", fields: [from_instrument_id], references: [id], onDelete: Restrict)
   to_instrument_id   String?
@@ -1345,10 +1343,12 @@ model Payment {
   @@index([to_instrument_id])
 }
 
+/// One of the farm's own accounts: Cash, a bank account, a bKash/Nagad/Rocket wallet. Only the farm's
+/// side of a payment is ever an account here -- who paid us or whom we paid is known from the bill the
+/// payment settles (the sale's customer, the purchase's supplier); employees are paid to their own
+/// EmployeePayoutAccount.
 model PaymentInstrument {
   id         String        @id @default(uuid())
-  owner_type UserRole
-  owner_id   String
   type       PaymentMethod
   label      String
   bank_name  String?

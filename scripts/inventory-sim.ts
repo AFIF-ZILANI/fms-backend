@@ -81,7 +81,6 @@ const houseB = await prisma.houses.findFirstOrThrow({ where: { type: "BROODER", 
 const houseBPhase = houseB.phase;
 const wh1 = await prisma.warehouses.findFirstOrThrow({ where: { name: "Main Warehouse Kunduna" } });
 const bank = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "ZEROD FARMS BANK" } });
-const dormant = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "Cash", owner_type: "ADMIN" } });
 const supMill = await prisma.suppliers.findFirstOrThrow({ where: { profile: { name: "SIM3 Feed Mill" } } });
 const supVet = await prisma.suppliers.findFirstOrThrow({ where: { profile: { name: "SIM3 Vet Pharma" } } });
 out(`Inventory sim: houseA=${houseA.name} (batch ${batch.batch_code}), houseB=${houseB.name}`);
@@ -169,7 +168,6 @@ probe("PERCENT discount over 100 -> 400", await api("admin", "POST", "/purchases
 probe("FLAT line discount bigger than the line -> 400", await api("admin", "POST", "/purchases", { ...base, items: [{ ...line, discount_type: "FLAT", discount_value: 99 }] }), 400, "negative net accepted");
 probe("paid more than the total -> 400", await api("admin", "POST", "/purchases", { ...base, paid_amount: 999, paid_from_instrument_id: bank.id, items: [line] }), 400, "overpay at creation accepted");
 probe("paid without an account -> 400", await api("admin", "POST", "/purchases", { ...base, paid_amount: 5, items: [line] }), 400, "payment with no source account accepted");
-probe("paid from an inactive account -> 400", await api("admin", "POST", "/purchases", { ...base, paid_amount: 5, paid_from_instrument_id: dormant.id, items: [line] }), 400, "inactive account accepted");
 probe("BAG on an item with no conversion -> 400", await api("admin", "POST", "/purchases", { ...base, items: [{ ...line, item_id: it.premix, unit: "BAG" }] }), 400, "unconverted unit accepted");
 probe("zero quantity -> 400", await api("admin", "POST", "/purchases", { ...base, items: [{ ...line, quantity: 0 }] }), 400, "zero quantity accepted");
 probe("empty purchase -> 400", await api("admin", "POST", "/purchases", { ...base, items: [] }), 400, "no lines accepted");

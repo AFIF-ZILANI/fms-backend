@@ -23,14 +23,10 @@ const createdSaleIds: string[] = [];
 describe("PaymentService", () => {
     beforeAll(async () => {
         const from = await PaymentInstrumentService.create({
-            owner_type: "CUSTOMER",
-            owner_id: crypto.randomUUID(),
             type: "CASH",
             label: "Customer Cash",
         });
         const to = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "BANK_TRANSFER",
             label: "Farm Bank",
         });
@@ -123,6 +119,7 @@ describe("PaymentService", () => {
                 OR: [
                     { id: { in: createdPaymentIds } },
                     { from_instrument_id: { in: createdInstrumentIds } },
+                    { to_instrument_id: { in: createdInstrumentIds } },
                 ],
             },
         });
@@ -141,7 +138,6 @@ describe("PaymentService", () => {
             payment_date: new Date(),
             ref_type: "SALE",
             ref_id: saleId,
-            from_instrument_id: fromInstrumentId,
             to_instrument_id: toInstrumentId,
         });
         createdPaymentIds.push(payment!.id);
@@ -153,22 +149,42 @@ describe("PaymentService", () => {
 
     // A real ref with room in its balance, so the request reaches the instrument
     // FK -- which is the thing under test here.
-    test("create with a nonexistent from_instrument_id throws bad-request, not a raw 500", async () => {
+    test("create with a nonexistent account throws bad-request, not a raw 500", async () => {
         await expect(
             PaymentService.create({
                 amount: 100,
                 payment_date: new Date(),
                 ref_type: "SALE",
                 ref_id: saleId,
-                from_instrument_id: "00000000-0000-0000-0000-000000000000",
+                to_instrument_id: "00000000-0000-0000-0000-000000000000",
             }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("a payment names one farm account, on the side the money moved", async () => {
+        const wrong = (body: Partial<Parameters<typeof PaymentService.create>[0]>) =>
+            PaymentService.create({
+                amount: 1,
+                payment_date: new Date(),
+                ref_type: "SALE",
+                ref_id: saleId,
+                ...body,
+            });
+        // money in: only where it landed
+        await expect(wrong({ from_instrument_id: fromInstrumentId })).rejects.toMatchObject({
+            status: 400,
+        });
+        await expect(
+            wrong({ to_instrument_id: toInstrumentId, from_instrument_id: fromInstrumentId }),
+        ).rejects.toMatchObject({ status: 400 });
+        // money out: only where it left from
+        await expect(
+            wrong({ ref_type: "PURCHASE", ref_id: purchaseId, to_instrument_id: toInstrumentId }),
         ).rejects.toMatchObject({ status: 400 });
     });
 
     test("create refuses an inactive account", async () => {
         const dead = await PaymentInstrumentService.create({
-            owner_type: "ADMIN",
-            owner_id: crypto.randomUUID(),
             type: "CASH",
             label: "Dormant Cash",
         });
@@ -223,7 +239,6 @@ describe("PaymentService", () => {
             payment_date: new Date(),
             ref_type: "BIRD_SALE",
             ref_id: refId,
-            from_instrument_id: fromInstrumentId,
             to_instrument_id: toInstrumentId,
         });
         createdPaymentIds.push(payment!.id);
@@ -259,7 +274,7 @@ describe("PaymentService", () => {
                 payment_date: new Date(),
                 ref_type: "SALE",
                 ref_id: id,
-                from_instrument_id: fromInstrumentId,
+                to_instrument_id: toInstrumentId,
             }),
         ).rejects.toThrow("exceeds the outstanding balance");
     });
@@ -272,7 +287,7 @@ describe("PaymentService", () => {
             payment_date: new Date(),
             ref_type: "SALE",
             ref_id: id,
-            from_instrument_id: fromInstrumentId,
+            to_instrument_id: toInstrumentId,
         });
         createdPaymentIds.push(first!.id);
 
@@ -283,7 +298,7 @@ describe("PaymentService", () => {
             payment_date: new Date(),
             ref_type: "SALE",
             ref_id: id,
-            from_instrument_id: fromInstrumentId,
+            to_instrument_id: toInstrumentId,
         });
         createdPaymentIds.push(second!.id);
 
@@ -295,7 +310,7 @@ describe("PaymentService", () => {
                 payment_date: new Date(),
                 ref_type: "SALE",
                 ref_id: id,
-                from_instrument_id: fromInstrumentId,
+                to_instrument_id: toInstrumentId,
             }),
         ).rejects.toThrow("exceeds the outstanding balance");
     });
@@ -308,7 +323,7 @@ describe("PaymentService", () => {
                 payment_date: new Date(),
                 ref_type: "SALE",
                 ref_id: id,
-                from_instrument_id: fromInstrumentId,
+                to_instrument_id: toInstrumentId,
             });
 
         const results = await Promise.allSettled(Array.from({ length: 10 }, pay));
@@ -323,7 +338,7 @@ describe("PaymentService", () => {
                 payment_date: new Date(),
                 ref_type: "SALE",
                 ref_id: crypto.randomUUID(),
-                from_instrument_id: fromInstrumentId,
+                to_instrument_id: toInstrumentId,
             }),
         ).rejects.toThrow("Sale not found");
     });
@@ -336,7 +351,7 @@ describe("PaymentService", () => {
                 payment_date: new Date(),
                 ref_type: "SALE",
                 ref_id: id,
-                from_instrument_id: fromInstrumentId,
+                to_instrument_id: toInstrumentId,
             });
             createdPaymentIds.push(payment!.id);
         }

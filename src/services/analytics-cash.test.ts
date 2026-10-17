@@ -12,8 +12,6 @@ const instrumentIds: string[] = [];
 async function newInstrument(label: string) {
     const i = await prisma.paymentInstrument.create({
         data: {
-            owner_type: "ADMIN",
-            owner_id: ownerId,
             type: "MFS",
             label: `${label} ${crypto.randomUUID()}`,
             mfs_type: "BKASH",
@@ -53,21 +51,24 @@ describe("financialDashboard cash_by_instrument", () => {
         const a = await newInstrument("Cash A");
         const b = await newInstrument("Cash B");
         const idle = await newInstrument("Cash Idle");
-        const pay = (from: string, to: string | null, amount: number) =>
+        // Each payment names one farm account, on the side the money moved.
+        const pay = (direction: "INCOMING" | "OUTGOING", account: string, amount: number) =>
             prisma.payment.create({
                 data: {
                     amount,
                     payment_date: new Date(Date.now() - 400 * 86_400_000),
-                    direction: "OUTGOING",
-                    ref_type: "EXPENSE",
+                    direction,
+                    ref_type: direction === "INCOMING" ? "SALE" : "EXPENSE",
                     ref_id: crypto.randomUUID(),
-                    from_instrument_id: from,
-                    ...(to && { to_instrument_id: to }),
+                    ...(direction === "INCOMING"
+                        ? { to_instrument_id: account }
+                        : { from_instrument_id: account }),
                 },
             });
-        await pay(a, b, 300); // A -> B
-        await pay(b, null, 50); // B out
-        await pay(a, null, 25.5); // A out, with cents
+        await pay("INCOMING", b, 300); // into B
+        await pay("OUTGOING", a, 300); // out of A
+        await pay("OUTGOING", b, 50); // out of B
+        await pay("OUTGOING", a, 25.5); // out of A, with cents
 
         const dash = await AnalyticsService.financialDashboard({});
         for (const id of [a, b, idle]) {

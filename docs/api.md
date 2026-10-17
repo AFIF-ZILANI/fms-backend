@@ -270,8 +270,6 @@ just an untyped string the server trusts:
 
 - `StockLedger.ref_type` + `ref_id`, `Payment.ref_type` + `ref_id` — e.g.
   `ref_type: "PURCHASE", ref_id: "<a Purchase.id>"`.
-- `PaymentInstrument.owner_type` + `owner_id` — e.g.
-  `owner_type: "SUPPLIER", owner_id: "<a Suppliers.id>"`.
 - `Alerts.related_id` — no `related_type`; interpret using `Alerts.type`.
 
 ### 1.14 Enums quick reference
@@ -1360,26 +1358,25 @@ one request instead of one per batch.
 ### 15.1 Payment Instruments
 
 Full CRUD + deactivate/reactivate (own `is_active`, §1.11).
-`owner_type`/`owner_id` is a polymorphic reference (§1.13) — e.g. the farm's
-own bank account has `owner_type: "ADMIN"`, a supplier's account has
-`owner_type: "SUPPLIER", owner_id: <Suppliers.id>`.
+**Every instrument is one of the farm's own accounts** (Cash, a bank account, a
+bKash/Nagad/Rocket wallet). There is no owner: customers', suppliers' and
+employees' accounts are never instruments — the counterparty of a payment is
+the customer/supplier on the bill it settles, and employees are paid to their
+`EmployeePayoutAccount`.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
-| GET | `/api/payment-instruments` | 200 | query: `owner_type?`, `owner_id?`, `is_active?` |
+| GET | `/api/payment-instruments` | 200 | query: `is_active?` |
 | GET | `/api/payment-instruments/:id` | 200 | — |
 | GET | `/api/payment-instruments/:id/balance` | 200 | `{ instrument_id, incoming, outgoing, balance }` — computed, not stored |
-| POST | `/api/payment-instruments` | 201 | `{ owner_type, owner_id, type: PaymentMethod, label, bank_name?, account_no?, mobile_no?, mfs_type? }` |
-| PATCH | `/api/payment-instruments/:id` | 200 | `{ type?, label?, bank_name?, account_no?, mobile_no?, mfs_type? }` (`owner_type`/`owner_id` not editable — not accepted by the update schema) |
+| POST | `/api/payment-instruments` | 201 | `{ type: PaymentMethod, label, bank_name?, account_no?, mobile_no?, mfs_type? }` |
+| PATCH | `/api/payment-instruments/:id` | 200 | `{ type?, label?, bank_name?, account_no?, mobile_no?, mfs_type? }` |
 | POST | `/api/payment-instruments/:id/deactivate` | 200 | — |
 | POST | `/api/payment-instruments/:id/reactivate` | 200 | — |
 | DELETE | `/api/payment-instruments/:id` | 200 | — — hard delete, unused instruments only |
 
 **Errors**: **404** unknown `:id` on get/balance/patch/deactivate/
-reactivate; **400** empty `PATCH` body. `owner_id` isn't validated against
-any table (§1.13) — create can never 400/409 on a bad owner reference, and
-`owner_type`/`owner_id` aren't unique either, so create has essentially no
-business-rule error path at all beyond generic field validation.
+reactivate; **400** empty `PATCH` body.
 
 `DELETE` is for a mis-created instrument (wrong account number, duplicate):
 **409** (`detail`: `"Payment instrument has payment history and cannot be
@@ -1397,11 +1394,13 @@ Append-only (§1.10).
 | GET | `/api/payments` | 200 | query: `ref_type?`, `ref_id?`, `direction?`, `instrument_id?` (matches either from/to) |
 | GET | `/api/payments/total-paid` | 200 | query (**required**): `ref_type`, `ref_id` → `{ ref_type, ref_id, total_paid }` |
 | GET | `/api/payments/:id` | 200 | — |
-| POST | `/api/payments` | 201 | `{ amount, payment_date, ref_type: SALE\|BIRD_SALE\|PURCHASE\|EXPENSE, ref_id, from_instrument_id, to_instrument_id?, transaction_ref?, note? }` — `direction` is derived from `ref_type` (sales in, purchases and expenses out), and wage/fee expenses are refused: they are paid through their payroll payout |
+| POST | `/api/payments` | 201 | `{ amount, payment_date, ref_type: SALE\|BIRD_SALE\|PURCHASE\|EXPENSE, ref_id, to_instrument_id \| from_instrument_id, transaction_ref?, note? }` — `direction` is derived from `ref_type` (sales in, purchases and expenses out), and wage/fee expenses are refused: they are paid through their payroll payout |
 
-`from_instrument_id` must reference a real `PaymentInstrument`;
-`to_instrument_id` is optional (e.g. an outgoing payment to a supplier whose
-exact receiving account isn't tracked). `ref_type`/`ref_id` are polymorphic
+**Exactly one farm account, on the side the money moved**: money received
+(SALE, BIRD_SALE) names only `to_instrument_id` — where it landed; money paid
+out (PURCHASE, EXPENSE) names only `from_instrument_id` — where it left from.
+Anything else is a **400** (and a database CHECK, `Payment_one_farm_account`).
+The account must exist and be active. `ref_type`/`ref_id` are polymorphic
 (§1.13, like `StockLedger`) — not validated against the target table, so
 pointing `ref_id` at a nonexistent Purchase/Sale/etc. **won't error at
 all**, it'll just create an orphaned Payment that `total-paid` will

@@ -57,8 +57,6 @@ export async function sharedInstrumentId(): Promise<string> {
         return (
             await prisma.paymentInstrument.create({
                 data: {
-                    owner_type: "ADMIN",
-                    owner_id: crypto.randomUUID(),
                     type: "CASH",
                     label: SHARED_WALLET,
                 },

@@ -46,8 +46,6 @@ describe("PayrollRecordService", () => {
 
         const instrument = await prisma.paymentInstrument.create({
             data: {
-                owner_type: "ADMIN",
-                owner_id: profileId,
                 type: "MFS",
                 label: "Test payroll wallet",
                 mfs_type: "BKASH",

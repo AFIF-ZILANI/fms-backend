@@ -47,8 +47,6 @@ describe("paid when recorded", () => {
         walletId = (
             await prisma.paymentInstrument.create({
                 data: {
-                    owner_type: "ADMIN",
-                    owner_id: profileId,
                     type: "CASH",
                     label: "Paid-at-create wallet",
                 },
@@ -165,8 +163,6 @@ describe("paid when recorded", () => {
     test("an inactive or unknown account is refused", async () => {
         const dead = await prisma.paymentInstrument.create({
             data: {
-                owner_type: "ADMIN",
-                owner_id: profileId,
                 type: "CASH",
                 label: "PAC dead wallet",
                 is_active: false,

@@ -153,6 +153,19 @@ export const PaymentService = {
                         );
                     }
                 }
+                // One farm account, on the side the money moved -- the other party is on the bill.
+                const incoming = DIRECTION[data.ref_type] === "INCOMING";
+                if (
+                    incoming
+                        ? !data.to_instrument_id || data.from_instrument_id
+                        : !data.from_instrument_id || data.to_instrument_id
+                ) {
+                    throw AppError.badRequest(
+                        incoming
+                            ? "Money received names only the account it landed in (to_instrument_id)"
+                            : "Money paid out names only the account it left (from_instrument_id)",
+                    );
+                }
                 // Same rule as paid-at-create: money can't move through a deactivated account (the
                 // dashboard cash position only sums active ones, so it would silently vanish).
                 for (const id of [data.from_instrument_id, data.to_instrument_id]) {
