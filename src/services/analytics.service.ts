@@ -240,7 +240,7 @@ export const AnalyticsService = {
             await Promise.all([
                 prisma.birdSale.aggregate({
                     where: { batch_id: batchId },
-                    _sum: { total_amount: true },
+                    _sum: { total_amount: true, discount_amount: true },
                 }),
                 prisma.purchaseItem.aggregate({
                     where: { batch_id: batchId },
@@ -260,15 +260,36 @@ export const AnalyticsService = {
                 }),
             ]);
 
-        const revenue = birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0);
+        // Revenue is what the customer owed: the discount was never earned.
+        const revenue = (birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0)).minus(
+            birdSaleRevenue._sum.discount_amount ?? new Prisma.Decimal(0),
+        );
         const purchase_cost = purchaseCost._sum.total_price ?? new Prisma.Decimal(0);
         const direct_expenses = directExpenses._sum.amount ?? new Prisma.Decimal(0);
         const depreciation_share = depreciation._sum.amount ?? new Prisma.Decimal(0);
         const shared_period_expenses_unallocated =
             sharedPeriodExpenses._sum.amount ?? new Prisma.Decimal(0);
 
+        // Stock the batch used up (feed, bedding, medicine) at average purchase cost -- the same rule
+        // batchesPerformance.cost_to_date uses. Items bought straight onto the batch are already in
+        // purchase_cost.
+        const [used, onBatch] = await Promise.all([
+            prisma.consumption.findMany({
+                where: { batch_id: batchId },
+                select: { item_id: true, base_quantity: true },
+            }),
+            prisma.purchaseItem.findMany({ where: { batch_id: batchId }, select: { item_id: true }, distinct: ["item_id"] }),
+        ]);
+        const avgCosts = await getItemAvgCosts([...new Set(used.map((c) => c.item_id))]);
+        const boughtOnBatch = new Set(onBatch.map((p) => p.item_id));
+        const consumption_cost = used.reduce((sum, c) => {
+            const avg = avgCosts.get(c.item_id);
+            return avg && !boughtOnBatch.has(c.item_id) ? sum.plus(c.base_quantity.times(avg)) : sum;
+        }, new Prisma.Decimal(0));
+
         const profit = revenue
             .minus(purchase_cost)
+            .minus(consumption_cost)
             .minus(direct_expenses)
             .minus(depreciation_share);
 
@@ -276,6 +297,7 @@ export const AnalyticsService = {
             batch_id: batchId,
             revenue,
             purchase_cost,
+            consumption_cost,
             direct_expenses,
             depreciation_share,
             shared_period_expenses_unallocated,
@@ -305,7 +327,7 @@ export const AnalyticsService = {
                 }),
                 prisma.birdSale.aggregate({
                     where: { sale_date: { gte: monthStart, lt: monthEnd } },
-                    _sum: { total_amount: true },
+                    _sum: { total_amount: true, discount_amount: true },
                 }),
                 prisma.expense.aggregate({
                     where: { date: { gte: monthStart, lt: monthEnd } },
@@ -326,7 +348,9 @@ export const AnalyticsService = {
         const paid = (t: string) => paidByType.find((r) => r.ref_type === t)?._sum.amount ?? zeroDec;
 
         const revenue = (saleRevenue._sum.total ?? new Prisma.Decimal(0)).plus(
-            birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0),
+            (birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0)).minus(
+                birdSaleRevenue._sum.discount_amount ?? new Prisma.Decimal(0),
+            ),
         );
         const expenseTotal = expenses._sum.amount ?? new Prisma.Decimal(0);
         // Net of payments, the same identity SaleService.summary uses -- exact, because a payment
@@ -476,7 +500,7 @@ export const AnalyticsService = {
         const window = trendWindow(days);
         const rows = await prisma.birdSale.findMany({
             where: { sale_date: window },
-            select: { sale_date: true, total_amount: true, net_weight: true },
+            select: { sale_date: true, total_amount: true, discount_amount: true, net_weight: true },
         });
 
         const byDate = new Map<string, { revenue: Prisma.Decimal; weight: Prisma.Decimal }>();
@@ -484,7 +508,7 @@ export const AnalyticsService = {
             const dateKey = row.sale_date.toISOString().slice(0, 10);
             const existing = byDate.get(dateKey) ?? { revenue: new Prisma.Decimal(0), weight: new Prisma.Decimal(0) };
             byDate.set(dateKey, {
-                revenue: existing.revenue.plus(row.total_amount),
+                revenue: existing.revenue.plus(row.total_amount).minus(row.discount_amount),
                 weight: existing.weight.plus(row.net_weight),
             });
         }
@@ -511,7 +535,7 @@ export const AnalyticsService = {
             }),
             prisma.birdSale.aggregate({
                 where: { sale_date: window },
-                _sum: { total_amount: true },
+                _sum: { total_amount: true, discount_amount: true },
             }),
         ]);
 
@@ -520,7 +544,9 @@ export const AnalyticsService = {
             const category = row.item.category;
             byCategory.set(category, (byCategory.get(category) ?? new Prisma.Decimal(0)).plus(row.total_price));
         }
-        const birdRevenue = birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0);
+        const birdRevenue = (birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0)).minus(
+            birdSaleRevenue._sum.discount_amount ?? new Prisma.Decimal(0),
+        );
         if (!birdRevenue.isZero()) {
             byCategory.set("BIRD", (byCategory.get("BIRD") ?? new Prisma.Decimal(0)).plus(birdRevenue));
         }
@@ -540,7 +566,7 @@ export const AnalyticsService = {
         const grouped = await prisma.birdSale.groupBy({
             by: ["grade"],
             where: { sale_date: window },
-            _sum: { birds_count: true, total_amount: true, net_weight: true },
+            _sum: { birds_count: true, total_amount: true, discount_amount: true, net_weight: true },
         });
 
         // net_weight rides along so avg price/kg is revenue/weight over this
@@ -550,7 +576,7 @@ export const AnalyticsService = {
             .map((row) => ({
                 grade: row.grade,
                 birds_count: row._sum.birds_count ?? 0,
-                revenue: (row._sum.total_amount ?? new Prisma.Decimal(0)).toString(),
+                revenue: (row._sum.total_amount ?? new Prisma.Decimal(0)).minus(row._sum.discount_amount ?? new Prisma.Decimal(0)).toString(),
                 net_weight: (row._sum.net_weight ?? new Prisma.Decimal(0)).toString(),
             }))
             .sort((a, b) => b.birds_count - a.birds_count);
@@ -701,7 +727,7 @@ export const AnalyticsService = {
             }),
             prisma.birdSale.findMany({
                 where: { sale_date: { gte: from, lt: to } },
-                select: { sale_date: true, total_amount: true },
+                select: { sale_date: true, total_amount: true, discount_amount: true },
             }),
             prisma.expense.findMany({
                 where: { date: { gte: from, lt: to } },
@@ -717,7 +743,7 @@ export const AnalyticsService = {
         }
         for (const s of birdSales) {
             const m = bucket(s.sale_date);
-            if (m) m.revenue = m.revenue.plus(s.total_amount);
+            if (m) m.revenue = m.revenue.plus(s.total_amount).minus(s.discount_amount);
         }
         for (const e of expenses) {
             const m = bucket(e.date);

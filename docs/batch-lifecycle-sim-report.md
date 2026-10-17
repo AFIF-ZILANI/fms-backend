@@ -2,7 +2,7 @@
 
 Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16), driven through the HTTP API as admin / worker / manager. Run took 2s.
 
-**Checks: 166/169 passed, 3 failed.**
+**Checks: 169/169 passed, 0 failed.**
 
 ## Headline numbers
 
@@ -14,7 +14,7 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 | Revenue (sum of total_amount; 1,500 discounted at sale) | 1,955,061.7 |
 | Chicks + direct expenses + consumed stock | 198,000 + 102,000 + 1,173,344.05 = 1,473,344.05 |
 | True profit (revenue - discounts - costs) | 480,217.65 |
-| P&L endpoint profit | 1,655,061.7 |
+| P&L endpoint profit | 480,217.65 |
 | Receivable (customers still owe) / payable (suppliers) | 262,531.38 / 839,250 |
 | Feed left unused (warehouse + houses) | 1,574.7 kg |
 | Active alerts after scan | 2 |
@@ -23,16 +23,11 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 
 - **NOTE** Item categories include VACCINE and SUPPLEMENT but supplier supply categories do not (FEED, MEDICINE, CHICKS, HUSK, ... only), so a vaccine/vitamin distributor can only be tagged MEDICINE.
 - **GAP** Environment records, house allocations (incl. the INITIAL one), QR relocations and stock transfers have no client-settable timestamp (they stamp now()). Entries synced late from the offline mobile app would carry the sync time, not the time of the event. This sim back-dated them in SQL after the fact.
-- **BUG** GET /analytics/batches/:id/pnl reports profit 1,655,061.7 but the batch consumed 1,173,344.05 of feed/bedding/medicine that the formula leaves out (analytics.service.ts batchPnl: revenue - chick purchases - direct expenses - depreciation). True profit is about 481,717.65. batchesPerformance.cost_to_date does include consumption, so the two screens disagree about the same batch.
 - **NOTE** actual_end_date is stamped with the close request time (new Date()), not the last sale. Closing a batch a day late shifts bird-days / depreciation accordingly.
-- **BUG** POST /payments accepts an inactive payment account ("Cash", is_active=false) that purchase/sale paid-at-create rejects (lib/paid-at-create.ts). The money then drops out of the dashboard cash position, which only sums active instruments -- seen as a 102,000 gap in a first run that paid expenses from it. Added a 1-taka payment to demonstrate.
-- **BUG** Revenue ignores discount_amount in: batch P&L, financial dashboard, sales trend. They sum BirdSale.total_amount; the sim gave 1,500 of discount, which stays in revenue (and receivable math, which does subtract it, then disagrees with revenue).
 
 ## Failed checks
 
-- pnl.profit includes feed/medicine cost pnl=1655061.7 true=481717.65
-- probe: payment from an INACTIVE account is refused status 201 (purchase/sale paid-at-create refuses inactive accounts; POST /payments does not)
-- revenue figures are net of discount_amount gross-only: batch P&L, financial dashboard, sales trend
+- none
 
 ## Alerts raised by the scan
 
@@ -251,13 +246,13 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS ledger vitamin: grower = model
 - PASS consumption vitamin: DB = model
 - PASS purchases: total = Σ lines - discount
-- PASS purchase SIM-INV-1-71d8: paid <= total
-- PASS purchase SIM-INV-2-76ab: paid <= total
-- PASS purchase SIM-INV-1-5c30: paid <= total
-- PASS purchase SIM-INV-1-4177: paid <= total
-- PASS purchase SIM-INV-14-5c30: paid <= total
-- PASS purchase SIM-INV-34-5c30: paid <= total
-- PASS purchase SIM-INV-46-5c30: paid <= total
+- PASS purchase SIM-INV-1-bcb7: paid <= total
+- PASS purchase SIM-INV-2-03b5: paid <= total
+- PASS purchase SIM-INV-1-1d73: paid <= total
+- PASS purchase SIM-INV-1-11ca: paid <= total
+- PASS purchase SIM-INV-14-1d73: paid <= total
+- PASS purchase SIM-INV-34-1d73: paid <= total
+- PASS purchase SIM-INV-46-1d73: paid <= total
 - PASS sales revenue = model
 - PASS analytics: cumulative_died
 - PASS analytics: mortality rate
@@ -265,15 +260,15 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS analytics: feed_kg = Σ feed consumed
 - PASS analytics: farm overview shows 0 running batches
 - PASS analytics: FCR within 1% of feed / (sold kg - chick kg)
-- PASS pnl: revenue = Σ sales
+- PASS pnl: revenue = Σ sales - discounts
 - PASS pnl: purchase_cost = chick cost
 - PASS pnl: direct expenses = Σ expenses
-- **FAIL** pnl.profit includes feed/medicine cost -- pnl=1655061.7 true=481717.65
+- PASS pnl.profit includes feed/medicine cost
 - PASS dashboard: receivables rose by exactly the unpaid sales
 - PASS dashboard: payables rose by exactly the unpaid purchases
 - PASS dashboard: cash position moved by Σ(in - out) payments
-- **FAIL** probe: payment from an INACTIVE account is refused -- status 201 (purchase/sale paid-at-create refuses inactive accounts; POST /payments does not)
+- PASS probe: payment from an INACTIVE account is refused
 - PASS top outstanding customer C = its unpaid balance
 - PASS trend: mortality Σ = died
 - PASS trend: feed Σ = feed consumed (+ pre-existing)
-- **FAIL** revenue figures are net of discount_amount -- gross-only: batch P&L, financial dashboard, sales trend
+- PASS revenue figures are net of discount_amount

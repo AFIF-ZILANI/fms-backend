@@ -675,7 +675,7 @@ const soldKg = sum(sales, (s) => Number(s.net_weight));
 const gainKg = soldKg - (INITIAL * CHICK_WT) / 1000;
 const fcrExpected = M.feedKg / gainKg;
 check("analytics: FCR within 1% of feed / (sold kg - chick kg)", !!perf?.fcr && Math.abs(perf.fcr - fcrExpected) / fcrExpected < 0.01, `api=${perf?.fcr} expected=${fcrExpected}`);
-check("pnl: revenue = Σ sales", r2(Number(pnl?.revenue)) === revenue, `${pnl?.revenue}`);
+check("pnl: revenue = Σ sales - discounts", r2(Number(pnl?.revenue)) === r2(revenue - discounts), `${pnl?.revenue}`);
 check("pnl: purchase_cost = chick cost", r2(Number(pnl?.purchase_cost)) === M.chickCost, `${pnl?.purchase_cost}`);
 check("pnl: direct expenses = Σ expenses", r2(Number(pnl?.direct_expenses)) === r2(M.expenses), `${pnl?.direct_expenses} vs ${M.expenses}`);
 
@@ -690,7 +690,7 @@ const consumedCost = await (async () => {
     }
     return r2(total);
 })();
-const trueProfit = r2(revenue - M.chickCost - M.expenses - consumedCost);
+const trueProfit = r2(revenue - discounts - M.chickCost - M.expenses - consumedCost);
 const pnlProfit = r2(Number(pnl?.profit));
 if (Math.abs(pnlProfit - trueProfit) > 1000) {
     finding("BUG", `GET /analytics/batches/:id/pnl reports profit ${pnlProfit.toLocaleString()} but the batch consumed ${consumedCost.toLocaleString()} of feed/bedding/medicine that the formula leaves out (analytics.service.ts batchPnl: revenue - chick purchases - direct expenses - depreciation). True profit is about ${trueProfit.toLocaleString()}. batchesPerformance.cost_to_date does include consumption, so the two screens disagree about the same batch.`);

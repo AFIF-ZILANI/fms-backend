@@ -165,6 +165,26 @@ describe("PaymentService", () => {
         ).rejects.toMatchObject({ status: 400 });
     });
 
+    test("create refuses an inactive account", async () => {
+        const dead = await PaymentInstrumentService.create({
+            owner_type: "ADMIN",
+            owner_id: crypto.randomUUID(),
+            type: "CASH",
+            label: "Dormant Cash",
+        });
+        createdInstrumentIds.push(dead.id);
+        await prisma.paymentInstrument.update({ where: { id: dead.id }, data: { is_active: false } });
+        await expect(
+            PaymentService.create({
+                amount: 1,
+                payment_date: new Date(),
+                ref_type: "PURCHASE",
+                ref_id: purchaseId,
+                from_instrument_id: dead.id,
+            }),
+        ).rejects.toBeInstanceOf(AppError);
+    });
+
     test("getById on unknown id throws not-found", async () => {
         await expect(
             PaymentService.getById("00000000-0000-0000-0000-000000000000"),

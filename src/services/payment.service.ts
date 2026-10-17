@@ -151,6 +151,14 @@ export const PaymentService = {
                         );
                     }
                 }
+                // Same rule as paid-at-create: money can't move through a deactivated account (the
+                // dashboard cash position only sums active ones, so it would silently vanish).
+                for (const id of [data.from_instrument_id, data.to_instrument_id]) {
+                    if (id === undefined) continue;
+                    const inst = await tx.paymentInstrument.findUnique({ where: { id }, select: { is_active: true, label: true } });
+                    if (!inst) throw AppError.badRequest("The account named does not exist");
+                    if (!inst.is_active) throw AppError.badRequest(`${inst.label} is inactive -- pick an active account`);
+                }
                 const outstanding = await outstandingWithin(tx, data.ref_type, data.ref_id);
                 if (new Prisma.Decimal(data.amount).greaterThan(outstanding)) {
                     throw AppError.badRequest(
