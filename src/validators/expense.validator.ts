@@ -13,6 +13,15 @@ export const createExpenseSchema = z
         amount: z.coerce.number().positive("Amount must be positive"),
         date: z.coerce.date(),
         remarks: z.string().optional(),
+        // Paid when recorded: written as a Payment from this account in the same transaction, so the
+        // expense and the money leaving an account can't be recorded one without the other.
+        // optional, not .default(0): a default makes it required for in-process callers
+        paid_amount: z.coerce.number().nonnegative().optional(),
+        paid_from_instrument_id: z.string().uuid().optional(),
+    })
+    .refine((d) => (d.paid_amount ?? 0) <= d.amount, {
+        message: "Paid can't be more than the expense",
+        path: ["paid_amount"],
     })
     // A DIRECT cost is one attributed to a batch; without one it belongs in a shared bucket. The
     // database has a CHECK for this too (Expense_direct_has_batch).

@@ -11,7 +11,10 @@ const discountFields = {
     discount_value: z.coerce.number().nonnegative().optional(),
 };
 const discountRefine = <
-    T extends { discount_type?: "FLAT" | "PERCENT" | undefined; discount_value?: number | undefined },
+    T extends {
+        discount_type?: "FLAT" | "PERCENT" | undefined;
+        discount_value?: number | undefined;
+    },
 >(
     data: T,
 ) => (data.discount_type === undefined) === (data.discount_value === undefined);
@@ -42,6 +45,10 @@ export const createPurchaseSchema = z
         paid_amount: z.coerce.number().nonnegative().default(0),
         // Required when paid_amount > 0: which of the farm's accounts the money came from.
         paid_from_instrument_id: z.string().uuid().optional(),
+        // Details of the payment made at creation; it defaults to the purchase date.
+        payment_date: z.coerce.date().optional(),
+        payment_transaction_ref: z.string().trim().min(1).optional(),
+        payment_note: z.string().trim().min(1).optional(),
         ...discountFields,
         items: z.array(purchaseItemInput).min(1, "At least one item is required"),
     })

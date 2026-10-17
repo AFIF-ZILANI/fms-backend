@@ -5,6 +5,7 @@ import { AppError } from "@lib/app-error";
 import { getItemBalances } from "@lib/stock-balance";
 import { getItemAvgCosts } from "@lib/stock-value";
 import { isNonDepleting } from "@lib/coded-stock";
+import { PAYROLL_EXPENSE_CATEGORIES } from "@lib/paid-at-create";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
 /** kg in one of these weight units. */
@@ -365,6 +366,7 @@ export const AnalyticsService = {
             birdSaleRevenue,
             expenses,
             purchasesDue,
+            expensesOwed,
             salesDue,
             birdSalesDue,
             paidByType,
@@ -383,12 +385,17 @@ export const AnalyticsService = {
                 _sum: { amount: true },
             }),
             prisma.purchase.aggregate({ _sum: { due_amount: true } }),
+            // Payroll's own expenses are settled by their payout, never owed as an expense.
+            prisma.expense.aggregate({
+                where: { category: { notIn: PAYROLL_EXPENSE_CATEGORIES } },
+                _sum: { amount: true },
+            }),
             prisma.sale.aggregate({ _sum: { due_amount: true } }),
             prisma.birdSale.aggregate({ _sum: { due_amount: true } }),
             // due_amount is the create-time snapshot; what has been paid since lives in Payment.
             prisma.payment.groupBy({
                 by: ["ref_type"],
-                where: { ref_type: { in: ["PURCHASE", "SALE", "BIRD_SALE"] } },
+                where: { ref_type: { in: ["PURCHASE", "SALE", "BIRD_SALE", "EXPENSE"] } },
                 _sum: { amount: true },
             }),
             prisma.paymentInstrument.findMany({ where: { is_active: true } }),
@@ -439,7 +446,10 @@ export const AnalyticsService = {
             revenue,
             expenses: expenseTotal,
             gross_profit: revenue.minus(expenseTotal),
-            outstanding_payables: (purchasesDue._sum.due_amount ?? zeroDec).minus(paid("PURCHASE")),
+            // Unpaid purchases and unpaid expenses: both are money the farm still has to pay out.
+            outstanding_payables: (purchasesDue._sum.due_amount ?? zeroDec)
+                .minus(paid("PURCHASE"))
+                .plus((expensesOwed._sum.amount ?? zeroDec).minus(paid("EXPENSE"))),
             outstanding_receivables: outstandingReceivables,
             cash_position: cashPosition,
             cash_by_instrument: instruments.map((inst, i) => ({

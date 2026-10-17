@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { ExpenseService } from "./expense.service";
 import { AppError } from "@lib/app-error";
 import { createExpenseSchema } from "@validators/expense.validator";
+import { sharedInstrumentId } from "@lib/test-fixtures";
 
 let profileId: string;
 const createdIds: string[] = [];
@@ -20,6 +21,9 @@ describe("ExpenseService", () => {
     });
 
     afterAll(async () => {
+        await prisma.payment.deleteMany({
+            where: { ref_type: "EXPENSE", ref_id: { in: createdIds } },
+        });
         await prisma.expense.deleteMany({ where: { id: { in: createdIds } } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
@@ -38,6 +42,60 @@ describe("ExpenseService", () => {
         expect(found.category).toBe("ELECTRICITY");
         expect(found.cost_type).toBe("SHARED_PERIOD");
         expect(found.amount.toNumber()).toBe(4500);
+    });
+
+    test("paid when recorded: the expense and its Payment land together", async () => {
+        const account = await sharedInstrumentId();
+        const expense = await ExpenseService.create({
+            category: "TRANSPORT",
+            cost_type: "SHARED_PERIOD",
+            amount: 900,
+            date: new Date(),
+            paid_amount: 900,
+            paid_from_instrument_id: account,
+            recorded_by_id: profileId,
+        });
+        createdIds.push(expense!.id);
+        const pay = await prisma.payment.findFirstOrThrow({
+            where: { ref_type: "EXPENSE", ref_id: expense!.id },
+        });
+        expect(pay).toMatchObject({ direction: "OUTGOING", from_instrument_id: account });
+        expect(pay.amount.toNumber()).toBe(900);
+    });
+
+    test("paid with no account, or a salary expense paid here, writes nothing", async () => {
+        const before = await prisma.expense.count();
+        await expect(
+            ExpenseService.create({
+                category: "TRANSPORT",
+                cost_type: "SHARED_PERIOD",
+                amount: 50,
+                date: new Date(),
+                paid_amount: 50,
+                recorded_by_id: profileId,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+        await expect(
+            ExpenseService.create({
+                category: "SALARY",
+                cost_type: "SHARED_PERIOD",
+                amount: 50,
+                date: new Date(),
+                paid_amount: 50,
+                paid_from_instrument_id: await sharedInstrumentId(),
+                recorded_by_id: profileId,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+        expect(await prisma.expense.count()).toBe(before);
+        expect(
+            createExpenseSchema.safeParse({
+                category: "MISC",
+                cost_type: "SHARED_PERIOD",
+                amount: 10,
+                date: "2026-10-01",
+                paid_amount: 11,
+            }).success,
+        ).toBe(false);
     });
 
     test("getById on unknown id throws not-found", async () => {

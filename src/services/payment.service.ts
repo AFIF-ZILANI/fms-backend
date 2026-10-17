@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { PAYROLL_EXPENSE_CATEGORIES } from "@lib/paid-at-create";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -46,7 +47,10 @@ async function owedForRef(
         switch (ref_type) {
             case "SALE":
                 return (
-                    await tx.sale.findUnique({ where: { id: ref_id }, select: { due_amount: true } })
+                    await tx.sale.findUnique({
+                        where: { id: ref_id },
+                        select: { due_amount: true },
+                    })
                 )?.due_amount;
             case "BIRD_SALE":
                 return (
@@ -143,9 +147,7 @@ export const PaymentService = {
                         where: { id: data.ref_id },
                         select: { category: true },
                     });
-                    if (expense?.category === "SALARY" ||
-                        expense?.category === "FESTIVAL_BONUS" ||
-                        expense?.category === "SALARY_TRANSFER_FEE") {
+                    if (expense && PAYROLL_EXPENSE_CATEGORIES.includes(expense.category)) {
                         throw AppError.badRequest(
                             "Salary and bonus expenses are paid through their payout, not a payment",
                         );
@@ -155,9 +157,15 @@ export const PaymentService = {
                 // dashboard cash position only sums active ones, so it would silently vanish).
                 for (const id of [data.from_instrument_id, data.to_instrument_id]) {
                     if (id === undefined) continue;
-                    const inst = await tx.paymentInstrument.findUnique({ where: { id }, select: { is_active: true, label: true } });
+                    const inst = await tx.paymentInstrument.findUnique({
+                        where: { id },
+                        select: { is_active: true, label: true },
+                    });
                     if (!inst) throw AppError.badRequest("The account named does not exist");
-                    if (!inst.is_active) throw AppError.badRequest(`${inst.label} is inactive -- pick an active account`);
+                    if (!inst.is_active)
+                        throw AppError.badRequest(
+                            `${inst.label} is inactive -- pick an active account`,
+                        );
                 }
                 const outstanding = await outstandingWithin(tx, data.ref_type, data.ref_id);
                 if (new Prisma.Decimal(data.amount).greaterThan(outstanding)) {

@@ -3,6 +3,10 @@ import { AppError } from "@lib/app-error";
 
 type Ref = "SALE" | "BIRD_SALE" | "PURCHASE" | "EXPENSE";
 
+/** Wage and fee expenses are settled by their payroll payout's own PAYROLL Payment -- never by an EXPENSE
+ * payment, and never counted as an expense still owed. */
+export const PAYROLL_EXPENSE_CATEGORIES = ["SALARY", "FESTIVAL_BONUS", "SALARY_TRANSFER_FEE"];
+
 /**
  * A sale or purchase can be recorded with money already paid. That cash has to land somewhere the books
  * can see, so it is written as a Payment against an instrument -- exactly like a payment made later --
@@ -41,6 +45,8 @@ export async function recordPaidAtCreate(
         instrument_id: string | undefined;
         date: Date;
         actor_id: string;
+        transaction_ref?: string | undefined;
+        note?: string | undefined;
     },
 ) {
     if (!p.amount.greaterThan(0)) return;
@@ -67,7 +73,8 @@ export async function recordPaidAtCreate(
                 ? { to_instrument_id: p.instrument_id! }
                 : { from_instrument_id: p.instrument_id! }),
             handled_by_id: p.actor_id,
-            note: "Paid when recorded",
+            note: p.note ?? "Paid when recorded",
+            ...(p.transaction_ref !== undefined && { transaction_ref: p.transaction_ref }),
         },
     });
 }

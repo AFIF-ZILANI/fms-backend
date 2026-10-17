@@ -805,7 +805,8 @@ never update.
 **Create body**:
 ```
 {
-  supplier_id?, invoice_no?, purchase_date, paid_amount? (default 0), recorded_by_id,
+  supplier_id?, invoice_no?, purchase_date, paid_amount? (default 0), paid_from_instrument_id?,
+  payment_date?, payment_transaction_ref?, payment_note?, recorded_by_id,
   items: [{ item_id, batch_id?, quantity, unit, unit_price, mfg_date?, expiration_date? }, ...] (min 1)
 }
 ```
@@ -814,7 +815,8 @@ server-side (`quantity × unit_price`, summed) — don't send them, they're not
 accepted by the request schema at all. `due_amount = total_amount -
 paid_amount`. Set `batch_id` on a line item when the purchase funds a
 specific batch (chicks) — this is how `Batches`/`PurchaseItem` link
-financially.
+financially. A `paid_amount` is written as a `Payment` from `paid_from_instrument_id`
+in the same transaction (dated `payment_date`, default `purchase_date`).
 
 **Errors**: **404** unknown `:id` on get. Create → **400** if `paid_amount`
 exceeds the computed `total_amount` (`detail`: `"paid_amount cannot exceed
@@ -998,7 +1000,7 @@ Append-only (§1.10).
 |---|---|---|---|
 | GET | `/api/expenses` | 200 | query: `batch_id?`, `category?`, `cost_type?`, `date_from?`, `date_to?` |
 | GET | `/api/expenses/:id` | 200 | — |
-| POST | `/api/expenses` | 201 | `{ batch_id?, category: string (a code matching an active ExpenseCategoryLookup.code, §6.8), cost_type: CostType, amount, date, remarks?, recorded_by_id }` |
+| POST | `/api/expenses` | 201 | `{ batch_id?, category: string (a code matching an active ExpenseCategoryLookup.code, §6.8), cost_type: CostType, amount, date, remarks?, paid_amount?, paid_from_instrument_id?, recorded_by_id }` -- `paid_amount` (≤ `amount`) is written as a `Payment` from that account in the same transaction; refused for SALARY/FESTIVAL_BONUS/SALARY_TRANSFER_FEE, which payroll pays |
 
 A `DIRECT` cost must carry a `batch_id` (**400** otherwise); costs that belong to no batch are `SHARED_PERIOD` or `SHARED_CAPITAL`.
 

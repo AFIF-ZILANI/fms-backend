@@ -45,9 +45,10 @@ const SHARED_WALLET = "Shared Test Wallet";
 /** One long-lived account for fixtures that record money paid at creation (which must name an account). Created
  * on first use and never deleted, for the same reason as the shared warehouse. */
 export async function sharedInstrumentId(): Promise<string> {
+    // Active only: an account tidied away in the app is left alone, and paying from it would be refused.
     const find = () =>
         prisma.paymentInstrument.findFirst({
-            where: { label: SHARED_WALLET },
+            where: { label: SHARED_WALLET, is_active: true },
             select: { id: true },
         });
     const existing = await find();

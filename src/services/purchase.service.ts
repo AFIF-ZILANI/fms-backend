@@ -82,20 +82,35 @@ export const PurchaseService = {
         // discounts exist.
         const itemsWithTotals = data.items.map((item) => {
             const gross = new Prisma.Decimal(item.quantity).times(item.unit_price);
-            const discount = computeDiscount(gross, item.discount_type, item.discount_value, "Line");
+            const discount = computeDiscount(
+                gross,
+                item.discount_type,
+                item.discount_value,
+                "Line",
+            );
             return { ...item, total_price: gross.minus(discount) };
         });
         const subtotal = itemsWithTotals.reduce(
             (sum, item) => sum.plus(item.total_price),
             new Prisma.Decimal(0),
         );
-        const globalDiscount = computeDiscount(subtotal, data.discount_type, data.discount_value, "Purchase");
+        const globalDiscount = computeDiscount(
+            subtotal,
+            data.discount_type,
+            data.discount_value,
+            "Purchase",
+        );
         const total_amount = subtotal.minus(globalDiscount);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         if (total_amount.minus(paid_amount).isNegative()) {
             throw AppError.badRequest("paid_amount cannot exceed the purchase total");
         }
-        requirePaidInstrument(paid_amount, data.paid_from_instrument_id, "paid_from_instrument_id", "PURCHASE");
+        requirePaidInstrument(
+            paid_amount,
+            data.paid_from_instrument_id,
+            "paid_from_instrument_id",
+            "PURCHASE",
+        );
 
         try {
             return await prisma.$transaction(async (tx) => {
@@ -169,8 +184,10 @@ export const PurchaseService = {
                     ref_id: purchase.id,
                     amount: paid_amount,
                     instrument_id: data.paid_from_instrument_id,
-                    date: data.purchase_date,
+                    date: data.payment_date ?? data.purchase_date,
                     actor_id: data.recorded_by_id,
+                    transaction_ref: data.payment_transaction_ref,
+                    note: data.payment_note,
                 });
 
                 return tx.purchase.findUniqueOrThrow({ where: { id: purchase.id }, include });
