@@ -42,8 +42,9 @@ export async function purgeAuditLog(args: Prisma.AuditLogDeleteManyArgs) {
 
 const SHARED_WALLET = "Shared Test Wallet";
 
-/** One long-lived account for fixtures that record money paid at creation (which must name an account). Created
- * on first use and never deleted, for the same reason as the shared warehouse. */
+/** One account for fixtures that record money paid at creation (which must name an account). Created on first
+ * use and shared by every suite in a run; removed once the whole run is done (src/test-setup.ts), so it never
+ * sits among the farm's real accounts. */
 export async function sharedInstrumentId(): Promise<string> {
     // Active only: an account tidied away in the app is left alone, and paying from it would be refused.
     const find = () =>
@@ -65,6 +66,18 @@ export async function sharedInstrumentId(): Promise<string> {
     } catch {
         return (await find())!.id;
     }
+}
+
+/** Drops the shared test account and the payments made through it -- payments the suites' own fixtures
+ * didn't already clean up, since the account is only ever used by tests. */
+export async function removeSharedTestWallet() {
+    const wallets = await prisma.paymentInstrument.findMany({ where: { label: SHARED_WALLET }, select: { id: true } });
+    const ids = wallets.map((w) => w.id);
+    if (ids.length === 0) return;
+    await prisma.payment.deleteMany({
+        where: { OR: [{ from_instrument_id: { in: ids } }, { to_instrument_id: { in: ids } }] },
+    });
+    await prisma.paymentInstrument.deleteMany({ where: { id: { in: ids } } });
 }
 
 /** Puts `quantity` of an item into a warehouse's stock (a ledger IN). The caller deletes the item's ledger rows in teardown. */
