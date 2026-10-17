@@ -46,6 +46,25 @@ export const StockLedgerService = {
         return { entries, meta: buildMeta(total, query) };
     },
 
+    // Last-30-day movement summary for the ledger KPIs. Farm-scale, so the IN
+    // value is summed in JS rather than raw SQL. ponytail: fixed 30-day window.
+    async summary() {
+        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const recent = { occurred_at: { gte: since } };
+        const [total, byDirection, loss, received] = await Promise.all([
+            prisma.stockLedger.count(),
+            prisma.stockLedger.groupBy({ by: ["direction"], where: recent, _count: true }),
+            prisma.stockLedger.count({ where: { ...recent, reason: { in: ["WASTAGE", "EXPIRED"] } } }),
+            prisma.stockLedger.findMany({
+                where: { ...recent, direction: "IN", unit_cost: { not: null } },
+                select: { quantity: true, unit_cost: true },
+            }),
+        ]);
+        const count = (d: "IN" | "OUT") => byDirection.find((g) => g.direction === d)?._count ?? 0;
+        const receivedValue = received.reduce((sum, e) => sum + Number(e.quantity) * Number(e.unit_cost), 0);
+        return { total, in_30d: count("IN"), out_30d: count("OUT"), loss_30d: loss, received_value_30d: receivedValue };
+    },
+
     record(tx: Prisma.TransactionClient, entry: LedgerEntryInput) {
         return tx.stockLedger.create({
             data: { ...entry, idempotency_key: entry.idempotency_key ?? crypto.randomUUID() },

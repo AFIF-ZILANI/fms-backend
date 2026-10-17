@@ -10,3 +10,5 @@ stockLedgerRoutes.get(
     zValidatorRfc7807("query", listStockLedgerQuerySchema),
     StockLedgerController.getAll,
 );
+
+stockLedgerRoutes.get("/summary", StockLedgerController.summary);
