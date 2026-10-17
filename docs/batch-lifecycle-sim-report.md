@@ -2,7 +2,7 @@
 
 Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16), driven through the HTTP API as admin / worker / manager. Run took 2s.
 
-**Checks: 169/169 passed, 0 failed.**
+**Checks: 171/171 passed, 0 failed.**
 
 ## Headline numbers
 
@@ -103,8 +103,8 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 
 ## All checks
 
-- PASS pre: no batches exist
-- PASS pre: houses empty
+- PASS pre: no batch with this code
+- PASS pre: target houses empty
 - PASS auth: no token -> 401
 - PASS batch created RUNNING with initial balance
 - PASS purchase d1 total = Σlines - discount
@@ -221,7 +221,7 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS houses both end CLEANING
 - PASS count: vaccinations = 5
 - PASS count: weight records = 9
-- PASS count: mortality records >= 50
+- PASS count: mortality records >= 35
 - PASS medications recorded (3 vitamin + 5 abx + 3 vitamin)
 - PASS every med/vacc has a linked consumption
 - PASS weights rise week over week (grower house)
@@ -246,13 +246,13 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS ledger vitamin: grower = model
 - PASS consumption vitamin: DB = model
 - PASS purchases: total = Σ lines - discount
-- PASS purchase SIM-INV-1-bcb7: paid <= total
-- PASS purchase SIM-INV-2-03b5: paid <= total
-- PASS purchase SIM-INV-1-1d73: paid <= total
-- PASS purchase SIM-INV-1-11ca: paid <= total
-- PASS purchase SIM-INV-14-1d73: paid <= total
-- PASS purchase SIM-INV-34-1d73: paid <= total
-- PASS purchase SIM-INV-46-1d73: paid <= total
+- PASS purchase SIM-INV-1-2060: paid <= total
+- PASS purchase SIM-INV-2-d75f: paid <= total
+- PASS purchase SIM-INV-1-19a2: paid <= total
+- PASS purchase SIM-INV-1-1722: paid <= total
+- PASS purchase SIM-INV-14-19a2: paid <= total
+- PASS purchase SIM-INV-34-19a2: paid <= total
+- PASS purchase SIM-INV-46-19a2: paid <= total
 - PASS sales revenue = model
 - PASS analytics: cumulative_died
 - PASS analytics: mortality rate
@@ -268,7 +268,9 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS dashboard: payables rose by exactly the unpaid purchases
 - PASS dashboard: cash position moved by Σ(in - out) payments
 - PASS probe: payment from an INACTIVE account is refused
-- PASS top outstanding customer C = its unpaid balance
-- PASS trend: mortality Σ = died
+- PASS top outstanding: customer A balance
+- PASS top outstanding: customer B balance
+- PASS top outstanding: customer C balance
+- PASS trend: mortality Σ = died (+ other batches)
 - PASS trend: feed Σ = feed consumed (+ pre-existing)
 - PASS revenue figures are net of discount_amount

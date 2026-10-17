@@ -2,10 +2,11 @@
  * 62-day batch lifecycle simulation, driven through the real HTTP API (in-process, real auth + validators
  * + permissions) and then audited against the database. Backdated to end yesterday.
  *
- *   bun scripts/batch-lifecycle-sim.ts
+ *   bun scripts/batch-lifecycle-sim.ts [1|2]     # which scenario (default 1); runs are independent and additive
  *
  * Writes to the dev database and does NOT clean up -- the point is a browsable batch. Run it against a
- * database with no batches (the sim assumes empty SIM item stock). Report: docs/batch-lifecycle-sim-report.md
+ * database where that scenario's houses are empty (each scenario creates its own items, suppliers and customers).
+ * Report: docs/batch-lifecycle-sim-report.md (scenario 1), docs/batch-lifecycle-sim-2-report.md (scenario 2).
  */
 process.env.RATE_LIMIT_MAX = "10000000";
 const realLog = console.log;
@@ -62,7 +63,24 @@ async function must(who: Who, method: string, path: string, body?: unknown, labe
 }
 
 // ── deterministic randomness + domain curves ────────────────────────────────
-let seed = 20260816;
+const SIM = Number(process.argv[2] ?? 1);
+const CFG = {
+    1: {
+        tag: "SIM", seed: 20260816, start: [2026, 7, 16], initial: 5000, breed: "HIBREED", code: "SIM-2026-08-16",
+        brooder: 1, grower: 1, chicks: [[3000, 38], [2000, 42]], outbreak: [29, 33], ob: 29,
+        sales: { 58: { cust: "A", rows: [["HIGH", 1350], ["LOW", 100]], payPct: 1, discount: 1500 }, 60: { cust: "B", rows: [["HIGH", 1650], ["LOW", 80], ["CULL", 20]], payPct: 0.8 } },
+        finalMix: [45, 15], finalPay: 0.6, settleB: true, report: "batch-lifecycle-sim-report.md",
+    },
+    2: {
+        tag: "SIM2", seed: 20260810, start: [2026, 7, 10], initial: 3000, breed: "KEDERNATH", code: "SIM2-2026-08-10",
+        brooder: 2, grower: 2, chicks: [[3000, 55]], outbreak: [20, 24], ob: 20,
+        sales: { 57: { cust: "A", rows: [["HIGH", 900], ["LOW", 60]], payPct: 0.5 }, 60: { cust: "B", rows: [["HIGH", 1000], ["LOW", 40], ["CULL", 10]], payPct: 0 } },
+        finalMix: [30, 10], finalPay: 1, settleB: false, report: "batch-lifecycle-sim-2-report.md",
+    },
+}[SIM as 1 | 2] as any;
+const TAG: string = CFG.tag;
+const mob = (k: number) => `+88019${SIM - 1}${String(k).padStart(7, "0")}`;
+let seed: number = CFG.seed;
 const rnd = () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -74,16 +92,18 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 const DAYS = 62;
-const INITIAL = 5000;
+const INITIAL: number = CFG.initial;
+const SCALE = INITIAL / 5000;
+const bags = (n: number) => Math.max(1, Math.round(n * SCALE));
 const CHICK_WT = 38;
 /** Day 1 = 2026-08-16, day 62 = 2026-10-16 (yesterday); entries are 08:00 farm time unless said. */
-const T = (day: number, h = 8, m = 0) => new Date(Date.UTC(2026, 7, 16 + day - 1, h - 6, m));
+const T = (day: number, h = 8, m = 0) => new Date(Date.UTC(CFG.start[0], CFG.start[1], CFG.start[2] + day - 1, h - 6, m));
 const ageOf = (day: number) => day - 1;
 const weightG = (age: number) => 40 + 1700 * Math.pow(age / 62, 1.6);
 const feedG = (age: number) => 10 + 2.05 * age;
 function mortalityRate(day: number) {
     const a = ageOf(day);
-    if (day >= 29 && day <= 33) return 0.0045; // the CRD outbreak
+    if (day >= CFG.outbreak[0] && day <= CFG.outbreak[1]) return 0.0045; // the CRD outbreak
     if (a < 3) return 0.003;
     if (a < 8) return 0.0016;
     if (a < 22) return 0.0008;
@@ -118,45 +138,45 @@ const managerP = await prisma.profiles.findFirstOrThrow({ where: { name: "Test M
 for (const [who, p] of [["admin", admin.profile], ["worker", workerP], ["manager", managerP]] as const) {
     tokens[who] = await signSession(p.id, p.password_changed_at, "web");
 }
-const brooder = await prisma.houses.findFirstOrThrow({ where: { type: "BROODER", number: 1 } });
-const grower = await prisma.houses.findFirstOrThrow({ where: { type: "GROWER", number: 1 } });
+const brooder = await prisma.houses.findFirstOrThrow({ where: { type: "BROODER", number: CFG.brooder } });
+const grower = await prisma.houses.findFirstOrThrow({ where: { type: "GROWER", number: CFG.grower } });
 const H = { B: brooder.id, G: grower.id };
 const warehouse = await prisma.warehouses.findFirstOrThrow({ where: { name: "Main Warehouse Kunduna" } });
 const cash = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "Cash", owner_type: "ADMIN" } });
 const bank = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "ZEROD FARMS BANK" } });
-out(`Sim: ${DAYS} days, ${INITIAL} chicks, ${brooder.name} -> ${grower.name}`);
+out(`Sim ${SIM}: ${DAYS} days, ${INITIAL} chicks, ${brooder.name} -> ${grower.name}`);
 
 const fin0 = (await api("admin", "GET", "/analytics/financial")).data;
-check("pre: no batches exist", (await prisma.batches.count()) === 0);
-check("pre: houses empty", (await prisma.batchHouseBalance.count({ where: { quantity: { gt: 0 } } })) === 0);
+check("pre: no batch with this code", (await prisma.batches.count({ where: { batch_code: CFG.code } })) === 0);
+check("pre: target houses empty", (await prisma.batchHouseBalance.count({ where: { quantity: { gt: 0 }, house_id: { in: [brooder.id, grower.id] } } })) === 0);
 check("auth: no token -> 401", (await api(null, "GET", "/batches")).status === 401);
 
 // ── master data ─────────────────────────────────────────────────────────────
 const mk = async (path: string, body: object) => (await must("admin", "POST", path, body))?.id as string;
 const sup = {
-    hatchA: await mk("/suppliers", { name: "SIM Hatchery A", mobile: "+8801900000001", role: "OWNER", supplies: ["CHICKS"] }),
-    hatchB: await mk("/suppliers", { name: "SIM Hatchery B", mobile: "+8801900000002", role: "OWNER", supplies: ["CHICKS"] }),
-    mill: await mk("/suppliers", { name: "SIM Feed Mill", mobile: "+8801900000003", role: "DISTRIBUTOR", supplies: ["FEED", "HUSK"] }),
-    vet: await mk("/suppliers", { name: "SIM Vet Pharma", mobile: "+8801900000004", role: "DEALER", supplies: ["MEDICINE"] }),
+    hatchA: await mk("/suppliers", { name: `${TAG} Hatchery A`, mobile: mob(1), role: "OWNER", supplies: ["CHICKS"] }),
+    hatchB: await mk("/suppliers", { name: `${TAG} Hatchery B`, mobile: mob(2), role: "OWNER", supplies: ["CHICKS"] }),
+    mill: await mk("/suppliers", { name: `${TAG} Feed Mill`, mobile: mob(3), role: "DISTRIBUTOR", supplies: ["FEED", "HUSK"] }),
+    vet: await mk("/suppliers", { name: `${TAG} Vet Pharma`, mobile: mob(4), role: "DEALER", supplies: ["MEDICINE"] }),
 };
 const cust = {
-    A: await mk("/customers", { name: "SIM Karim Poultry Traders", mobile: "+8801900000011" }),
-    B: await mk("/customers", { name: "SIM Rahim Broiler House", mobile: "+8801900000012" }),
-    C: await mk("/customers", { name: "SIM Dhaka Live Bird Co", mobile: "+8801900000013" }),
+    A: await mk("/customers", { name: `${TAG} Karim Poultry Traders`, mobile: mob(11) }),
+    B: await mk("/customers", { name: `${TAG} Rahim Broiler House`, mobile: mob(12) }),
+    C: await mk("/customers", { name: `${TAG} Dhaka Live Bird Co`, mobile: mob(13) }),
 };
-const doctor = await mk("/doctors", { name: "Dr. SIM Rahman", mobile: "+8801900000021", specialty: "Poultry" });
+const doctor = await mk("/doctors", { name: `Dr. ${TAG} Rahman`, mobile: mob(21), specialty: "Poultry" });
 const item = async (name: string, category: string, unit: string, tracked = false) =>
     await mk("/items", { name, category, unit, is_unit_tracked: tracked });
 const it = {
-    chick: await item("SIM Day-old Chick", "CHICKS", "PCS"),
-    starter: await item("SIM Starter Feed", "FEED", "KG"),
-    grower: await item("SIM Grower Feed", "FEED", "KG"),
-    finisher: await item("SIM Finisher Feed", "FEED", "KG"),
-    husk: await item("SIM Rice Husk", "HUSK", "KG"),
-    vitamin: await item("SIM Vitamin-C Electrolyte", "SUPPLEMENT", "KG"),
-    nd: await item("SIM Newcastle (ND) Vaccine", "VACCINE", "DOSE", true),
-    ibd: await item("SIM Gumboro (IBD) Vaccine", "VACCINE", "DOSE", true),
-    abx: await item("SIM Enrofloxacin Antibiotic", "MEDICINE", "LITER", true),
+    chick: await item(`${TAG} Day-old Chick`, "CHICKS", "PCS"),
+    starter: await item(`${TAG} Starter Feed`, "FEED", "KG"),
+    grower: await item(`${TAG} Grower Feed`, "FEED", "KG"),
+    finisher: await item(`${TAG} Finisher Feed`, "FEED", "KG"),
+    husk: await item(`${TAG} Rice Husk`, "HUSK", "KG"),
+    vitamin: await item(`${TAG} Vitamin-C Electrolyte`, "SUPPLEMENT", "KG"),
+    nd: await item(`${TAG} Newcastle (ND) Vaccine`, "VACCINE", "DOSE", true),
+    ibd: await item(`${TAG} Gumboro (IBD) Vaccine`, "VACCINE", "DOSE", true),
+    abx: await item(`${TAG} Enrofloxacin Antibiotic`, "MEDICINE", "LITER", true),
 };
 for (const k of ["starter", "grower", "finisher"] as const)
     await must("admin", "POST", "/item-units", { item_id: it[k], unit: "BAG", factor_to_base: 50, is_purchasable: true });
@@ -175,7 +195,7 @@ async function purchase(day: number, supplier: string, lines: PL[], paidPct: num
     const p = await must("admin", "POST", "/purchases", {
         supplier_id: supplier, warehouse_id: warehouse.id, purchase_date: T(day, 7),
         paid_amount: paid, ...(paid > 0 && { paid_from_instrument_id: bank.id }),
-        invoice_no: `SIM-INV-${day}-${supplier.slice(0, 4)}`,
+        invoice_no: `${TAG}-INV-${day}-${supplier.slice(0, 4)}`,
         ...(opts.discount && { discount_type: "FLAT", discount_value: opts.discount }),
         items,
     }, `purchase d${day}`);
@@ -194,7 +214,7 @@ const rec = (p: Awaited<ReturnType<typeof purchase>>) => p && purchases.push({ i
 
 // ── day 1: batch ────────────────────────────────────────────────────────────
 const batch = await must("admin", "POST", "/batches", {
-    batch_code: "SIM-2026-08-16", breed: "HIBREED", starting_date: T(1, 7),
+    batch_code: CFG.code, breed: CFG.breed, starting_date: T(1, 7),
     expected_selling_date: T(62), initial_chick_count: INITIAL, init_chicks_avg_wt: CHICK_WT, house_id: H.B,
 });
 if (!batch) {
@@ -205,16 +225,19 @@ const BID: string = batch.id;
 M.alive.B = INITIAL;
 check("batch created RUNNING with initial balance", batch.status === "RUNNING" && batch.houseBalances[0]?.quantity === INITIAL);
 
+const LITTER = Math.round(1500 * SCALE);
 // two chick deliveries: different suppliers, prices, days (batch-management-design §3)
-const c1 = await purchase(1, sup.hatchA, [{ item: it.chick, qty: 3000, unit: "PCS", price: 38, batch: BID }], 1);
-const c2 = await purchase(2, sup.hatchB, [{ item: it.chick, qty: 2000, unit: "PCS", price: 42, batch: BID }], 0.5);
-rec(c1); rec(c2);
-M.chickCost = 3000 * 38 + 2000 * 42;
+const [d1, d2] = CFG.chicks as [number, number][];
+const c1 = await purchase(1, sup.hatchA, [{ item: it.chick, qty: d1![0], unit: "PCS", price: d1![1], batch: BID }], 1);
+const c2 = d2 ? await purchase(2, sup.hatchB, [{ item: it.chick, qty: d2[0], unit: "PCS", price: d2[1], batch: BID }], 0.5) : null;
+rec(c1);
+if (c2) rec(c2);
+M.chickCost = (CFG.chicks as [number, number][]).reduce((a, [q, pr]) => a + q * pr, 0);
 
 // feeds, bedding, vaccines, meds
 rec(await purchase(1, sup.mill, [
-    { item: it.starter, qty: 45, unit: "BAG", price: 3100, key: "starter" },
-    { item: it.husk, qty: 1500, unit: "KG", price: 12, key: "husk" },
+    { item: it.starter, qty: bags(45), unit: "BAG", price: 3100, key: "starter" },
+    { item: it.husk, qty: LITTER, unit: "KG", price: 12, key: "husk" },
 ], 0.5));
 const vacc = await purchase(1, sup.vet, [
     { item: it.nd, qty: 15000, unit: "DOSE", price: 0.13 },
@@ -330,7 +353,7 @@ async function vaccinate(day: number, name: string, itemKey: "nd" | "ibd", vialI
 
 async function doseMed(day: number, key: "abx" | "vitamin", name: string, qty: number, unit: string, vialId?: string) {
     const h: "B" | "G" = M.alive.G > 0 && M.alive.B === 0 ? "G" : "B";
-    if (vialId && day === 30) await relocateVial(day, vialId, h);
+    if (vialId && day === CFG.ob + 1) await relocateVial(day, vialId, h);
     if (key === "vitamin") {
         const have = M.house[h].vitamin ?? 0;
         if (have < qty) await stockTransfer(day, "vitamin", it.vitamin, h, 3);
@@ -364,14 +387,14 @@ for (let day = 1; day <= DAYS; day++) {
     const feedBefore = M.feedKg;
 
     // morning logistics: bulk feed arrivals
-    if (day === 14) rec(await purchase(day, sup.mill, [{ item: it.grower, qty: 140, unit: "BAG", price: 2900, key: "grower" }], 0.5));
-    if (day === 34) rec(await purchase(day, sup.mill, [{ item: it.finisher, qty: 100, unit: "BAG", price: 2750, key: "finisher" }], 0.5));
-    if (day === 46) rec(await purchase(day, sup.mill, [{ item: it.finisher, qty: 150, unit: "BAG", price: 2800, key: "finisher" }], 0));
+    if (day === 14) rec(await purchase(day, sup.mill, [{ item: it.grower, qty: bags(140), unit: "BAG", price: 2900, key: "grower" }], 0.5));
+    if (day === 34) rec(await purchase(day, sup.mill, [{ item: it.finisher, qty: bags(100), unit: "BAG", price: 2750, key: "finisher" }], 0.5));
+    if (day === 46) rec(await purchase(day, sup.mill, [{ item: it.finisher, qty: bags(150), unit: "BAG", price: 2800, key: "finisher" }], 0));
 
     // day 1: litter + chick-guard supplements into the brooder
     if (day === 1) {
-        await stockTransfer(day, "husk", it.husk, "B", 1500);
-        await consume(day, "worker", "husk", it.husk, "B", 1500);
+        await stockTransfer(day, "husk", it.husk, "B", LITTER);
+        await consume(day, "worker", "husk", it.husk, "B", LITTER);
         notes.push("litter laid");
     }
     if (day <= 3) await doseMed(day, "vitamin", "Vitamin-C + Electrolyte", 0.5, "KG");
@@ -388,12 +411,12 @@ for (let day = 1; day <= DAYS; day++) {
 
     // brooder -> grower, staggered over two days (60% then the rest)
     if (day === 15) {
-        await transferBirds(day, Math.round(M.alive.B * 0.6), "sim-move-d15");
+        await transferBirds(day, Math.round(M.alive.B * 0.6), `${TAG}-move-d15`);
         notes.push("60% moved to grower");
     }
     if (day === 16) {
         const rest = M.alive.B;
-        await transferBirds(day, rest, "sim-move-d16");
+        await transferBirds(day, rest, `${TAG}-move-d16`);
         notes.push("rest moved; brooder emptied");
         const bh = await prisma.houses.findUniqueOrThrow({ where: { id: H.B } });
         check("brooder auto-CLEANING once emptied", bh.phase === "CLEANING", `phase=${bh.phase}`);
@@ -409,9 +432,9 @@ for (let day = 1; day <= DAYS; day++) {
     if (day === 36) await vaccinate(day, "Newcastle booster", "nd", vials.nd[2]!, "ND booster"), notes.push("ND booster");
 
     // CRD outbreak treatment: day 30-34 antibiotic (300 ml/day), electrolyte support day 31-33
-    if (day >= 30 && day <= 34) {
+    if (day >= CFG.ob + 1 && day <= CFG.ob + 5) {
         await doseMed(day, "abx", "Enrofloxacin 10%", 300, "ML", vials.abx[0]);
-        if (day >= 31 && day <= 33) await doseMed(day, "vitamin", "Vitamin-C + Electrolyte", 0.5, "KG");
+        if (day >= CFG.ob + 2 && day <= CFG.ob + 4) await doseMed(day, "vitamin", "Vitamin-C + Electrolyte", 0.5, "KG");
         notes.push("antibiotic course");
     }
 
@@ -428,10 +451,10 @@ for (let day = 1; day <= DAYS; day++) {
     for (const h of ["B", "G"] as const) {
         const n = split[h];
         if (n <= 0) continue;
-        const key = `sim-mort-d${day}-${h}`;
+        const key = `${TAG}-mort-d${day}-${h}`;
         const m = await must("worker", "POST", "/mortality-logs", {
             batch_id: BID, house_id: H[h], count_died: n, date: T(day, 17), idempotency_key: key,
-            cause_note: day >= 29 && day <= 33 ? "Respiratory distress / CRD" : age < 8 ? "Weak chick / yolk sac" : "Natural",
+            cause_note: day >= CFG.outbreak[0] && day <= CFG.outbreak[1] ? "Respiratory distress / CRD" : age < 8 ? "Weak chick / yolk sac" : "Natural",
         }, `mortality d${day}`);
         if (m) {
             M.alive[h] -= n;
@@ -452,7 +475,7 @@ for (let day = 1; day <= DAYS; day++) {
     for (const h of ["B", "G"] as const) {
         if (M.alive[h] <= 0) continue;
         for (const [period, hr] of [["MORNING", 6], ["EVENING", 18]] as const) {
-            const outbreak = day >= 29 && day <= 33;
+            const outbreak = day >= CFG.outbreak[0] && day <= CFG.outbreak[1];
             const e = await must("worker", "POST", "/environment-records", {
                 batch_id: BID, house_id: H[h], time_period: period,
                 temperature_c: r1(Math.max(24, 33 - 0.45 * age) + gauss() * 0.6 + (period === "EVENING" ? 1 : 0)),
@@ -466,7 +489,7 @@ for (let day = 1; day <= DAYS; day++) {
     // overheads
     if (day % 7 === 0) await expense(day, "LABOR", 8500, "Weekly shed labour");
     if (day === 10) await expense(day, "MISC", 1800, "Brooder heater repair");
-    if (day === 30) await expense(day, "VET_FEE", 2500, "Vet visit - respiratory outbreak");
+    if (day === CFG.ob + 1) await expense(day, "VET_FEE", 2500, "Vet visit - respiratory outbreak");
     if (day === 31) { await expense(day, "ELECTRICITY", 6200, "Month 1 power"); await expense(day, "WATER", 1200, "Month 1 water"); }
     if (day === 45) await expense(day, "FUEL", 4000, "Generator diesel");
     if (day === 61) await expense(day, "ELECTRICITY", 7800, "Month 2 power");
@@ -508,11 +531,8 @@ for (let day = 1; day <= DAYS; day++) {
     }
 
     // sales: three truckloads, mixed grades, three customers
-    const saleDays: Record<number, { cust: keyof typeof cust; rows: [("HIGH" | "LOW" | "CULL"), number][]; payPct: number; discount?: number }> = {
-        58: { cust: "A", rows: [["HIGH", 1350], ["LOW", 100]], payPct: 1, discount: 1500 },
-        60: { cust: "B", rows: [["HIGH", 1650], ["LOW", 80], ["CULL", 20]], payPct: 0.8 },
-    };
-    const spec = day === 62 ? { cust: "C" as const, rows: null, payPct: 0.6 } : saleDays[day];
+    const saleDays = CFG.sales as Record<number, { cust: keyof typeof cust; rows: [("HIGH" | "LOW" | "CULL"), number][]; payPct: number; discount?: number }>;
+    const spec = day === 62 ? { cust: "C" as const, rows: null, payPct: CFG.finalPay as number } : saleDays[day];
     if (day === 62) await finishSales(day);
     if (spec && day !== 62) await sellLoad(day, spec.cust, spec.rows, spec.payPct, spec.discount);
 
@@ -558,14 +578,14 @@ async function sellLoad(day: number, who: keyof typeof cust, rows: [("HIGH" | "L
 async function finishSales(day: number) {
     // final load: everything left, mostly HIGH
     const left = M.alive.G;
-    const cull = 15, low = 45;
-    await sellLoad(day, "C", [["HIGH", left - cull - low], ["LOW", low], ["CULL", cull]], 0.6);
+    const [low, cull] = CFG.finalMix as [number, number];
+    await sellLoad(day, "C", [["HIGH", left - cull - low], ["LOW", low], ["CULL", cull]], CFG.finalPay);
     // closing without force while birds remain must be refused -- tested one day earlier than the real close
 }
 
 // Settle customer B's balance after the fact (a real follow-up payment), leave A fully paid and C owing.
 {
-    const bSales = await prisma.birdSale.findMany({ where: { customer_id: cust.B } });
+    const bSales = CFG.settleB ? await prisma.birdSale.findMany({ where: { customer_id: cust.B } }) : [];
     for (const s of bSales) {
         const paidNow = await prisma.payment.aggregate({ where: { ref_type: "BIRD_SALE", ref_id: s.id }, _sum: { amount: true } });
         const owed = Number(s.due_amount) - Number(paidNow._sum.amount ?? 0);
@@ -598,7 +618,7 @@ for (const x of backdate.transfers) {
 }
 for (const c of await prisma.consumption.findMany({ where: { batch_id: BID }, select: { id: true, date: true } }))
     await prisma.stockLedger.updateMany({ where: { ref_type: "CONSUMPTION", ref_id: c.id }, data: { occurred_at: c.date } });
-for (const pi of await prisma.purchaseItem.findMany({ where: { purchase: { invoice_no: { startsWith: "SIM-INV" } } }, include: { purchase: true } }))
+for (const pi of await prisma.purchaseItem.findMany({ where: { purchase: { invoice_no: { startsWith: `${TAG}-INV-` } } }, include: { purchase: true } }))
     await prisma.stockLedger.updateMany({ where: { ref_type: "PURCHASE", ref_id: pi.id }, data: { occurred_at: pi.purchase.purchase_date } });
 finding("NOTE", "Item categories include VACCINE and SUPPLEMENT but supplier supply categories do not (FEED, MEDICINE, CHICKS, HUSK, ... only), so a vaccine/vitamin distributor can only be tagged MEDICINE.");
 finding("GAP", "Environment records, house allocations (incl. the INITIAL one), QR relocations and stock transfers have no client-settable timestamp (they stamp now()). Entries synced late from the offline mobile app would carry the sync time, not the time of the event. This sim back-dated them in SQL after the fact.");
@@ -621,7 +641,7 @@ const chickLines = await prisma.purchaseItem.findMany({ where: { batch_id: BID }
 check("chick purchase lines = initial_chick_count", sum(chickLines, (l) => Number(l.quantity)) === INITIAL);
 check("chick purchase cost", r2(sum(chickLines, (l) => Number(l.total_price))) === M.chickCost);
 check("houses both end CLEANING", (await prisma.houses.findMany({ where: { id: { in: [H.B, H.G] } } })).every((h) => h.phase === "CLEANING"));
-for (const [name, n] of [["vaccinations", 5], ["weight records", 9], ["mortality records", 50]] as const) {
+for (const [name, n] of [["vaccinations", 5], ["weight records", 9], ["mortality records", 35]] as const) {
     const have = name === "vaccinations" ? await prisma.vaccinations.count({ where: { batch_id: BID } }) : name === "weight records" ? await prisma.weightRecords.count({ where: { batch_id: BID } }) : mortalityIds.length;
     check(`count: ${name} ${name === "mortality records" ? ">=" : "="} ${n}`, name === "mortality records" ? have >= n : have === n, `got ${have}`);
 }
@@ -644,7 +664,7 @@ for (const key of ["starter", "grower", "finisher", "husk", "vitamin"] as const)
 const leftover = r2(["starter", "grower", "finisher"].reduce((s, k) => s + (M.whs[k] ?? 0) + (M.house.B[k] ?? 0) + (M.house.G[k] ?? 0), 0));
 
 // money
-const purchaseRows = await prisma.purchase.findMany({ where: { invoice_no: { startsWith: "SIM-INV" } }, include: { items: true } });
+const purchaseRows = await prisma.purchase.findMany({ where: { invoice_no: { startsWith: `${TAG}-INV-` } }, include: { items: true } });
 check("purchases: total = Σ lines - discount", purchaseRows.every((p) => { const g = sum(p.items, (i) => Number(i.total_price)); const d = p.discount_type === "FLAT" ? Number(p.discount_value) : 0; return r2(g - d) === r2(Number(p.total_amount)); }));
 let payables = 0;
 for (const p of purchaseRows) {
@@ -712,16 +732,25 @@ check("dashboard: payables rose by exactly the unpaid purchases", d("outstanding
 const simPays = await prisma.payment.findMany({ where: { created_at: { gte: new Date(t0) } } });
 const cashDelta = r2(sum(simPays, (p) => (p.direction === "INCOMING" ? 1 : -1) * Number(p.amount)));
 check("dashboard: cash position moved by Σ(in - out) payments", d("cash_position") === cashDelta, `${d("cash_position")} vs ${cashDelta}`);
-const probeExpense = await must("admin", "POST", "/expenses", { category: "MISC", cost_type: "SHARED_PERIOD", amount: 1, date: T(62, 17), remarks: "SIM probe: pay from an inactive account" }, "probe expense");
-const inactivePay = await api("admin", "POST", "/payments", { amount: 1, payment_date: T(62, 17), ref_type: "EXPENSE", ref_id: probeExpense?.id ?? crypto.randomUUID(), from_instrument_id: cash.id });
+const probeExpense = SIM !== 1 ? null : await must("admin", "POST", "/expenses", { category: "MISC", cost_type: "SHARED_PERIOD", amount: 1, date: T(62, 17), remarks: "SIM probe: pay from an inactive account" }, "probe expense");
+const inactivePay = SIM !== 1 ? { status: 400 } : await api("admin", "POST", "/payments", { amount: 1, payment_date: T(62, 17), ref_type: "EXPENSE", ref_id: probeExpense?.id ?? crypto.randomUUID(), from_instrument_id: cash.id });
 check("probe: payment from an INACTIVE account is refused", inactivePay.status === 400, `status ${inactivePay.status} (purchase/sale paid-at-create refuses inactive accounts; POST /payments does not)`);
-if (inactivePay.status < 300)
+if (inactivePay.status < 300 && SIM === 1)
     finding("BUG", `POST /payments accepts an inactive payment account ("${cash.label}", is_active=false) that purchase/sale paid-at-create rejects (lib/paid-at-create.ts). The money then drops out of the dashboard cash position, which only sums active instruments -- seen as a 102,000 gap in a first run that paid expenses from it. Added a 1-taka payment to demonstrate.`);
-const top = ((await api("admin", "GET", "/analytics/sales/top-outstanding-customers?limit=10")).data ?? []).find((x: any) => x.customer_id === cust.C);
-check("top outstanding customer C = its unpaid balance", r2(Number(top?.due)) === r2(receivable), `${top?.due} vs ${r2(receivable)}`);
+const topList = (await api("admin", "GET", "/analytics/sales/top-outstanding-customers?limit=10")).data ?? [];
+for (const k of ["A", "B", "C"] as const) {
+    let owed = 0;
+    for (const sl of sales.filter((x) => x.customer_id === cust[k])) {
+        const pd = Number((await prisma.payment.aggregate({ where: { ref_type: "BIRD_SALE", ref_id: sl.id }, _sum: { amount: true } }))._sum.amount ?? 0);
+        owed += Number(sl.due_amount) - pd;
+    }
+    const got = Number(topList.find((x: any) => x.customer_id === cust[k])?.due ?? 0);
+    check(`top outstanding: customer ${k} balance`, r2(got) === r2(owed), `${got} vs ${r2(owed)}`);
+}
 const tMort = (await api("admin", "GET", "/analytics/trends/mortality?days=70")).data ?? [];
-check("trend: mortality Σ = died", sum(tMort, (x) => x.died) === M.died, `${sum(tMort, (x) => x.died)} vs ${M.died}`);
-const preFeed = sum(await prisma.consumption.findMany({ where: { batch_id: null, item: { category: "FEED" } } }), (c) => Number(c.base_quantity));
+const otherDied = sum(await prisma.mortalityLog.findMany({ where: { batch_id: { not: BID } } }), (m) => m.count_died);
+check("trend: mortality Σ = died (+ other batches)", sum(tMort, (x) => x.died) === M.died + otherDied, `${sum(tMort, (x) => x.died)} vs ${M.died + otherDied}`);
+const preFeed = sum((await prisma.consumption.findMany({ where: { item: { category: "FEED" } } })).filter((c) => c.batch_id !== BID), (c) => Number(c.base_quantity));
 const tFeed = (await api("admin", "GET", "/analytics/trends/feed?days=70")).data ?? [];
 check("trend: feed Σ = feed consumed (+ pre-existing)", Math.abs(sum(tFeed, (x) => Number(x.quantity)) - (M.feedKg + preFeed)) < 0.01, `${sum(tFeed, (x) => Number(x.quantity))} vs ${M.feedKg + preFeed}`);
 const tSales = (await api("admin", "GET", "/analytics/trends/sales?days=70")).data ?? [];
@@ -747,7 +776,7 @@ const lastW = weights.at(-1);
 const totalCost = r2(M.chickCost + M.expenses + consumedCost);
 const L: string[] = [];
 L.push(`# Batch lifecycle simulation -- report`, "");
-L.push(`Batch \`${bRow.batch_code}\` (HIBREED), ${INITIAL} chicks, ${DAYS} days (2026-08-16 -> 2026-10-16), driven through the HTTP API as admin / worker / manager. Run took ${((Date.now() - t0) / 1000).toFixed(0)}s.`, "");
+L.push(`Batch \`${bRow.batch_code}\` (${bRow.breed}), ${INITIAL} chicks, ${DAYS} days (${T(1).toISOString().slice(0, 10)} -> ${T(DAYS).toISOString().slice(0, 10)}), driven through the HTTP API as admin / worker / manager. Run took ${((Date.now() - t0) / 1000).toFixed(0)}s.`, "");
 L.push(`**Checks: ${pass}/${checks.length} passed, ${failed.length} failed.**`, "");
 L.push(`## Headline numbers`, "", `| | |`, `|---|---|`);
 L.push(`| Chicks in / died / sold | ${INITIAL} / ${M.died} (${mortPct}%) / ${M.sold} |`);
@@ -773,10 +802,10 @@ L.push("", `## Day by day`, "", `| Day | Alive (EOD) | Died | Feed kg | Weight g
 for (const d of M.daily) L.push(`| ${d.day} | ${d.alive} | ${d.died} | ${d.feedKg} | ${d.avgG ?? ""} | ${d.note} |`);
 L.push("", `## All checks`, "");
 for (const c of checks) L.push(`- ${c.pass ? "PASS" : "**FAIL**"} ${c.name}${c.detail && !c.pass ? ` -- ${c.detail}` : ""}`);
-writeFileSync(new URL("../docs/batch-lifecycle-sim-report.md", import.meta.url), L.join("\n") + "\n");
+writeFileSync(new URL(`../docs/${CFG.report}`, import.meta.url), L.join("\n") + "\n");
 
 console.log = realLog;
-out(`\n${pass}/${checks.length} checks passed, ${failed.length} failed, ${findings.length} findings. Report: docs/batch-lifecycle-sim-report.md`);
+out(`\n${pass}/${checks.length} checks passed, ${failed.length} failed, ${findings.length} findings. Report: docs/${CFG.report}`);
 out(`mortality ${mortPct}%  FCR ${perf?.fcr?.toFixed(2)}  revenue ${revenue}  alerts ${alerts.length}`);
 await prisma.$disconnect();
 process.exit(0);
