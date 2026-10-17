@@ -9,7 +9,7 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 | | |
 |---|---|
 | Chicks in / died / sold | 5000 / 305 (6.10%) / 4695 |
-| Final avg weight (last sample, day 62) | 1756.33 g |
+| Final avg weight (last sample) | 1756.33 g |
 | Feed used | 20,175.3 kg  (FCR api 2.78, expected 2.78) |
 | Revenue (sum of total_amount; 1,500 discounted at sale) | 1,955,061.7 |
 | Chicks + direct expenses + consumed stock | 198,000 + 102,000 + 1,173,344.05 = 1,473,344.05 |
@@ -210,7 +210,7 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS probe: editing a closed batch -> 409
 - PASS probe: mortality on a closed batch is refused
 - PASS batch SOLD with actual_end_date
-- PASS conservation: initial = died + sold
+- PASS conservation: initial = died + sold + live
 - PASS mortality rows sum = model
 - PASS sold birds = model
 - PASS allocations: INITIAL = chick count
@@ -221,7 +221,7 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS houses both end CLEANING
 - PASS count: vaccinations = 5
 - PASS count: weight records = 9
-- PASS count: mortality records >= 35
+- PASS count: mortality records >= 20
 - PASS medications recorded (3 vitamin + 5 abx + 3 vitamin)
 - PASS every med/vacc has a linked consumption
 - PASS weights rise week over week (grower house)
@@ -246,19 +246,19 @@ Batch `SIM-2026-08-16` (HIBREED), 5000 chicks, 62 days (2026-08-16 -> 2026-10-16
 - PASS ledger vitamin: grower = model
 - PASS consumption vitamin: DB = model
 - PASS purchases: total = Σ lines - discount
-- PASS purchase SIM-INV-1-2060: paid <= total
-- PASS purchase SIM-INV-2-d75f: paid <= total
-- PASS purchase SIM-INV-1-19a2: paid <= total
-- PASS purchase SIM-INV-1-1722: paid <= total
-- PASS purchase SIM-INV-14-19a2: paid <= total
-- PASS purchase SIM-INV-34-19a2: paid <= total
-- PASS purchase SIM-INV-46-19a2: paid <= total
+- PASS purchase SIM-INV-1-7209: paid <= total
+- PASS purchase SIM-INV-2-9d84: paid <= total
+- PASS purchase SIM-INV-1-328a: paid <= total
+- PASS purchase SIM-INV-1-877e: paid <= total
+- PASS purchase SIM-INV-14-328a: paid <= total
+- PASS purchase SIM-INV-34-328a: paid <= total
+- PASS purchase SIM-INV-46-328a: paid <= total
 - PASS sales revenue = model
 - PASS analytics: cumulative_died
 - PASS analytics: mortality rate
-- PASS analytics: live_count = 0
+- PASS analytics: live_count = model
 - PASS analytics: feed_kg = Σ feed consumed
-- PASS analytics: farm overview shows 0 running batches
+- PASS analytics: farm overview birds alive = Σ running balances
 - PASS analytics: FCR within 1% of feed / (sold kg - chick kg)
 - PASS pnl: revenue = Σ sales - discounts
 - PASS pnl: purchase_cost = chick cost

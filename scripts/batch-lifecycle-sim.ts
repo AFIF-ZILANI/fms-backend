@@ -2,7 +2,7 @@
  * 62-day batch lifecycle simulation, driven through the real HTTP API (in-process, real auth + validators
  * + permissions) and then audited against the database. Backdated to end yesterday.
  *
- *   bun scripts/batch-lifecycle-sim.ts [1|2]     # which scenario (default 1); runs are independent and additive
+ *   bun scripts/batch-lifecycle-sim.ts [1|2|3]   # which scenario (default 1); runs are independent and additive
  *
  * Writes to the dev database and does NOT clean up -- the point is a browsable batch. Run it against a
  * database where that scenario's houses are empty (each scenario creates its own items, suppliers and customers).
@@ -77,7 +77,14 @@ const CFG = {
         sales: { 57: { cust: "A", rows: [["HIGH", 900], ["LOW", 60]], payPct: 0.5 }, 60: { cust: "B", rows: [["HIGH", 1000], ["LOW", 40], ["CULL", 10]], payPct: 0 } },
         finalMix: [30, 10], finalPay: 1, settleB: false, report: "batch-lifecycle-sim-2-report.md",
     },
-}[SIM as 1 | 2] as any;
+    // Half-cycle batch that is still RUNNING: no sales, no close. Ends yesterday at age 30.
+    3: {
+        tag: "SIM3", seed: 20260916, start: [2026, 8, 16], initial: 4000, breed: "FAOMI", code: "SIM3-2026-09-16", days: 31, running: true,
+        brooder: 1, grower: 3, chicks: [[2500, 40], [1500, 44]], outbreak: [24, 27], ob: 24,
+        sales: {}, finalMix: [0, 0], finalPay: 0, settleB: false, report: "batch-lifecycle-sim-3-report.md",
+    },
+}[SIM as 1 | 2 | 3] as any;
+const RUN: boolean = !!CFG.running;
 const TAG: string = CFG.tag;
 const mob = (k: number) => `+88019${SIM - 1}${String(k).padStart(7, "0")}`;
 let seed: number = CFG.seed;
@@ -91,7 +98,7 @@ const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI *
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-const DAYS = 62;
+const DAYS: number = CFG.days ?? 62;
 const INITIAL: number = CFG.initial;
 const SCALE = INITIAL / 5000;
 const bags = (n: number) => Math.max(1, Math.round(n * SCALE));
@@ -144,6 +151,13 @@ const H = { B: brooder.id, G: grower.id };
 const warehouse = await prisma.warehouses.findFirstOrThrow({ where: { name: "Main Warehouse Kunduna" } });
 const cash = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "Cash", owner_type: "ADMIN" } });
 const bank = await prisma.paymentInstrument.findFirstOrThrow({ where: { label: "ZEROD FARMS BANK" } });
+// a house coming out of a previous batch is CLEANING; the operator marks it READY before chicks arrive
+for (const h of [brooder, grower]) {
+    if (h.phase !== "READY") {
+        const r = await must("admin", "PATCH", `/houses/${h.id}`, { phase: "READY" }, "house -> READY");
+        check(`house ${h.name} set READY`, r?.phase === "READY");
+    }
+}
 out(`Sim ${SIM}: ${DAYS} days, ${INITIAL} chicks, ${brooder.name} -> ${grower.name}`);
 
 const fin0 = (await api("admin", "GET", "/analytics/financial")).data;
@@ -374,7 +388,7 @@ async function expense(day: number, category: string, amount: number, remarks: s
 }
 
 // ── daily loop ──────────────────────────────────────────────────────────────
-const weighDays = new Set([8, 15, 22, 29, 36, 43, 50, 57, 62]);
+const weighDays = new Set([8, 15, 22, 29, 36, 43, 50, 57, 62].filter((d) => d <= DAYS));
 const mortalityIds: string[] = [];
 const saleIds: string[] = [];
 let lastAvgG: number | null = null;
@@ -445,7 +459,7 @@ for (let day = 1; day <= DAYS; day++) {
     const totalAlive = M.alive.B + M.alive.G;
     const mean = totalAlive * mortalityRate(day);
     let deaths = Math.max(0, Math.round(mean + Math.sqrt(mean) * gauss()));
-    if (day === 62) deaths = 4;
+    if (day === DAYS && !RUN) deaths = 4;
     const dB = totalAlive > 0 ? Math.min(M.alive.B, Math.round((deaths * M.alive.B) / totalAlive)) : 0;
     const split = { B: dB, G: Math.min(M.alive.G, deaths - dB) };
     for (const h of ["B", "G"] as const) {
@@ -532,9 +546,9 @@ for (let day = 1; day <= DAYS; day++) {
 
     // sales: three truckloads, mixed grades, three customers
     const saleDays = CFG.sales as Record<number, { cust: keyof typeof cust; rows: [("HIGH" | "LOW" | "CULL"), number][]; payPct: number; discount?: number }>;
-    const spec = day === 62 ? { cust: "C" as const, rows: null, payPct: CFG.finalPay as number } : saleDays[day];
-    if (day === 62) await finishSales(day);
-    if (spec && day !== 62) await sellLoad(day, spec.cust, spec.rows, spec.payPct, spec.discount);
+    const spec = day === DAYS && !RUN ? { cust: "C" as const, rows: null, payPct: CFG.finalPay as number } : saleDays[day];
+    if (day === DAYS && !RUN) await finishSales(day);
+    if (spec && !(day === DAYS && !RUN)) await sellLoad(day, spec.cust, spec.rows, spec.payPct, spec.discount);
 
     // end-of-day parity: API balances must equal the model
     const b = await api("admin", "GET", `/batches/${BID}`);
@@ -594,6 +608,13 @@ async function finishSales(day: number) {
 }
 
 // ── close the batch ─────────────────────────────────────────────────────────
+if (RUN) {
+    check("end: birds still on the books", M.alive.B + M.alive.G > 0);
+    const refused = await api("admin", "POST", `/batches/${BID}/close`, { status: "CLOSED" });
+    check("probe: close with live birds and no force -> 409", refused.status === 409, `status ${refused.status}`);
+    const still = await prisma.batches.findUniqueOrThrow({ where: { id: BID } });
+    check("refused close left the batch RUNNING with no end date", still.status === "RUNNING" && still.actual_end_date === null);
+} else {
 check("end: no live birds left", M.alive.B + M.alive.G === 0, `alive=${M.alive.B + M.alive.G}`);
 {
     // reopen-style probe on an empty batch is moot; test force/no-force semantics with a throwaway expectations:
@@ -605,6 +626,7 @@ check("end: no live birds left", M.alive.B + M.alive.G === 0, `alive=${M.alive.B
     check("probe: editing a closed batch -> 409", edit.status === 409, `status ${edit.status}`);
     const late = await api("worker", "POST", "/mortality-logs", { batch_id: BID, house_id: H.G, count_died: 1, date: T(62, 18) });
     check("probe: mortality on a closed batch is refused", late.status >= 400, `status ${late.status} (live birds = 0 so the balance guard stops it)`);
+}
 }
 
 // ── make backdated rows look like the days they happened ────────────────────
@@ -630,18 +652,19 @@ const mort = await prisma.mortalityLog.findMany({ where: { batch_id: BID } });
 const sales = await prisma.birdSale.findMany({ where: { batch_id: BID } });
 const allocs = await prisma.batchHouseAllocation.findMany({ where: { batch_id: BID } });
 
-check("batch SOLD with actual_end_date", bRow.status === "SOLD" && !!bRow.actual_end_date);
-check("conservation: initial = died + sold", INITIAL === sum(mort, (m) => m.count_died) + sum(sales, (s) => s.birds_count), `${INITIAL} vs ${sum(mort, (m) => m.count_died)}+${sum(sales, (s) => s.birds_count)}`);
+check(RUN ? "batch still RUNNING" : "batch SOLD with actual_end_date", RUN ? bRow.status === "RUNNING" && !bRow.actual_end_date : bRow.status === "SOLD" && !!bRow.actual_end_date);
+const liveNow = sum(bRow.houseBalances, (x) => x.quantity);
+check("conservation: initial = died + sold + live", INITIAL === sum(mort, (m) => m.count_died) + sum(sales, (s) => s.birds_count) + liveNow, `${INITIAL} vs ${sum(mort, (m) => m.count_died)}+${sum(sales, (s) => s.birds_count)}+${liveNow}`);
 check("mortality rows sum = model", sum(mort, (m) => m.count_died) === M.died);
 check("sold birds = model", sum(sales, (s) => s.birds_count) === M.sold);
 check("allocations: INITIAL = chick count", sum(allocs.filter((a) => a.reason === "INITIAL"), (a) => a.quantity) === INITIAL);
 check("allocations: moves out of brooder = into grower", sum(allocs.filter((a) => a.reason === "TRANSFER"), (a) => a.quantity) === sum(allocs.filter((a) => a.reason === "TRANSFER" && a.to_house_id === H.G), (a) => a.quantity));
-check("allocations: balances all zero", bRow.houseBalances.every((x) => x.quantity === 0));
+check(RUN ? "balances = model" : "allocations: balances all zero", RUN ? liveNow === M.alive.B + M.alive.G : bRow.houseBalances.every((x) => x.quantity === 0));
 const chickLines = await prisma.purchaseItem.findMany({ where: { batch_id: BID } });
 check("chick purchase lines = initial_chick_count", sum(chickLines, (l) => Number(l.quantity)) === INITIAL);
 check("chick purchase cost", r2(sum(chickLines, (l) => Number(l.total_price))) === M.chickCost);
-check("houses both end CLEANING", (await prisma.houses.findMany({ where: { id: { in: [H.B, H.G] } } })).every((h) => h.phase === "CLEANING"));
-for (const [name, n] of [["vaccinations", 5], ["weight records", 9], ["mortality records", 35]] as const) {
+if (!RUN) check("houses both end CLEANING", (await prisma.houses.findMany({ where: { id: { in: [H.B, H.G] } } })).every((h) => h.phase === "CLEANING"));
+for (const [name, n] of [["vaccinations", [5, 11, 18, 22, 36].filter((d) => d <= DAYS).length], ["weight records", [...weighDays].length - (DAYS >= 15 ? 0 : 0)], ["mortality records", 20]] as const) {
     const have = name === "vaccinations" ? await prisma.vaccinations.count({ where: { batch_id: BID } }) : name === "weight records" ? await prisma.weightRecords.count({ where: { batch_id: BID } }) : mortalityIds.length;
     check(`count: ${name} ${name === "mortality records" ? ">=" : "="} ${n}`, name === "mortality records" ? have >= n : have === n, `got ${have}`);
 }
@@ -682,17 +705,21 @@ for (const s of sales) {
 }
 
 // analytics must agree with the books
-const perf = (await api("admin", "GET", "/analytics/batches/performance?status=SOLD")).data?.find((x: any) => x.batch_id === BID);
+const perf = (await api("admin", "GET", `/analytics/batches/performance?status=${RUN ? "RUNNING" : "SOLD"}`)).data?.find((x: any) => x.batch_id === BID);
 const pnl = (await api("admin", "GET", `/analytics/batches/${BID}/pnl`)).data;
 const perf1 = (await api("admin", "GET", `/analytics/batches/${BID}/performance`)).data;
 const overview = (await api("admin", "GET", "/analytics/overview")).data;
 check("analytics: cumulative_died", perf?.cumulative_died === M.died, `${perf?.cumulative_died}`);
 check("analytics: mortality rate", Math.abs(perf?.cumulative_mortality_rate - M.died / INITIAL) < 1e-9);
-check("analytics: live_count = 0", perf?.live_count === 0);
+check("analytics: live_count = model", perf?.live_count === M.alive.B + M.alive.G, `${perf?.live_count}`);
 check("analytics: feed_kg = Σ feed consumed", Math.abs(perf?.feed_kg - M.feedKg) < 0.01, `${perf?.feed_kg} vs ${M.feedKg}`);
-check("analytics: farm overview shows 0 running batches", overview?.active_batch_count === 0 && overview?.total_birds_alive === 0);
+const runningLive = sum(await prisma.batchHouseBalance.findMany({ where: { batch: { status: "RUNNING" } } }), (x) => x.quantity);
+check("analytics: farm overview birds alive = Σ running balances", overview?.total_birds_alive === runningLive && (RUN ? overview?.active_batch_count >= 1 : true), `${overview?.total_birds_alive} vs ${runningLive}`);
 const soldKg = sum(sales, (s) => Number(s.net_weight));
-const gainKg = soldKg - (INITIAL * CHICK_WT) / 1000;
+// the API stands the latest weighing in for the whole live flock (see batchesPerformance)
+const latestW = await prisma.weightRecords.findFirst({ where: { batch_id: BID }, orderBy: [{ date: "desc" }, { created_at: "desc" }] });
+const producedKg = soldKg + (latestW ? (Number(latestW.average_wt_grams) * liveNow) / 1000 : 0);
+const gainKg = producedKg - (INITIAL * CHICK_WT) / 1000;
 const fcrExpected = M.feedKg / gainKg;
 check("analytics: FCR within 1% of feed / (sold kg - chick kg)", !!perf?.fcr && Math.abs(perf.fcr - fcrExpected) / fcrExpected < 0.01, `api=${perf?.fcr} expected=${fcrExpected}`);
 check("pnl: revenue = Σ sales - discounts", r2(Number(pnl?.revenue)) === r2(revenue - discounts), `${pnl?.revenue}`);
@@ -717,10 +744,10 @@ if (Math.abs(pnlProfit - trueProfit) > 1000) {
 }
 check("pnl.profit includes feed/medicine cost", Math.abs(pnlProfit - trueProfit) <= 1000, `pnl=${pnlProfit} true=${trueProfit}`);
 const sinceEnd = Math.floor((Date.now() - bRow.starting_date.getTime()) / 86_400_000);
-if (perf && perf.age_days === sinceEnd && sinceEnd > DAYS) {
+if (!RUN && perf && perf.age_days === sinceEnd && sinceEnd > DAYS) {
     finding("NOTE", `analytics age_days for a SOLD batch keeps growing (${perf.age_days}d, from Date.now()) instead of stopping at the batch end (~${DAYS}d). Shows on the Analytics page for finished batches.`);
 }
-if (bRow.actual_end_date && bRow.actual_end_date.getTime() > T(62).getTime() + 86400_000) {
+if (!RUN && bRow.actual_end_date && bRow.actual_end_date.getTime() > T(62).getTime() + 86400_000) {
     finding("NOTE", `actual_end_date is stamped with the close request time (new Date()), not the last sale. Closing a batch a day late shifts bird-days / depreciation accordingly.`);
 }
 
@@ -772,7 +799,7 @@ const alerts = (scan ?? []) as any[];
 const pass = checks.filter((c) => c.pass).length;
 const failed = checks.filter((c) => !c.pass);
 const mortPct = ((M.died / INITIAL) * 100).toFixed(2);
-const lastW = weights.at(-1);
+const lastW = weights.at(-1) ?? lastAvgG;
 const totalCost = r2(M.chickCost + M.expenses + consumedCost);
 const L: string[] = [];
 L.push(`# Batch lifecycle simulation -- report`, "");
@@ -780,7 +807,7 @@ L.push(`Batch \`${bRow.batch_code}\` (${bRow.breed}), ${INITIAL} chicks, ${DAYS}
 L.push(`**Checks: ${pass}/${checks.length} passed, ${failed.length} failed.**`, "");
 L.push(`## Headline numbers`, "", `| | |`, `|---|---|`);
 L.push(`| Chicks in / died / sold | ${INITIAL} / ${M.died} (${mortPct}%) / ${M.sold} |`);
-L.push(`| Final avg weight (last sample, day 62) | ${lastW} g |`);
+L.push(`| Final avg weight (last sample) | ${lastW} g |`);
 L.push(`| Feed used | ${M.feedKg.toLocaleString()} kg  (FCR api ${perf?.fcr?.toFixed(2)}, expected ${fcrExpected.toFixed(2)}) |`);
 L.push(`| Revenue (sum of total_amount; ${discounts.toLocaleString()} discounted at sale) | ${revenue.toLocaleString()} |`);
 L.push(`| Chicks + direct expenses + consumed stock | ${M.chickCost.toLocaleString()} + ${M.expenses.toLocaleString()} + ${consumedCost.toLocaleString()} = ${totalCost.toLocaleString()} |`);
