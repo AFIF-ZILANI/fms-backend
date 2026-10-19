@@ -1,5 +1,11 @@
 import { Hono } from "hono";
 import { zValidatorRfc7807 } from "@lib/validator";
+import { FinanceController } from "@controllers/finance.controller";
+import {
+    financeMonthlyQuerySchema,
+    financeOwedQuerySchema,
+    financeSummaryQuerySchema,
+} from "@validators/finance.validator";
 import { AnalyticsController } from "@controllers/analytics.controller";
 import {
     batchesPerformanceQuerySchema,
@@ -13,6 +19,22 @@ import {
 export const analyticsRoutes = new Hono();
 
 analyticsRoutes.get("/overview", AnalyticsController.farmOverview);
+// The Finance overview: period figures (with comparison), a monthly series, and money owed both ways.
+analyticsRoutes.get(
+    "/finance/summary",
+    zValidatorRfc7807("query", financeSummaryQuerySchema),
+    FinanceController.summary,
+);
+analyticsRoutes.get(
+    "/finance/monthly",
+    zValidatorRfc7807("query", financeMonthlyQuerySchema),
+    FinanceController.monthly,
+);
+analyticsRoutes.get(
+    "/finance/owed",
+    zValidatorRfc7807("query", financeOwedQuerySchema),
+    FinanceController.owed,
+);
 analyticsRoutes.get(
     "/financial",
     zValidatorRfc7807("query", financialDashboardQuerySchema),
