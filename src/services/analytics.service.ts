@@ -4,25 +4,14 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemBalances } from "@lib/stock-balance";
 import { getItemAvgCosts } from "@lib/stock-value";
+import { BatchPnlService } from "@services/batch-pnl.service";
 import { isNonDepleting } from "@lib/coded-stock";
 import { PAYROLL_EXPENSE_CATEGORIES } from "@lib/paid-at-create";
 import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 
-/** kg in one of these weight units. */
-const KG_PER_UNIT: Record<string, number> = { KG: 1, G: 0.001, MON_40KG: 40, METRIC_TON: 1000 };
-
-/** kg in one base unit of an item, or null when the item has no weight conversion (a BAG item with no
- * KG ItemUnit). factor_to_base is "1 of unit = factor base units", so kg/base = kg/unit / factor. */
-export function kgPerBaseUnit(
-    baseUnit: string,
-    itemUnits: { unit: string; factor_to_base: Prisma.Decimal }[],
-) {
-    if (KG_PER_UNIT[baseUnit] !== undefined) return KG_PER_UNIT[baseUnit];
-    const weighted = itemUnits.find(
-        (u) => KG_PER_UNIT[u.unit] !== undefined && !u.factor_to_base.isZero(),
-    );
-    return weighted ? KG_PER_UNIT[weighted.unit]! / weighted.factor_to_base.toNumber() : null;
-}
+// kgPerBaseUnit lives with the other unit maths; re-exported for existing callers.
+export { kgPerBaseUnit } from "@lib/unit-conversion";
+import { kgPerBaseUnit } from "@lib/unit-conversion";
 
 // Reporting is deliberately read-only against every other module's tables
 // (system-design-arc.md §3) -- no state of its own, only queries.
@@ -274,85 +263,25 @@ export const AnalyticsService = {
      * bird-days formula that would distribute them is explicitly v2
      * (system-design-arc.md §7), not guessed at here. */
     async batchPnl(batchId: string) {
-        const batch = await prisma.batches.findUnique({ where: { id: batchId } });
-        if (!batch) throw AppError.notFound("Batch");
-
-        const [birdSaleRevenue, purchaseCost, directExpenses, sharedPeriodExpenses, depreciation] =
-            await Promise.all([
-                prisma.birdSale.aggregate({
-                    where: { batch_id: batchId },
-                    _sum: { total_amount: true, discount_amount: true },
-                }),
-                prisma.purchaseItem.aggregate({
-                    where: { batch_id: batchId },
-                    _sum: { total_price: true },
-                }),
-                prisma.expense.aggregate({
-                    where: { batch_id: batchId, cost_type: "DIRECT" },
-                    _sum: { amount: true },
-                }),
-                prisma.expense.aggregate({
-                    where: { batch_id: batchId, cost_type: "SHARED_PERIOD" },
-                    _sum: { amount: true },
-                }),
-                prisma.assetDepreciation.aggregate({
-                    where: { batch_id: batchId },
-                    _sum: { amount: true },
-                }),
-            ]);
-
-        // Revenue is what the customer owed: the discount was never earned.
-        const revenue = (birdSaleRevenue._sum.total_amount ?? new Prisma.Decimal(0)).minus(
-            birdSaleRevenue._sum.discount_amount ?? new Prisma.Decimal(0),
-        );
-        const purchase_cost = purchaseCost._sum.total_price ?? new Prisma.Decimal(0);
-        const direct_expenses = directExpenses._sum.amount ?? new Prisma.Decimal(0);
-        const depreciation_share = depreciation._sum.amount ?? new Prisma.Decimal(0);
-        const shared_period_expenses_unallocated =
-            sharedPeriodExpenses._sum.amount ?? new Prisma.Decimal(0);
-
-        // Stock the batch used up (feed, bedding, medicine) at average purchase cost -- the same rule
-        // batchesPerformance.cost_to_date uses. Items bought straight onto the batch are already in
-        // purchase_cost; equipment is in depreciation_share.
-        const [used, onBatch] = await Promise.all([
-            prisma.consumption.findMany({
-                where: { batch_id: batchId },
-                select: {
-                    item_id: true,
-                    base_quantity: true,
-                    item: { select: { category: true } },
-                },
-            }),
-            prisma.purchaseItem.findMany({
-                where: { batch_id: batchId },
-                select: { item_id: true },
-                distinct: ["item_id"],
-            }),
-        ]);
-        const avgCosts = await getItemAvgCosts([...new Set(used.map((c) => c.item_id))]);
-        const boughtOnBatch = new Set(onBatch.map((p) => p.item_id));
-        const consumption_cost = used.reduce((sum, c) => {
-            const avg = avgCosts.get(c.item_id);
-            return avg && !boughtOnBatch.has(c.item_id) && !isNonDepleting(c.item.category)
-                ? sum.plus(c.base_quantity.times(avg))
-                : sum;
-        }, new Prisma.Decimal(0));
-
-        const profit = revenue
-            .minus(purchase_cost)
-            .minus(consumption_cost)
-            .minus(direct_expenses)
-            .minus(depreciation_share);
-
+        // The statement is the source of truth; the flat fields are kept for existing callers
+        // (batch detail page, simulations). `profit` is the contribution, before farm-wide costs.
+        const st = await BatchPnlService.statement(batchId);
+        const sum = (sections: string[]) =>
+            st.cost_lines.filter((l) => sections.includes(l.section)).reduce((a, l) => a + l.amount, 0);
+        const unallocated = await prisma.expense.aggregate({
+            where: { batch_id: batchId, cost_type: "SHARED_PERIOD" },
+            _sum: { amount: true },
+        });
         return {
             batch_id: batchId,
-            revenue,
-            purchase_cost,
-            consumption_cost,
-            direct_expenses,
-            depreciation_share,
-            shared_period_expenses_unallocated,
-            profit,
+            revenue: new Prisma.Decimal(st.revenue.net),
+            purchase_cost: new Prisma.Decimal(sum(["CHICKS"])),
+            consumption_cost: new Prisma.Decimal(sum(["FEED", "HEALTH", "SUPPLIES"]).toFixed(2)),
+            direct_expenses: new Prisma.Decimal(sum(["DIRECT"])),
+            depreciation_share: new Prisma.Decimal(sum(["DEPRECIATION"])),
+            shared_period_expenses_unallocated: unallocated._sum.amount ?? new Prisma.Decimal(0),
+            profit: new Prisma.Decimal(st.contribution),
+            statement: st,
         };
     },
 

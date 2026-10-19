@@ -40,3 +40,7 @@ export const listExpensesQuerySchema = paginationQuerySchema.extend({
 
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema> & { recorded_by_id: string };
 export type ListExpensesQuery = z.infer<typeof listExpensesQuerySchema>;
+
+/** Same filters as the list, without paging: the summary covers the whole filtered set. */
+export const expenseSummaryQuerySchema = listExpensesQuerySchema.omit({ page: true, limit: true });
+export type ExpenseSummaryQuery = z.infer<typeof expenseSummaryQuerySchema>;

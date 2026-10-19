@@ -47,6 +47,9 @@ analyticsRoutes.get(
 );
 analyticsRoutes.get("/batches/:id/performance", AnalyticsController.batchPerformance);
 analyticsRoutes.get("/batches/:id/pnl", AnalyticsController.batchPnl);
+// Every batch's P&L statement, for comparing them; and how farm-wide costs split between batches.
+analyticsRoutes.get("/batches-pnl", AnalyticsController.batchesPnl);
+analyticsRoutes.get("/shared-costs", AnalyticsController.sharedCosts);
 analyticsRoutes.get(
     "/trends/mortality",
     zValidatorRfc7807("query", trendsQuerySchema),

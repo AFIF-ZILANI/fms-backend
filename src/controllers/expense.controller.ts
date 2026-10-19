@@ -4,7 +4,11 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { ExpenseService } from "@services/expense.service";
-import type { CreateExpenseInput, ListExpensesQuery } from "@validators/expense.validator";
+import type {
+    CreateExpenseInput,
+    ExpenseSummaryQuery,
+    ListExpensesQuery,
+} from "@validators/expense.validator";
 
 export const ExpenseController = {
     async getAll(c: Context) {
@@ -12,6 +16,13 @@ export const ExpenseController = {
             const query = getValid<ListExpensesQuery>(c, "query");
             const { expenses, meta } = await ExpenseService.getAll(query);
             return sendList(c, expenses, meta, "Expenses fetched successfully");
+        });
+    },
+
+    async summary(c: Context) {
+        return withHandler(c, async () => {
+            const query = getValid<ExpenseSummaryQuery>(c, "query");
+            return sendSuccess(c, await ExpenseService.summary(query), "Expense summary computed");
         });
     },
 

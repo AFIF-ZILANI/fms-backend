@@ -3,6 +3,8 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { AnalyticsService } from "@services/analytics.service";
+import { BatchPnlService } from "@services/batch-pnl.service";
+import { SharedCostService } from "@services/shared-cost.service";
 import type {
     BatchesPerformanceQuery,
     ExpenseBreakdownQuery,
@@ -33,6 +35,18 @@ export const AnalyticsController = {
             const rows = await AnalyticsService.batchesPerformance(query.status);
             return sendSuccess(c, rows, "Batch performance list computed");
         });
+    },
+
+    async batchesPnl(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(c, await BatchPnlService.all(), "Batch P&L list computed"),
+        );
+    },
+
+    async sharedCosts(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(c, await SharedCostService.byMonth(), "Shared costs computed"),
+        );
     },
 
     async batchPnl(c: Context) {

@@ -42,3 +42,19 @@ export async function toBaseQuantity(
     }
     return qty.times(conversion.factor_to_base);
 }
+
+/** kg in one of these weight units. */
+const KG_PER_UNIT: Record<string, number> = { KG: 1, G: 0.001, MON_40KG: 40, METRIC_TON: 1000 };
+
+/** kg in one base unit of an item, or null when the item has no weight conversion (a BAG item with no
+ * KG ItemUnit). factor_to_base is "1 of unit = factor base units", so kg/base = kg/unit / factor. */
+export function kgPerBaseUnit(
+    baseUnit: string,
+    itemUnits: { unit: string; factor_to_base: Prisma.Decimal }[],
+) {
+    if (KG_PER_UNIT[baseUnit] !== undefined) return KG_PER_UNIT[baseUnit];
+    const weighted = itemUnits.find(
+        (u) => KG_PER_UNIT[u.unit] !== undefined && !u.factor_to_base.isZero(),
+    );
+    return weighted ? KG_PER_UNIT[weighted.unit]! / weighted.factor_to_base.toNumber() : null;
+}
