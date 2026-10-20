@@ -84,6 +84,16 @@ describe("AuditLogService", () => {
         expect(log.after_data).toEqual({ reorder_level: 20 });
     });
 
+    test("entries carry who made them, and tables lists every audited table once", async () => {
+        const { logs } = await AuditLogService.getAll({ page: 1, limit: 10, changed_by_id: profileId });
+        expect(logs[0]!.changed_by.name).toBe("Audit Actor");
+
+        const tables = await AuditLogService.tables();
+        expect(tables).toContain("Item");
+        expect(tables).toContain("Batches");
+        expect(new Set(tables).size).toBe(tables.length);
+    });
+
     test("getById on unknown id throws not-found", async () => {
         await expect(
             AuditLogService.getById("00000000-0000-0000-0000-000000000000"),

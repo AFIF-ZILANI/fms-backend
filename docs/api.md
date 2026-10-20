@@ -1186,16 +1186,17 @@ an unresolvable one is silently accepted, not rejected.
 
 ### 14.1 Audit Log — read side only
 
-`AuditLog` exists in the schema, but **nothing writes to it yet** —
-population needs Phase 15 (Auth) to know who's making a change. Expect this
-to return an **empty list** until Auth lands; the endpoint is built and
-ready, just unpopulated. Don't build UI that assumes audit history exists
-for anything created through this API today. **No POST/PATCH/DELETE route
-exists for this resource at all.**
+Rows are written by the services that perform a sensitive action
+(`lib/audit.ts`), against the signed-in actor: logins and passwords, people,
+payroll payouts and payout accounts, purchases, sales, bird sales, stock
+adjustments, batch start/edit/close and devices. Every read includes
+`changed_by: { id, name }`. The table is append-only at the database. **No
+POST/PATCH/DELETE route exists for this resource at all.**
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
 | GET | `/api/audit-logs` | 200 | query: `table_name?`, `record_id?`, `changed_by_id?`, `action?`, `from?`, `to?` (dates) |
+| GET | `/api/audit-logs/tables` | 200 | every `table_name` with at least one entry, sorted (`string[]`) |
 | GET | `/api/audit-logs/:id` | 200 | full `before_data`/`after_data` JSON diff |
 
 **Errors**: **404** unknown `:id`. List has no error paths beyond generic

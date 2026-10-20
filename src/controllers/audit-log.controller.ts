@@ -14,6 +14,13 @@ export const AuditLogController = {
         });
     },
 
+    async tables(c: Context) {
+        return withHandler(c, async () => {
+            const tables = await AuditLogService.tables();
+            return sendSuccess(c, tables, "Audited tables fetched successfully");
+        });
+    },
+
     async getById(c: Context) {
         return withHandler(c, async () => {
             const log = await AuditLogService.getById(c.req.param("id") ?? "");
