@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
+import { purgeAuditLog } from "@lib/test-fixtures";
 import { BatchService } from "@services/batch.service";
 import { BatchHouseAllocationService } from "@services/batch-house-allocation.service";
 import { BirdSaleService } from "@services/bird-sale.service";
@@ -49,6 +50,7 @@ describe("markEmptiedHousesCleaning", () => {
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: { in: createdBatchIds } } });
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: createdHouseIds } } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.deleteMany({ where: { id: profileId } });
     });
 

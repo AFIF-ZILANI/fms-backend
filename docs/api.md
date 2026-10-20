@@ -238,9 +238,9 @@ not a business entity). Deactivation uses `POST /:id/deactivate` +
   active — they're a person who exists, just not currently a live supplier
   relationship.
 
-`Warehouses` and `Doctors` have no lifecycle endpoints at all (no
-`is_active` field) — they're create + read (+ rename for Warehouses), full
-stop.
+`Warehouses` have no lifecycle endpoints at all (no `is_active` field) —
+create + read + rename, full stop. `Doctors` deactivate through their
+profile's `is_active` (a doctor's profile is theirs alone), see §4.3.
 
 ### 1.12 `idempotency_key` — offline-write safety
 
@@ -413,19 +413,22 @@ as Suppliers.
 
 ### 4.3 Doctors
 
-`Profiles(role=DOCTOR)` + `Doctors`. **Reduced scope on purpose** — no
-FEATURES.md page of their own, no `is_active` field, referenced only via
-`doctor_id` on Medications/Vaccinations. Create + list + get only: **no
-`PATCH`, no deactivate/reactivate routes exist for this resource at all.**
+`Profiles(role=DOCTOR)` + `Doctors`, referenced via `doctor_id` on
+Medications/Vaccinations. The model has no `is_active`, so deactivate/reactivate
+flip `profile.is_active`; past treatments keep pointing at the doctor. Every
+read includes `_count: { medications, vaccinations }`.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
-| GET | `/api/doctors` | 200 | — (pagination only) |
+| GET | `/api/doctors` | 200 | `is_active?: "true"\|"false"` (on the profile), pagination |
 | GET | `/api/doctors/:id` | 200 | — |
 | POST | `/api/doctors` | 201 | `{ name, mobile, email?, address?, specialty?, position?, degrees?: string[], institution? }` |
+| PATCH | `/api/doctors/:id` | 200 | any create field |
+| POST | `/api/doctors/:id/deactivate` | 200 | — |
+| POST | `/api/doctors/:id/reactivate` | 200 | — |
 
-**Errors**: **404** unknown `:id` on get; **409** duplicate `mobile`/`email`
-on create.
+**Errors**: **404** unknown `:id`; **409** duplicate `mobile`/`email`;
+**400** empty `PATCH` body.
 
 ---
 
@@ -1155,7 +1158,8 @@ employee sees only those whose audience names their role, on both the list (and 
 (Warning over 0.5%, Critical over 1% of live birds in 24h; workers + managers), low stock (Critical at
 zero; managers), lot expiring in 30 days (managers), a running house with no feed logged
 by 18:00 farm time (workers + managers), a task pending 2h+ past due (managers), negative performance pattern and
-probation ending (managers), and, admin only, one payroll-not-generated alert and one failed-payouts
+probation ending (managers), a running batch within 7 days of its expected selling date (Info) or
+past it (Warning; managers), and, admin only, one payroll-not-generated alert and one failed-payouts
 and one unpaid-wages alert per month. Each scan also **resolves** an alert whose condition has
 cleared; alerts a person raised by hand are never auto-resolved, so a manager can `POST /:id/resolve`
 one they can see. The scan runs every 10 minutes. Environment and sensor alerts are not built yet.

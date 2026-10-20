@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from "node:crypto";
 import prisma from "@lib/db";
+import { audit } from "@lib/audit";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 
@@ -31,7 +32,7 @@ const deviceSelect = {
 } as const;
 
 export const DeviceService = {
-    async createPairingCode(profile_id: string) {
+    async createPairingCode(profile_id: string, actor_id?: string) {
         try {
             const created = await prisma.pairingCode.create({
                 data: {
@@ -40,6 +41,17 @@ export const DeviceService = {
                     expires_at: new Date(Date.now() + PAIRING_CODE_TTL_MS),
                 },
             });
+            // The code itself is a short-lived secret: never logged.
+            if (actor_id) {
+                await audit(prisma, {
+                    table: "Profiles",
+                    record_id: profile_id,
+                    action: "UPDATE",
+                    actor_id,
+                    note: "Device pairing code issued",
+                    after: { profile_id, expires_at: created.expires_at.toISOString() },
+                });
+            }
             return { code: created.code, expires_at: created.expires_at };
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -71,6 +83,14 @@ export const DeviceService = {
                 await tx.pairingCode.update({
                     where: { code },
                     data: { used_at: new Date() },
+                });
+                await audit(tx, {
+                    table: "Device",
+                    record_id: device.id,
+                    action: "CREATE",
+                    actor_id: pairing.profile_id,
+                    note: "Device paired",
+                    after: { label, ...(platform !== undefined && { platform }) },
                 });
 
                 return {
@@ -108,13 +128,26 @@ export const DeviceService = {
     async revoke(id: string, actor_id?: string) {
         const device = await prisma.device.findUnique({ where: { id } });
         if (!device) throw AppError.notFound("Device");
-        return prisma.device.update({
-            where: { id },
-            data: {
-                revoked_at: new Date(),
-                ...(actor_id !== undefined && { revoked_by_id: actor_id }),
-            },
-            select: deviceSelect,
+        return prisma.$transaction(async (tx) => {
+            const revoked = await tx.device.update({
+                where: { id },
+                data: {
+                    revoked_at: new Date(),
+                    ...(actor_id !== undefined && { revoked_by_id: actor_id }),
+                },
+                select: deviceSelect,
+            });
+            if (actor_id) {
+                await audit(tx, {
+                    table: "Device",
+                    record_id: id,
+                    action: "UPDATE",
+                    actor_id,
+                    note: "Device revoked",
+                    after: { label: device.label },
+                });
+            }
+            return revoked;
         });
     },
 };

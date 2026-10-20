@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
-import { houseNumber, sharedWarehouseId, seedStock } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, seedStock, purgeAuditLog } from "@lib/test-fixtures";
 import { createPaymentSchema } from "@validators/payment.validator";
 import { SaleService } from "./sale.service";
 import { PurchaseService } from "./purchase.service";
@@ -101,6 +101,7 @@ describe("paid when recorded", () => {
         await prisma.houses.deleteMany({ where: { id: houseId } });
         await prisma.item.deleteMany({ where: { id: itemId } });
         await prisma.paymentInstrument.deleteMany({ where: { id: walletId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.deleteMany({ where: { id: profileId } });
     });
 

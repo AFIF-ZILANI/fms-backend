@@ -4,7 +4,7 @@ import { BatchService } from "./batch.service";
 import { StockUnitService } from "./stock-unit.service";
 import { ConsumptionService } from "./consumption.service";
 import { AssetDepreciationService } from "./asset-depreciation.service";
-import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, purgeAuditLog } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -101,6 +101,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
         });
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.delete({ where: { id: houseId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 

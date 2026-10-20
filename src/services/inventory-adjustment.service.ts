@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { audit } from "@lib/audit";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -91,6 +92,16 @@ export const InventoryAdjustmentService = {
                     ref_id: adjustment.id,
                     location_type,
                     location_id,
+                });
+
+                await audit(tx, {
+                    table: "InventoryAdjustment",
+                    record_id: adjustment.id,
+                    action: "CREATE",
+                    actor_id: data.recorded_by_id,
+                    note: `Stock adjusted: ${data.reason}`,
+                    before: { item_id: data.item_id, quantity: before.toString() },
+                    after: { item_id: data.item_id, quantity: after.toString(), location_type, location_id },
                 });
 
                 return adjustment;

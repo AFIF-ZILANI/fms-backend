@@ -4,7 +4,7 @@ import { PurchaseService, PurchaseItemService } from "./purchase.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
 import { createPurchaseSchema } from "@validators/purchase.validator";
-import { sharedInstrumentId } from "@lib/test-fixtures";
+import { sharedInstrumentId, purgeAuditLog } from "@lib/test-fixtures";
 import { PaymentService } from "./payment.service";
 
 const createdPurchaseIds: string[] = [];
@@ -72,6 +72,9 @@ describe("PurchaseService", () => {
         await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
         const supplier = await prisma.suppliers.findUnique({ where: { id: supplierId } });
         await prisma.suppliers.delete({ where: { id: supplierId } });
+        await purgeAuditLog({
+            where: { changed_by_id: { in: [profileId, supplier!.profile_id] } },
+        });
         await prisma.profiles.deleteMany({
             where: { id: { in: [profileId, supplier!.profile_id] } },
         });

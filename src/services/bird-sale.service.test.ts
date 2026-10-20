@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { BirdSaleService } from "./bird-sale.service";
 import { createBirdSaleSchema } from "@validators/bird-sale.validator";
-import { houseNumber, sharedInstrumentId } from "@lib/test-fixtures";
+import { houseNumber, sharedInstrumentId, purgeAuditLog } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -58,6 +58,7 @@ describe("BirdSaleService", () => {
         });
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.delete({ where: { id: houseId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 

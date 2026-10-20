@@ -13,7 +13,7 @@ export const DeviceController = {
     async createPairingCode(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<CreatePairingCodeInput>(c, "json");
-            const code = await DeviceService.createPairingCode(body.profile_id);
+            const code = await DeviceService.createPairingCode(body.profile_id, await getActorId(c));
             return sendSuccess(c, code, "Pairing code created", 201);
         });
     },

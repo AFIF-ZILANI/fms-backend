@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
+import { purgeAuditLog } from "@lib/test-fixtures";
 import { InventoryAdjustmentService } from "./inventory-adjustment.service";
 
 const itemIds: string[] = [];
@@ -81,6 +82,7 @@ describe("InventoryAdjustmentService", () => {
         await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
         await prisma.warehouses.delete({ where: { id: warehouseId } });
         await prisma.houses.delete({ where: { id: houseId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 

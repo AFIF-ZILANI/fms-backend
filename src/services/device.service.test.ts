@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
+import { purgeAuditLog } from "@lib/test-fixtures";
 import { DeviceService } from "./device.service";
 
 let profileId: string;
@@ -21,6 +22,7 @@ describe("DeviceService", () => {
         // must not leave rows behind in the shared dev database.
         await prisma.device.deleteMany({ where: { profile_id: profileId } });
         await prisma.pairingCode.deleteMany({ where: { profile_id: profileId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.deleteMany({ where: { id: profileId } });
     });
 

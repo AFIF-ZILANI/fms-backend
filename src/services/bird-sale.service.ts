@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { audit } from "@lib/audit";
 import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { assertHouseActive } from "@lib/active-guards";
 import { Prisma } from "../../prisma/generated/prisma/client";
@@ -193,6 +194,24 @@ export const BirdSaleService = {
         }
 
         await markEmptiedHousesCleaning(tx, [data.house_id]);
+
+        await audit(tx, {
+            table: "BirdSale",
+            record_id: birdSale.id,
+            action: "CREATE",
+            actor_id: data.recorded_by_id,
+            note: "Bird sale recorded",
+            after: {
+                batch_id: data.batch_id,
+                house_id: data.house_id,
+                birds_count: data.birds_count,
+                net_weight: String(data.net_weight),
+                price_per_kg: String(data.price_per_kg),
+                total_amount: total_amount.toString(),
+                discount_amount: discount_amount.toString(),
+                paid_at_create: paid_amount.toString(),
+            },
+        });
 
         return birdSale;
     },

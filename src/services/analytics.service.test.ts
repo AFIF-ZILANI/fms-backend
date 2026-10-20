@@ -6,7 +6,7 @@ import { ConsumptionService } from "./consumption.service";
 import { AnalyticsService, kgPerBaseUnit } from "./analytics.service";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
-import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, purgeAuditLog } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -145,6 +145,7 @@ describe("AnalyticsService", () => {
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: batchId } });
         await prisma.batches.delete({ where: { id: batchId } });
         await prisma.houses.delete({ where: { id: houseId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 
