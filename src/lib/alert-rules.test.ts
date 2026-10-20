@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {
     AUDIENCE,
+    daysUntil,
     farmDayStart,
     farmHour,
     monthKey,
@@ -9,6 +10,7 @@ import {
     overdueByHours,
     overdueLabel,
     pastDailyCutoff,
+    sellingDateLevel,
 } from "./alert-rules";
 
 // --- mortality grading ---
@@ -36,6 +38,14 @@ assert.equal(monthKey(new Date("2026-09-01T00:00:00Z")), "2026-09");
 assert.equal(overdueLabel(3), "3h");
 assert.equal(overdueLabel(47), "47h");
 assert.equal(overdueLabel(817), "34d");
+
+// --- selling date ---
+assert.equal(daysUntil(new Date("2026-10-15T00:00:00Z"), new Date("2026-10-08T20:00:00Z")), 6, "farm-local days, not UTC");
+assert.equal(daysUntil(new Date("2026-10-07T00:00:00Z"), new Date("2026-10-08T06:00:00Z")), -1);
+assert.equal(sellingDateLevel(8), null);
+assert.equal(sellingDateLevel(7), "INFO");
+assert.equal(sellingDateLevel(0), "INFO", "selling today is a reminder, not late");
+assert.equal(sellingDateLevel(-1), "WARNING");
 
 // --- audiences ---
 assert.deepEqual([...AUDIENCE.ADMIN], [], "admin-only is the empty list");

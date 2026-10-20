@@ -41,6 +41,20 @@ export const pastDailyCutoff = (now: Date): boolean => farmHour(now) >= DAILY_LO
 export const farmDayStart = (now: Date): Date =>
     new Date(farmDay(now).getTime() - FARM_UTC_OFFSET_MS);
 
+// ── Selling date ─────────────────────────────────────────────────────────────
+/** How far ahead of a running batch's expected selling date to start reminding: enough to book buyers. */
+export const SELLING_DATE_WARNING_DAYS = 7;
+
+/** Whole farm-calendar days from today to the expected selling date; negative once it has passed. */
+export const daysUntil = (date: Date, now: Date): number =>
+    Math.round((farmDay(date).getTime() - farmDay(now).getTime()) / 86_400_000);
+
+export function sellingDateLevel(daysLeft: number): "INFO" | "WARNING" | null {
+    if (daysLeft < 0) return "WARNING";
+    if (daysLeft <= SELLING_DATE_WARNING_DAYS) return "INFO";
+    return null;
+}
+
 // ── Tasks ────────────────────────────────────────────────────────────────────
 /** How long past due before a manager is told. The worker already sees it on their Tasks tab. */
 export const TASK_OVERDUE_GRACE_HOURS = 2;
