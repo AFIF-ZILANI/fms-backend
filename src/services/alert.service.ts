@@ -8,6 +8,9 @@ import { getItemBalances } from "@lib/stock-balance";
 import {
     AUDIENCE,
     TASK_OVERDUE_GRACE_HOURS,
+    SELLING_DATE_WARNING_DAYS,
+    daysUntil,
+    sellingDateLevel,
     farmDayStart,
     monthKey,
     mortalityLevel,
@@ -378,6 +381,37 @@ async function checkOverdueTasks(): Promise<Raised> {
     return raised;
 }
 
+/** A running batch close to (or past) its expected selling date: time to line up buyers, or move the
+ *  date. Clears when the batch closes or the date is pushed back. Manager and admin. */
+async function checkSellingDates(): Promise<Raised> {
+    const raised: Raised = new Set();
+    const now = new Date();
+    const horizon = new Date(now.getTime() + (SELLING_DATE_WARNING_DAYS + 1) * 86_400_000);
+    const batches = await prisma.batches.findMany({
+        where: { status: "RUNNING", expected_selling_date: { lte: horizon } },
+    });
+    for (const b of batches) {
+        const days = daysUntil(b.expected_selling_date, now);
+        const level = sellingDateLevel(days);
+        if (!level) continue;
+        await raise(raised, {
+            type: "BATCH",
+            level,
+            title:
+                days < 0
+                    ? `${b.batch_code} is past its expected selling date`
+                    : days === 0
+                      ? `${b.batch_code} is due for sale today`
+                      : `${b.batch_code} is due for sale in ${plural(days, "day")}`,
+            description: `Expected selling date ${b.expected_selling_date.toISOString().slice(0, 10)}`,
+            related_id: b.id,
+            audience: AUDIENCE.MANAGER,
+            key: `SELLING_DATE:${b.id}`,
+        });
+    }
+    return raised;
+}
+
 /** Every alert family the scan owns: its key prefix and the check that raises it. A family whose
  *  check threw is left alone -- better a stale alert than resolving what we couldn't verify. */
 const FAMILIES: [prefix: string, check: () => Promise<Raised>][] = [
@@ -391,6 +425,7 @@ const FAMILIES: [prefix: string, check: () => Promise<Raised>][] = [
     ["PAYOUT_DUE:", checkPayoutDue],
     ["LOG_MISSING:", checkDailyLogs],
     ["TASK_OVERDUE:", checkOverdueTasks],
+    ["SELLING_DATE:", checkSellingDates],
 ];
 
 /** Resolves ACTIVE alerts in a family that this scan no longer raised: the stock came in, the reading

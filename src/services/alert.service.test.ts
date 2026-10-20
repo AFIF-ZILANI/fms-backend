@@ -108,6 +108,38 @@ describe("AlertService", () => {
         expect(matchesAfterRescan.length).toBe(1); // still just one, not duplicated
     });
 
+    test("scan reminds about a batch due for sale soon, warns once the date passes, and clears on close", async () => {
+        const make = (days: number) =>
+            prisma.batches.create({
+                data: {
+                    batch_code: `SELL-${crypto.randomUUID()}`,
+                    breed: "CLASSIC",
+                    expected_selling_date: new Date(Date.now() + days * 86400_000),
+                    initial_chick_count: 100,
+                    init_chicks_avg_wt: 40,
+                },
+            });
+        const soon = await make(3);
+        const late = await make(-2);
+        const far = await make(30);
+        createdBatchIds.push(soon.id, late.id, far.id);
+
+        await AlertService.runScan();
+        const find = (id: string) =>
+            prisma.alerts.findFirst({ where: { dedupe_key: `SELLING_DATE:${id}`, status: "ACTIVE" } });
+        const [a, b, c] = await Promise.all([find(soon.id), find(late.id), find(far.id)]);
+        if (a) createdAlertIds.push(a.id);
+        if (b) createdAlertIds.push(b.id);
+        expect(a?.level).toBe("INFO");
+        expect(a?.audience).toEqual(["MANAGER"]);
+        expect(b?.level).toBe("WARNING");
+        expect(c).toBeNull();
+
+        await prisma.batches.update({ where: { id: late.id }, data: { status: "CLOSED" } });
+        await AlertService.runScan();
+        expect(await find(late.id)).toBeNull();
+    });
+
     test("scan raises a critical mortality alert when the 24h rate exceeds 1%", async () => {
         const house = await prisma.houses.create({
             data: { name: "Scan House", type: "BROODER", number: houseNumber() },

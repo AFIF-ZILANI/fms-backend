@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { DeviceService } from "./device.service";
 import { IngestService } from "./ingest.service";
 import type { IngestSaleInput } from "@validators/ingest.validator";
-import { houseNumber, sharedInstrumentId } from "@lib/test-fixtures";
+import { houseNumber, sharedInstrumentId, purgeAuditLog } from "@lib/test-fixtures";
 import { PaymentService } from "./payment.service";
 
 let profileId: string;
@@ -55,6 +55,7 @@ describe("IngestService", () => {
         await prisma.ingestedSale.deleteMany({ where: { recorded_by_id: profileId } });
         await prisma.device.deleteMany({ where: { profile_id: profileId } });
         await prisma.pairingCode.deleteMany({ where: { profile_id: profileId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.deleteMany({ where: { id: profileId } });
     });
 

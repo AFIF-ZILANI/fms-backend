@@ -6,8 +6,10 @@ import { EmployeeService } from "./employee.service";
 import { EmployeePayoutAccountService } from "./employee-payout-account.service";
 import { PerformanceScoreEntryService } from "./performance-score-entry.service";
 import { DeviceService } from "./device.service";
+import { BatchService } from "./batch.service";
+import { InventoryAdjustmentService } from "./inventory-adjustment.service";
 import type { CreateEmployeeInput } from "@validators/employee.validator";
-import { purgeAuditLog } from "@lib/test-fixtures";
+import { houseNumber, purgeAuditLog, sharedWarehouseId } from "@lib/test-fixtures";
 
 // The sensitive actions leave a permanent "who did it" row -- and never a secret.
 
@@ -19,6 +21,9 @@ const adminIds: string[] = [];
 const employeeIds: string[] = [];
 const avatarIds: string[] = [];
 const accountIds: string[] = [];
+const batchIds: string[] = [];
+const houseIds: string[] = [];
+const itemIds: string[] = [];
 
 const rowsFor = (table: string, record_id: string) =>
     prisma.auditLog.findMany({
@@ -70,6 +75,13 @@ describe("audit writes", () => {
         await prisma.employeePayoutAccount.deleteMany({
             where: { employee_id: { in: employeeIds } },
         });
+        await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: batchIds } } });
+        await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: { in: batchIds } } });
+        await prisma.batches.deleteMany({ where: { id: { in: batchIds } } });
+        await prisma.houses.deleteMany({ where: { id: { in: houseIds } } });
+        await prisma.stockLedger.deleteMany({ where: { item_id: { in: itemIds } } });
+        await prisma.inventoryAdjustment.deleteMany({ where: { item_id: { in: itemIds } } });
+        await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
         await prisma.employees.deleteMany({ where: { id: { in: employeeIds } } });
         await prisma.admins.deleteMany({ where: { id: { in: adminIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: profileIds } } });
@@ -239,6 +251,72 @@ describe("audit writes", () => {
             (await prisma.device.findUniqueOrThrow({ where: { id: paired.device_id } }))
                 .revoked_by_id,
         ).toBe(actorId);
+    });
+
+    test("pairing and revoking a device are recorded; the pairing code is not", async () => {
+        const { code } = await DeviceService.createPairingCode(actorId, actorId);
+        const paired = await DeviceService.redeemPairingCode(code, "Audited phone", "android");
+        await DeviceService.revoke(paired.device_id, actorId);
+
+        const issued = await rowsFor("Profiles", actorId);
+        expect(issued.map((r) => r.note)).toContain("Device pairing code issued");
+        expect(JSON.stringify(issued)).not.toContain(code);
+        expect((await rowsFor("Device", paired.device_id)).map((r) => r.note)).toEqual([
+            "Device paired",
+            "Device revoked",
+        ]);
+    });
+
+    test("starting, editing and closing a batch are recorded against who did each", async () => {
+        const house = await prisma.houses.create({
+            data: { name: "Audit House", type: "BROODER", number: houseNumber() },
+        });
+        houseIds.push(house.id);
+        const batch = await BatchService.create({
+            batch_code: `AUDIT-${uniq()}`,
+            breed: "CLASSIC",
+            expected_selling_date: new Date(Date.now() + 40 * 86_400_000),
+            initial_chick_count: 50,
+            init_chicks_avg_wt: 40,
+            house_id: house.id,
+            recorded_by_id: actorId,
+        });
+        batchIds.push(batch!.id);
+        await BatchService.update(batch!.id, { breed: "HIBREED" }, actorId);
+        await BatchService.close(batch!.id, { status: "CLOSED", force: true, recorded_by_id: actorId });
+
+        const rows = await rowsFor("Batches", batch!.id);
+        expect(rows.map((r) => r.note)).toEqual([
+            "Batch started",
+            "Batch edited: breed",
+            "Batch force-closed as CLOSED with 50 birds written off",
+        ]);
+        expect(rows.every((r) => r.changed_by_id === actorId)).toBe(true);
+        expect(rows[1]!.before_data).toEqual({ breed: "CLASSIC" });
+        expect(rows[1]!.after_data).toEqual({ breed: "HIBREED" });
+    });
+
+    test("a stock adjustment records the count before and after", async () => {
+        const item = await prisma.item.create({
+            data: {
+                name: `Audit Item ${uniq()}`,
+                normalized_key: `audit item ${uniq()}`,
+                category: "FEED",
+                unit: "BAG",
+            },
+        });
+        itemIds.push(item.id);
+        const adjustment = await InventoryAdjustmentService.create({
+            item_id: item.id,
+            warehouse_id: await sharedWarehouseId(),
+            quantity_after: 12,
+            reason: "recount",
+            recorded_by_id: actorId,
+        });
+        const [row] = await rowsFor("InventoryAdjustment", adjustment!.id);
+        expect(row!.changed_by_id).toBe(actorId);
+        expect(row!.before_data).toMatchObject({ quantity: "0" });
+        expect(row!.after_data).toMatchObject({ quantity: "12" });
     });
 
     test("the audit log is append-only at the database: no edits, and deletes only by explicit opt-in", async () => {

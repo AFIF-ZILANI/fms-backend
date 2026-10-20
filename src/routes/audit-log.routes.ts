@@ -10,4 +10,5 @@ auditLogRoutes.get(
     zValidatorRfc7807("query", listAuditLogsQuerySchema),
     AuditLogController.getAll,
 );
+auditLogRoutes.get("/tables", AuditLogController.tables);
 auditLogRoutes.get("/:id", AuditLogController.getById);

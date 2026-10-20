@@ -41,7 +41,7 @@ export const BatchController = {
     async update(c: Context) {
         return withHandler(c, async () => {
             const body = getValid<UpdateBatchInput>(c, "json");
-            const batch = await BatchService.update(c.req.param("id") ?? "", body);
+            const batch = await BatchService.update(c.req.param("id") ?? "", body, await getActorId(c));
             return sendSuccess(c, batch, "Batch updated");
         });
     },

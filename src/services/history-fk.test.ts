@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { StockUnitService } from "./stock-unit.service";
-import { boundStockUnit, removeBoundStockUnit } from "@lib/test-fixtures";
+import { boundStockUnit, removeBoundStockUnit, purgeAuditLog } from "@lib/test-fixtures";
 
 // History-bearing foreign keys are RESTRICT: the database, not a count in a service, is what stops a
 // delete that would erase or null out history -- including one that races the service's own check.
@@ -90,6 +90,7 @@ describe("history foreign keys refuse deletes", () => {
         await prisma.item.deleteMany({ where: { id: itemId } });
         await prisma.warehouses.deleteMany({ where: { id: warehouseId } });
         await prisma.houses.deleteMany({ where: { id: houseId } });
+        await purgeAuditLog({ where: { changed_by_id: { in: [profileId, adminProfileId] } } });
         await prisma.profiles.deleteMany({ where: { id: { in: [profileId, adminProfileId] } } });
     });
 

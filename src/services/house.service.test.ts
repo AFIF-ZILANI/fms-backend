@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { HouseService } from "./house.service";
 import { BatchService } from "./batch.service";
 import { AppError } from "@lib/app-error";
-import { houseNumber } from "@lib/test-fixtures";
+import { houseNumber, purgeAuditLog } from "@lib/test-fixtures";
 
 const createdIds: string[] = [];
 const createdBatchIds: string[] = [];
@@ -17,6 +17,7 @@ describe("HouseService", () => {
         });
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: createdIds } } });
+        await purgeAuditLog({ where: { changed_by_id: { in: createdProfileIds } } });
         await prisma.profiles.deleteMany({ where: { id: { in: createdProfileIds } } });
     });
 

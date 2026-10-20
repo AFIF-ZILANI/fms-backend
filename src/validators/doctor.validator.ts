@@ -12,7 +12,12 @@ export const createDoctorSchema = z.object({
     institution: z.string().optional(),
 });
 
-export const listDoctorsQuerySchema = paginationQuerySchema;
+export const updateDoctorSchema = createDoctorSchema.partial();
+
+export const listDoctorsQuerySchema = paginationQuerySchema.extend({
+    is_active: z.enum(["true", "false"]).optional(),
+});
 
 export type CreateDoctorInput = z.infer<typeof createDoctorSchema>;
+export type UpdateDoctorInput = z.infer<typeof updateDoctorSchema>;
 export type ListDoctorsQuery = z.infer<typeof listDoctorsQuerySchema>;

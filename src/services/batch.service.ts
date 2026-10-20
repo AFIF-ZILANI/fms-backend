@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { audit } from "@lib/audit";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -79,6 +80,19 @@ export const BatchService = {
                     },
                 });
 
+                await audit(tx, {
+                    table: "Batches",
+                    record_id: batch.id,
+                    action: "CREATE",
+                    actor_id: data.recorded_by_id,
+                    note: "Batch started",
+                    after: {
+                        batch_code: data.batch_code,
+                        initial_chick_count: data.initial_chick_count,
+                        house_id: data.house_id,
+                    },
+                });
+
                 return tx.batches.findUniqueOrThrow({ where: { id: batch.id }, include });
             });
         } catch (err) {
@@ -86,7 +100,7 @@ export const BatchService = {
         }
     },
 
-    async update(id: string, data: UpdateBatchInput) {
+    async update(id: string, data: UpdateBatchInput, actor_id?: string) {
         const batch = await prisma.batches.findUnique({ where: { id } });
         if (!batch) throw AppError.notFound("Batch");
         if (batch.status !== "RUNNING")
@@ -97,16 +111,28 @@ export const BatchService = {
             throw AppError.badRequest("No update fields provided");
         }
 
+        const changes = {
+            ...(batch_code && { batch_code }),
+            ...(breed && { breed }),
+            ...(phase && { phase }),
+            ...(expected_selling_date && { expected_selling_date }),
+        };
         try {
-            return await prisma.batches.update({
-                where: { id },
-                data: {
-                    ...(batch_code && { batch_code }),
-                    ...(breed && { breed }),
-                    ...(phase && { phase }),
-                    ...(expected_selling_date && { expected_selling_date }),
-                },
-                include,
+            return await prisma.$transaction(async (tx) => {
+                const updated = await tx.batches.update({ where: { id }, data: changes, include });
+                if (actor_id) {
+                    const keys = Object.keys(changes) as (keyof typeof changes)[];
+                    await audit(tx, {
+                        table: "Batches",
+                        record_id: id,
+                        action: "UPDATE",
+                        actor_id,
+                        note: `Batch edited: ${keys.join(", ")}`,
+                        before: Object.fromEntries(keys.map((k) => [k, String(batch[k])])),
+                        after: Object.fromEntries(keys.map((k) => [k, String(changes[k])])),
+                    });
+                }
+                return updated;
             });
         } catch (err) {
             return handlePrismaWriteError(err);
@@ -169,6 +195,15 @@ export const BatchService = {
             await markEmptiedHousesCleaning(tx, balances.map((b) => b.house_id));
 
             const closed = await tx.batches.findUniqueOrThrow({ where: { id }, include });
+            await audit(tx, {
+                table: "Batches",
+                record_id: id,
+                action: "UPDATE",
+                actor_id: data.recorded_by_id,
+                note: remaining > 0 ? `Batch force-closed as ${data.status} with ${remaining} birds written off` : `Batch closed as ${data.status}`,
+                before: { status: "RUNNING" },
+                after: { status: data.status, birds_written_off: remaining },
+            });
 
             const usedStockUnits = await tx.consumption.findMany({
                 where: { batch_id: id, stock_unit_id: { not: null } },

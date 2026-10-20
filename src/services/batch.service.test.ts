@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { AppError } from "@lib/app-error";
-import { houseNumber } from "@lib/test-fixtures";
+import { houseNumber, purgeAuditLog } from "@lib/test-fixtures";
 
 const createdBatchIds: string[] = [];
 let houseId: string;
@@ -33,6 +33,7 @@ describe("BatchService", () => {
         });
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.delete({ where: { id: houseId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 

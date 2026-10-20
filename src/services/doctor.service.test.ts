@@ -60,4 +60,28 @@ describe("DoctorService", () => {
         const { doctors } = await DoctorService.getAll({ page: 1, limit: 100 });
         expect(doctors.some((d) => d.id === doctor!.id)).toBe(true);
     });
+
+    test("update edits profile and doctor fields; deactivate filters it out of the active list", async () => {
+        const doctor = await DoctorService.create({ name: "Before", mobile: mobile() });
+        createdIds.push(doctor!.id);
+
+        const updated = await DoctorService.update(doctor!.id, {
+            name: "After",
+            specialty: "Avian vet",
+        });
+        expect(updated!.profile.name).toBe("After");
+        expect(updated!.specialty).toBe("Avian vet");
+
+        await DoctorService.setActive(doctor!.id, false);
+        const active = await DoctorService.getAll({ page: 1, limit: 100, is_active: "true" });
+        expect(active.doctors.some((d) => d.id === doctor!.id)).toBe(false);
+        const inactive = await DoctorService.getAll({ page: 1, limit: 100, is_active: "false" });
+        expect(inactive.doctors.some((d) => d.id === doctor!.id)).toBe(true);
+    });
+
+    test("update with no fields is a bad request", async () => {
+        const doctor = await DoctorService.create({ name: "Empty", mobile: mobile() });
+        createdIds.push(doctor!.id);
+        await expect(DoctorService.update(doctor!.id, {})).rejects.toMatchObject({ status: 400 });
+    });
 });

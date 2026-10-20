@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { SaleService } from "./sale.service";
 import { AppError } from "@lib/app-error";
-import { sharedInstrumentId, sharedWarehouseId, seedStock } from "@lib/test-fixtures";
+import { sharedInstrumentId, sharedWarehouseId, seedStock, purgeAuditLog } from "@lib/test-fixtures";
 import { PaymentService } from "./payment.service";
 import { getItemLocationBalance } from "@lib/stock-balance";
 
@@ -43,6 +43,7 @@ describe("SaleService", () => {
         await prisma.item.deleteMany({ where: { id: { in: createdItemIds } } });
         await prisma.stockLedger.deleteMany({ where: { item_id: itemId } });
         await prisma.item.delete({ where: { id: itemId } });
+        await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 
@@ -214,6 +215,7 @@ describe("SaleService stock", () => {
         await prisma.sale.deleteMany({ where: { id: { in: saleIds } } });
         await prisma.stockLedger.deleteMany({ where: { item_id: item } });
         await prisma.item.delete({ where: { id: item } });
+        await purgeAuditLog({ where: { changed_by_id: actor } });
         await prisma.profiles.delete({ where: { id: actor } });
     });
 

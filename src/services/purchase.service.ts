@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { audit } from "@lib/audit";
 import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
@@ -188,6 +189,21 @@ export const PurchaseService = {
                     actor_id: data.recorded_by_id,
                     transaction_ref: data.payment_transaction_ref,
                     note: data.payment_note,
+                });
+
+                await audit(tx, {
+                    table: "Purchase",
+                    record_id: purchase.id,
+                    action: "CREATE",
+                    actor_id: data.recorded_by_id,
+                    note: "Purchase recorded",
+                    after: {
+                        total_amount: total_amount.toString(),
+                        paid_at_create: paid_amount.toString(),
+                        lines: data.items.length,
+                        ...(data.supplier_id !== undefined && { supplier_id: data.supplier_id }),
+                        ...(data.invoice_no !== undefined && { invoice_no: data.invoice_no }),
+                    },
                 });
 
                 return tx.purchase.findUniqueOrThrow({ where: { id: purchase.id }, include });
