@@ -1,8 +1,8 @@
 // There is no registration page, so the first admin (and anyone locked out) gets in with this:
 //   bun run auth:set-password someone@example.com
 // Sets a random temporary password and forces a change at next login.
-import prisma from "@lib/db";
-import { AuthService } from "@services/auth.service";
+import prisma from "../src/lib/db";
+import { AuthService } from "../src/services/auth.service";
 
 const email = process.argv[2]?.trim();
 if (!email) {
@@ -20,5 +20,7 @@ if (!profile || (profile.role !== "ADMIN" && profile.role !== "EMPLOYEE")) {
 }
 
 const password = await AuthService.issueTempPassword(profile.id);
-console.log(`${profile.name} (${profile.role})\n  email:    ${email}\n  password: ${password}\n\nThey must change it at first login.`);
+console.log(
+    `${profile.name} (${profile.role})\n  email:    ${email}\n  password: ${password}\n\nThey must change it at first login.`,
+);
 await prisma.$disconnect();
