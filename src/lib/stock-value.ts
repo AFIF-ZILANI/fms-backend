@@ -15,7 +15,8 @@ export async function getItemAvgCosts(itemIds: string[]): Promise<Map<string, Pr
     if (itemIds.length === 0) return new Map();
     const grouped = await prisma.purchaseItem.groupBy({
         by: ["item_id"],
-        where: { item_id: { in: itemIds } },
+        // Opening lots are zero-cost placeholders, not a price paid -- they'd drag the average down.
+        where: { item_id: { in: itemIds }, purchase: { is_opening: false } },
         _sum: { base_quantity: true, total_price: true },
     });
 

@@ -866,6 +866,11 @@ model Purchase {
   due_amount     Decimal       @db.Decimal(10, 2)
   recorded_by_id String
   recorded_by    Profiles      @relation(fields: [recorded_by_id], references: [id])
+  // Not a real purchase: the zero-cost lot an opening balance creates for a QR-tracked item, so its
+  // bottles have a lot to bind to (StockUnit only binds to a PurchaseItem). The opening balance's
+  // adjustment already wrote the stock-ledger IN, so this writes none. Kept out of the purchase
+  // list, spend analytics and average cost.
+  is_opening     Boolean       @default(false)
   created_at     DateTime      @default(now())
 
   items PurchaseItem[]
