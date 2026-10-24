@@ -145,6 +145,13 @@ describe("InventoryAdjustmentService", () => {
         });
     });
 
+    test("an opening balance is refused once the item has stock history anywhere, even at an empty location", async () => {
+        const item = await newItem({ stockAtWarehouse: 50 });
+        await expect(
+            adjust(item.id, 10, { reason: "Opening balance", warehouse_id: undefined, house_id: houseId }),
+        ).rejects.toMatchObject({ status: 409 });
+    });
+
     test("when both locations are sent the house wins, and only the house is recorded", async () => {
         const item = await newItem({ stockAtWarehouse: 100 });
         const adjustment = await adjust(item.id, 30, { house_id: houseId });

@@ -23,6 +23,9 @@ export const ItemService = {
             ...(query.is_unit_tracked !== undefined && {
                 is_unit_tracked: query.is_unit_tracked === "true",
             }),
+            ...(query.has_stock_history !== undefined && {
+                ledgerEntries: query.has_stock_history === "true" ? { some: {} } : { none: {} },
+            }),
         };
         const [items, total] = await Promise.all([
             prisma.item.findMany({

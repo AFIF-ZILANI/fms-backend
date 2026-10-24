@@ -29,6 +29,8 @@ export const listItemsQuerySchema = paginationQuerySchema.extend({
     // -side rather than client-side because a paginated list filtered after the
     // fact silently drops matches past page one.
     is_unit_tracked: z.enum(["true", "false"]).optional(),
+    // false = items with no StockLedger entry anywhere -- the only ones an opening balance applies to.
+    has_stock_history: z.enum(["true", "false"]).optional(),
 });
 
 export const createItemUnitSchema = z

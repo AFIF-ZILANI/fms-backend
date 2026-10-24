@@ -52,11 +52,15 @@ export const InventoryAdjustmentService = {
                     location_type,
                     location_id,
                 );
-                // An opening balance means "this is what was here when we started": on a location
-                // that already holds recorded stock it would silently become a count correction.
-                if (data.reason === "Opening balance" && !current.isZero()) {
+                // An opening balance means "this is what was here when we started": once the item has
+                // any ledger entry anywhere (a purchase, an earlier opening balance) its stock is
+                // already being tracked, and a second "start" would double-count it.
+                if (
+                    data.reason === "Opening balance" &&
+                    (await tx.stockLedger.findFirst({ where: { item_id: data.item_id }, select: { id: true } }))
+                ) {
                     throw AppError.conflict(
-                        "Stock is already recorded here -- use a count correction instead of an opening balance",
+                        "This item already has stock history -- use a count correction instead of an opening balance",
                     );
                 }
                 const before = current;
