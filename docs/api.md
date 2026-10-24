@@ -462,7 +462,7 @@ empty `PATCH` body).
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
 | GET | `/api/items` | 200 | query: `category?`, `is_active?` |
-| GET | `/api/items/:id` | 200 | — |
+| GET | `/api/items/:id` | 200 | — (also returns `itemOrganizations` links) |
 | POST | `/api/items` | 201 | `{ name, category, unit, reorder_level?, preferred_reorder_qty?, lead_time_days?, supplier_ids?: uuid[] }` |
 | PATCH | `/api/items/:id` | 200 | any subset of create fields |
 | POST | `/api/items/:id/deactivate` | 200 | — |

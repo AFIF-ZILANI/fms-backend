@@ -37,7 +37,11 @@ export const ItemService = {
     },
 
     async getById(id: string) {
-        const item = await prisma.item.findUnique({ where: { id }, include });
+        // itemOrganizations only on the detail read -- the edit form prefills its manufacturer from it.
+        const item = await prisma.item.findUnique({
+            where: { id },
+            include: { ...include, itemOrganizations: true },
+        });
         if (!item) throw AppError.notFound("Item");
         return item;
     },
