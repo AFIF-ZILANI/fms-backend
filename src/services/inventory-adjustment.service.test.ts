@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { purgeAuditLog } from "@lib/test-fixtures";
 import { InventoryAdjustmentService } from "./inventory-adjustment.service";
+import { PurchaseService } from "./purchase.service";
 
 const itemIds: string[] = [];
 let warehouseId: string;
@@ -9,13 +10,14 @@ let houseId: string;
 let profileId: string;
 
 /** A fresh item per test, so one test's ledger never leaks into another's balance. */
-async function newItem(opts: { stockAtWarehouse?: number } = {}) {
+async function newItem(opts: { stockAtWarehouse?: number; unitTracked?: boolean } = {}) {
     const item = await prisma.item.create({
         data: {
             name: `Adjustment Item ${crypto.randomUUID()}`,
             normalized_key: `adjustment item ${crypto.randomUUID()}`,
             category: "FEED",
             unit: "BAG",
+            is_unit_tracked: opts.unitTracked ?? false,
         },
     });
     itemIds.push(item.id);
@@ -79,6 +81,8 @@ describe("InventoryAdjustmentService", () => {
     afterAll(async () => {
         await prisma.stockLedger.deleteMany({ where: { item_id: { in: itemIds } } });
         await prisma.inventoryAdjustment.deleteMany({ where: { item_id: { in: itemIds } } });
+        await prisma.purchaseItem.deleteMany({ where: { item_id: { in: itemIds } } });
+        await prisma.purchase.deleteMany({ where: { is_opening: true, warehouse_id: warehouseId } });
         await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
         await prisma.warehouses.delete({ where: { id: warehouseId } });
         await prisma.houses.delete({ where: { id: houseId } });
@@ -143,6 +147,32 @@ describe("InventoryAdjustmentService", () => {
         await expect(adjust(item.id, 90, { reason: "Opening balance" })).rejects.toMatchObject({
             status: 409,
         });
+    });
+
+    test("a QR-tracked item's opening balance creates a zero-cost opening lot to bind codes to", async () => {
+        const item = await newItem({ unitTracked: true });
+        await adjust(item.id, 12, { reason: "Opening balance" });
+
+        const lot = await prisma.purchaseItem.findFirstOrThrow({
+            where: { item_id: item.id },
+            include: { purchase: true },
+        });
+        expect(lot.purchase.is_opening).toBe(true);
+        expect(lot.purchase.warehouse_id).toBe(warehouseId);
+        expect(lot.base_quantity.toNumber()).toBe(12);
+        expect(lot.total_price.toNumber()).toBe(0);
+        // Only the adjustment posted stock -- the lot adds no second IN.
+        expect(await prisma.stockLedger.count({ where: { item_id: item.id } })).toBe(1);
+        // Not listed as a purchase.
+        const { purchases } = await PurchaseService.getAll({ page: 1, limit: 100 } as never);
+        expect(purchases.some((p) => p.id === lot.purchase_id)).toBe(false);
+    });
+
+    test("a QR-tracked item's opening balance is refused at a house", async () => {
+        const item = await newItem({ unitTracked: true });
+        await expect(
+            adjust(item.id, 5, { reason: "Opening balance", warehouse_id: undefined, house_id: houseId }),
+        ).rejects.toMatchObject({ status: 400 });
     });
 
     test("an opening balance is refused once the item has stock history anywhere, even at an empty location", async () => {

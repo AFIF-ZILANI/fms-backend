@@ -685,7 +685,7 @@ export const AnalyticsService = {
         const window = trendWindow(days);
 
         const purchaseItems = await prisma.purchaseItem.findMany({
-            where: { purchase: { purchase_date: window } },
+            where: { purchase: { purchase_date: window, is_opening: false } },
             select: { total_price: true, item: { select: { category: true } } },
         });
 
@@ -711,7 +711,7 @@ export const AnalyticsService = {
     async purchasesTrend(days: number) {
         const window = trendWindow(days);
         const rows = await prisma.purchase.findMany({
-            where: { purchase_date: window },
+            where: { purchase_date: window, is_opening: false },
             select: { purchase_date: true, total_amount: true },
         });
 

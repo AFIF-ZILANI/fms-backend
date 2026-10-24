@@ -19,6 +19,45 @@ const LEDGER_REASON: Record<string, "WASTAGE" | "EXPIRED" | "OPENING_BALANCE"> =
     "Opening balance": "OPENING_BALANCE",
 };
 
+/** The zero-cost "Opening stock" lot behind a QR-tracked item's opening balance (see Purchase.is_opening):
+ * StockUnit only binds to a PurchaseItem, so without it the item's bottles could never be linked.
+ * Writes no ledger row -- the opening balance's own adjustment already posted the stock. Also used by
+ * scripts/backfill-opening-lots.ts for opening balances recorded before this existed. */
+export async function createOpeningLot(
+    tx: Prisma.TransactionClient,
+    lot: {
+        item_id: string;
+        unit: string;
+        quantity: Prisma.Decimal;
+        warehouse_id: string;
+        recorded_by_id: string;
+        date: Date;
+    },
+) {
+    return tx.purchase.create({
+        data: {
+            is_opening: true,
+            warehouse_id: lot.warehouse_id,
+            invoice_no: "Opening stock",
+            purchase_date: lot.date,
+            total_amount: 0,
+            paid_amount: 0,
+            due_amount: 0,
+            recorded_by_id: lot.recorded_by_id,
+            items: {
+                create: {
+                    item_id: lot.item_id,
+                    quantity: lot.quantity,
+                    unit: lot.unit,
+                    base_quantity: lot.quantity,
+                    unit_price: 0,
+                    total_price: 0,
+                },
+            },
+        },
+    });
+}
+
 export const InventoryAdjustmentService = {
     async getAll(query: ListInventoryAdjustmentsQuery) {
         const where = { ...(query.item_id !== undefined && { item_id: query.item_id }) };
@@ -63,6 +102,18 @@ export const InventoryAdjustmentService = {
                         "This item already has stock history -- use a count correction instead of an opening balance",
                     );
                 }
+                const item = await tx.item.findUniqueOrThrow({
+                    where: { id: data.item_id },
+                    select: { unit: true, is_unit_tracked: true },
+                });
+                const needsOpeningLot = data.reason === "Opening balance" && item.is_unit_tracked;
+                // A lot always lands in a warehouse (Purchase.warehouse_id); bottles reach a house by
+                // allocation once their codes are linked.
+                if (needsOpeningLot && location_type === "HOUSE") {
+                    throw AppError.badRequest(
+                        "A QR-tracked item's opening balance goes in a warehouse -- link the codes, then allocate the bottles to the house",
+                    );
+                }
                 const before = current;
                 const delta = after.minus(before);
                 if (delta.isZero()) {
@@ -97,6 +148,17 @@ export const InventoryAdjustmentService = {
                     location_type,
                     location_id,
                 });
+
+                if (needsOpeningLot) {
+                    await createOpeningLot(tx, {
+                        item_id: data.item_id,
+                        unit: item.unit,
+                        quantity: after,
+                        warehouse_id: location_id,
+                        recorded_by_id: data.recorded_by_id,
+                        date: adjustment.created_at,
+                    });
+                }
 
                 await audit(tx, {
                     table: "InventoryAdjustment",

@@ -45,6 +45,8 @@ function computeDiscount(
 export const PurchaseService = {
     async getAll(query: ListPurchasesQuery) {
         const where = {
+            // Opening lots aren't purchases anyone made (Purchase.is_opening).
+            is_opening: false,
             ...(query.supplier_id !== undefined && { supplier_id: query.supplier_id }),
             ...((query.date_from !== undefined || query.date_to !== undefined) && {
                 purchase_date: {
