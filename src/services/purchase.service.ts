@@ -166,6 +166,10 @@ export const PurchaseService = {
                             }),
                         },
                     });
+                    // A line bought for a batch (chicks) goes straight into that batch's house as live
+                    // birds, tracked by BatchHouseBalance -- it never sits in the warehouse, so it posts
+                    // no stock. Its cost still reaches the batch through PurchaseItem.batch_id.
+                    if (item.batch_id !== undefined) continue;
                     await StockLedgerService.record(tx, {
                         item_id: item.item_id,
                         quantity: base_quantity,

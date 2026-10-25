@@ -114,6 +114,34 @@ describe("PurchaseService", () => {
         expect(purchase!.items[0]!.total_price.toNumber()).toBeCloseTo(155.0, 2);
     });
 
+    test("a line bought for a batch (chicks) posts no warehouse stock", async () => {
+        const batch = await prisma.batches.create({
+            data: {
+                batch_code: `PUR-${crypto.randomUUID()}`,
+                breed: "CLASSIC",
+                expected_selling_date: new Date(),
+                initial_chick_count: 5,
+                init_chicks_avg_wt: 40,
+            },
+        });
+        try {
+            const purchase = await PurchaseService.create({
+                warehouse_id: warehouseId,
+                purchase_date: new Date(),
+                paid_amount: 0,
+                recorded_by_id: profileId,
+                items: [{ item_id: itemId, batch_id: batch.id, quantity: 5, unit: "BOTTLE", unit_price: 40 }],
+            });
+            createdPurchaseIds.push(purchase!.id);
+            const lineId = purchase!.items[0]!.id;
+            expect(await prisma.stockLedger.count({ where: { ref_type: "PURCHASE", ref_id: lineId } })).toBe(0);
+            expect(purchase!.items[0]!.batch_id).toBe(batch.id);
+        } finally {
+            await prisma.purchaseItem.deleteMany({ where: { batch_id: batch.id } });
+            await prisma.batches.delete({ where: { id: batch.id } });
+        }
+    });
+
     test("paid_amount exceeding total throws bad-request", async () => {
         await expect(
             PurchaseService.create({
