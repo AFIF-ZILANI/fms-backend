@@ -19,6 +19,13 @@ describe("canAccess", () => {
         expect(canAccess(other, "GET", "/notifications", none)).toBe(false);
     });
 
+    test("workers and managers can read doctors (treatment form's vet picker), not change them", () => {
+        for (const who of [worker, manager]) {
+            expect(canAccess(who, "GET", "/doctors", none)).toBe(true);
+            expect(canAccess(who, "POST", "/doctors", none)).toBe(false);
+        }
+    });
+
     test("a manager can resolve an alert, but not run the scan", () => {
         expect(canAccess(manager, "POST", "/alerts/abc/resolve", none)).toBe(true);
         expect(canAccess(manager, "POST", "/alerts/scan", none)).toBe(false);
