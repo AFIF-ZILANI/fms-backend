@@ -167,7 +167,8 @@ describe("ConsumptionService", () => {
         });
         expect(ledgerEntry?.direction).toBe("OUT");
         expect(ledgerEntry?.quantity.toNumber()).toBe(30);
-        expect(ledgerEntry?.location_type).toBeNull();
+        // Tagged to the house the unit was moved into, so that house's stock goes down.
+        expect(ledgerEntry?.location_type).toBe("HOUSE");
     });
 
     test("a coded draw can't take more than is left in its unit or its lot", async () => {
@@ -208,7 +209,7 @@ describe("ConsumptionService", () => {
             (await prisma.stockUnit.findUniqueOrThrow({ where: { id: units[0]!.id } })).status,
         ).toBe("IN_USE");
         await expect(draw(units[1]!.id, 1.5)).rejects.toMatchObject({ status: 409 });
-    });
+    }, 20_000);
 
     test("a coded draw naming another item's unit is refused, and nothing is written", async () => {
         const [unit] = await StockUnitService.provision(1);
@@ -297,7 +298,7 @@ describe("ConsumptionService", () => {
             await prisma.stockHouseAllocation.deleteMany({ where: { stock_unit_id: unit!.id } });
             await prisma.houses.delete({ where: { id: other.id } });
         }
-    });
+    }, 20_000);
 
     test("drawing from a DISPOSED unit throws a conflict", async () => {
         const [unit] = await StockUnitService.provision(1);

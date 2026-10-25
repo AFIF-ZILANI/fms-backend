@@ -4,7 +4,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { assertHouseActive } from "@lib/active-guards";
-import { codedRemaining, isNonDepleting, lockLot } from "@lib/coded-stock";
+import { lockLot, unitAmount, unitLocation } from "@lib/coded-stock";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     BindStockUnitInput,
@@ -153,10 +153,19 @@ export const StockUnitService = {
         house_id: string | null,
         idempotency_key: string,
         stock_transfer_id?: string,
+        /** Who moved it -- recorded on the transfer this posts. Falls back to whoever recorded the lot. */
+        recorded_by_id?: string,
     ) {
         const unit = await prisma.stockUnit.findUnique({
             where: { id },
-            include: { purchase_item: true },
+            include: {
+                purchase_item: {
+                    include: {
+                        item: { select: { unit: true, category: true } },
+                        purchase: { select: { recorded_by_id: true, warehouse_id: true } },
+                    },
+                },
+            },
         });
         if (!unit) throw AppError.notFound("StockUnit");
         // A blank code is just a sticker until it's bound to a lot; a used-up or disposed unit isn't
@@ -209,13 +218,62 @@ export const StockUnitService = {
                           ? "ALLOCATION"
                           : "REALLOCATION";
 
+                // The ledger follows the unit: move what's in it from where it is to where it's going,
+                // so warehouse and house stock both see the move. Skipped when the caller already
+                // recorded the movement as a transfer of its own (the web's "link to ledger").
+                let transferId = stock_transfer_id;
+                const lot = unit.purchase_item!;
+                if (transferId === undefined) {
+                    await lockLot(tx, lot.id);
+                    const amount = await unitAmount(tx, id, lot);
+                    if (amount.greaterThan(0)) {
+                        const from = await unitLocation(tx, id, lot);
+                        // A return goes back to the warehouse its lot was bought into.
+                        const to =
+                            house_id === null
+                                ? { location_type: "WAREHOUSE" as const, location_id: lot.purchase.warehouse_id }
+                                : { location_type: "HOUSE" as const, location_id: house_id };
+                        const transfer = await tx.stockTransfer.create({
+                            data: {
+                                item_id: lot.item_id,
+                                from_location_type: from.location_type,
+                                from_location_id: from.location_id,
+                                to_location_type: to.location_type,
+                                to_location_id: to.location_id,
+                                quantity: amount,
+                                unit: lot.item.unit,
+                                base_quantity: amount,
+                                note: "Coded unit moved",
+                                recorded_by_id: recorded_by_id ?? lot.purchase.recorded_by_id,
+                                idempotency_key: `${idempotency_key}:transfer`,
+                            },
+                        });
+                        for (const [direction, at] of [
+                            ["OUT", from],
+                            ["IN", to],
+                        ] as const) {
+                            await StockLedgerService.record(tx, {
+                                item_id: lot.item_id,
+                                quantity: amount,
+                                direction,
+                                reason: "TRANSFER",
+                                ref_type: "TRANSFER",
+                                ref_id: transfer.id,
+                                location_type: at.location_type,
+                                location_id: at.location_id,
+                            });
+                        }
+                        transferId = transfer.id;
+                    }
+                }
+
                 return tx.stockHouseAllocation.create({
                     data: {
                         stock_unit_id: id,
                         house_id,
                         type,
                         idempotency_key,
-                        ...(stock_transfer_id !== undefined && { stock_transfer_id }),
+                        ...(transferId !== undefined && { stock_transfer_id: transferId }),
                     },
                 });
             });
@@ -291,8 +349,8 @@ async function lockedUnit(tx: Prisma.TransactionClient, id: string) {
 }
 
 /** A unit leaving play (used up or disposed) takes what was still in it out of stock: a WASTAGE OUT of
- *  the remainder at the DISPOSAL location (ref_id = the unit), so balances, stock value and the wastage
- *  report all see it. Equipment is written off whole (1 of its base unit). */
+ *  the remainder (ref_id = the unit) from wherever the unit is, so that location's balance, stock value
+ *  and the wastage report all see it. Equipment is written off whole (1 of its base unit). */
 async function writeOffRemainder(
     tx: Prisma.TransactionClient,
     unit: Awaited<ReturnType<typeof lockedUnit>>,
@@ -300,18 +358,7 @@ async function writeOffRemainder(
     const lot = unit.purchase_item;
     if (!lot) return;
     await lockLot(tx, lot.id);
-    let writeOff: Prisma.Decimal;
-    if (isNonDepleting(lot.item.category)) {
-        writeOff = new Prisma.Decimal(1);
-    } else {
-        const left = await codedRemaining(tx, unit.id, lot);
-        // An unsized lot: split what the lot has left across its units still in play.
-        const live = await tx.stockUnit.count({
-            where: { purchase_item_id: lot.id, status: { in: ["IN_STOCK", "IN_USE"] } },
-        });
-        writeOff = left.unit ?? (live > 0 ? left.lot.dividedBy(live) : new Prisma.Decimal(0));
-        if (writeOff.greaterThan(left.lot)) writeOff = left.lot;
-    }
+    const writeOff = await unitAmount(tx, unit.id, lot);
     if (!writeOff.greaterThan(0)) return;
     await StockLedgerService.record(tx, {
         item_id: lot.item_id,
@@ -320,6 +367,6 @@ async function writeOffRemainder(
         reason: "WASTAGE",
         ref_type: "ADJUSTMENT",
         ref_id: unit.id,
-        location_type: "DISPOSAL",
+        ...(await unitLocation(tx, unit.id, lot)),
     });
 }

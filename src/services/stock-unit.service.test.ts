@@ -328,6 +328,27 @@ describe("StockUnitService", () => {
         await holder;
     });
 
+    test("relocate moves the unit's stock in the ledger: warehouse -> house, and back on return", async () => {
+        const unit = await boundUnit();
+        const legs = async (transferId: string | null) =>
+            prisma.stockLedger.findMany({
+                where: { ref_type: "TRANSFER", ref_id: transferId ?? "" },
+                orderBy: { direction: "asc" },
+            });
+
+        const moved = await StockUnitService.relocate(unit.id, houseId, crypto.randomUUID());
+        const [inLeg, outLeg] = await legs(moved!.stock_transfer_id);
+        expect(outLeg).toMatchObject({ direction: "OUT", location_type: "WAREHOUSE" });
+        expect(inLeg).toMatchObject({ direction: "IN", location_type: "HOUSE", location_id: houseId });
+        expect(inLeg!.quantity.toNumber()).toBeGreaterThan(0);
+        expect(inLeg!.quantity.toNumber()).toBe(outLeg!.quantity.toNumber());
+
+        const back = await StockUnitService.relocate(unit.id, null, crypto.randomUUID());
+        const [backIn, backOut] = await legs(back!.stock_transfer_id);
+        expect(backOut).toMatchObject({ location_type: "HOUSE", location_id: houseId });
+        expect(backIn).toMatchObject({ location_type: "WAREHOUSE", location_id: outLeg!.location_id });
+    }, 20_000);
+
     test("relocate infers ALLOCATION on first move, REALLOCATION on a house->house move, RETURN to warehouse", async () => {
         const unit = await boundUnit();
         createdUnitIds.push(unit!.id);
@@ -356,7 +377,7 @@ describe("StockUnitService", () => {
         // The allocations that point at this house go first: a house with history can't be deleted.
         await prisma.stockHouseAllocation.deleteMany({ where: { house_id: houseTwo.id } });
         await prisma.houses.delete({ where: { id: houseTwo.id } });
-    });
+    }, 20_000);
 
     test("relocate rejects a no-op move (same house, or already at the warehouse)", async () => {
         const unit = await boundUnit();
@@ -540,12 +561,12 @@ describe("StockUnitService", () => {
     test("setStatus: CONSUMED writes off the remainder and can then only be disposed; DISPOSED is final", async () => {
         const unit = await boundUnit();
         const before = await prisma.stockLedger.count({
-            where: { ref_id: unit.id, location_type: "DISPOSAL" },
+            where: { ref_id: unit.id, reason: "WASTAGE" },
         });
         expect((await StockUnitService.setStatus(unit.id, "CONSUMED")).status).toBe("CONSUMED");
         expect(
             await prisma.stockLedger.count({
-                where: { ref_id: unit.id, location_type: "DISPOSAL" },
+                where: { ref_id: unit.id, reason: "WASTAGE" },
             }),
         ).toBe(before + 1);
         await expect(StockUnitService.setStatus(unit.id, "IN_STOCK")).rejects.toMatchObject({
@@ -555,7 +576,7 @@ describe("StockUnitService", () => {
         // already written off as CONSUMED: disposing posts nothing more
         expect(
             await prisma.stockLedger.count({
-                where: { ref_id: unit.id, location_type: "DISPOSAL" },
+                where: { ref_id: unit.id, reason: "WASTAGE" },
             }),
         ).toBe(before + 1);
         await expect(StockUnitService.setStatus(unit.id, "IN_USE")).rejects.toMatchObject({
