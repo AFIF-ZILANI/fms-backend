@@ -62,6 +62,7 @@ export const StockUnitController = {
                 body.house_id ?? null,
                 body.idempotency_key ?? crypto.randomUUID(),
                 body.stock_transfer_id,
+                await getActorId(c),
             );
             return sendSuccess(c, unit, "Stock unit relocated");
         });
