@@ -4,6 +4,7 @@ import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemBalances } from "@lib/stock-balance";
 import { getItemAvgCosts } from "@lib/stock-value";
+import { chargeRatios, landedTotal } from "@lib/purchase-charges";
 import { BatchPnlService } from "@services/batch-pnl.service";
 import { isNonDepleting } from "@lib/coded-stock";
 import { PAYROLL_EXPENSE_CATEGORIES } from "@lib/paid-at-create";
@@ -143,7 +144,7 @@ export const AnalyticsService = {
                 _sum: { net_weight: true },
             }),
             prisma.purchaseItem.groupBy({
-                by: ["batch_id", "item_id"],
+                by: ["batch_id", "item_id", "purchase_id"],
                 where: { batch_id: { in: batchIds } },
                 _sum: { total_price: true },
             }),
@@ -171,8 +172,12 @@ export const AnalyticsService = {
                 costByBatch.set(batchId, (costByBatch.get(batchId) ?? zero).plus(amount));
         };
         const purchasedOnBatch = new Set<string>();
+        const ratios = await chargeRatios(batchPurchases.map((p) => p.purchase_id));
         for (const p of batchPurchases) {
-            addCost(p.batch_id, p._sum.total_price);
+            addCost(
+                p.batch_id,
+                landedTotal({ purchase_id: p.purchase_id, total_price: p._sum.total_price ?? zero }, ratios),
+            );
             purchasedOnBatch.add(`${p.batch_id}|${p.item_id}`);
         }
         for (const e of directExpenses) addCost(e.batch_id, e._sum.amount);
@@ -310,7 +315,8 @@ export const AnalyticsService = {
                 _sum: { total_amount: true, discount_amount: true },
             }),
             prisma.expense.aggregate({
-                where: { date: { gte: monthStart, lt: monthEnd } },
+                // A purchase charge (STOCK) is already inside stock cost via the landed average -- not again here.
+                where: { date: { gte: monthStart, lt: monthEnd }, cost_type: { not: "STOCK" } },
                 _sum: { amount: true },
             }),
             prisma.purchase.aggregate({ _sum: { due_amount: true } }),
@@ -740,7 +746,8 @@ export const AnalyticsService = {
 
         const grouped = await prisma.expense.groupBy({
             by: ["category"],
-            where: { date: { gte: monthStart, lt: monthEnd } },
+            // A purchase charge (STOCK) is already inside stock cost via the landed average -- not again here.
+            where: { date: { gte: monthStart, lt: monthEnd }, cost_type: { not: "STOCK" } },
             _sum: { amount: true },
         });
 
@@ -777,7 +784,8 @@ export const AnalyticsService = {
                 select: { sale_date: true, total_amount: true, discount_amount: true },
             }),
             prisma.expense.findMany({
-                where: { date: { gte: from, lt: to } },
+                // A purchase charge (STOCK) is already inside stock cost via the landed average -- not again here.
+                where: { date: { gte: from, lt: to }, cost_type: { not: "STOCK" } },
                 select: { date: true, amount: true },
             }),
         ]);

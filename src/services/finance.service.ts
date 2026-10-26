@@ -1,6 +1,7 @@
 import prisma from "@lib/db";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { getItemAvgCosts } from "@lib/stock-value";
+import { chargeRatios, landedTotal } from "@lib/purchase-charges";
 import { isNonDepleting } from "@lib/coded-stock";
 import { PAYROLL_EXPENSE_CATEGORIES } from "@lib/paid-at-create";
 
@@ -63,7 +64,7 @@ async function costsIn(
     const [chicks, consumed, expenses, depreciation, losses] = await Promise.all([
         prisma.purchaseItem.findMany({
             where: { batch_id: { not: null }, purchase: { purchase_date: { gte: from, lt: to } } },
-            select: { total_price: true, item: { select: { category: true } } },
+            select: { purchase_id: true, total_price: true, item: { select: { category: true } } },
         }),
         prisma.consumption.findMany({
             where: { date: { gte: from, lt: to } },
@@ -71,7 +72,8 @@ async function costsIn(
         }),
         prisma.expense.groupBy({
             by: ["category"],
-            where: { date: { gte: from, lt: to } },
+            // A purchase charge (STOCK) is already inside stock cost via the landed average -- not again here.
+            where: { date: { gte: from, lt: to }, cost_type: { not: "STOCK" } },
             _sum: { amount: true },
         }),
         prisma.assetDepreciation.aggregate({
@@ -91,6 +93,8 @@ async function costsIn(
         ...new Set([...consumed.map((c) => c.item_id), ...losses.map((l) => l.item_id)]),
     ]);
 
+    const ratios = await chargeRatios(chicks.map((p) => p.purchase_id));
+
     const lines = new Map<string, CostLine>();
     const add = (kind: CostLine["kind"], code: string, label: string, amount: Prisma.Decimal) => {
         if (amount.isZero()) return;
@@ -104,7 +108,7 @@ async function costsIn(
             "CHICKS",
             p.item.category,
             labels.item.get(p.item.category) ?? p.item.category,
-            p.total_price,
+            landedTotal(p, ratios),
         );
     for (const c of consumed) {
         const cost = avg.get(c.item_id);

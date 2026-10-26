@@ -3,6 +3,7 @@ import { zValidatorRfc7807 } from "@lib/validator";
 import { PurchaseController, PurchaseItemController } from "@controllers/purchase.controller";
 import {
     createPurchaseSchema,
+    addPurchaseChargeSchema,
     listPurchasesQuerySchema,
     listPurchaseItemsQuerySchema,
     completePurchaseItemSchema,
@@ -20,6 +21,11 @@ purchaseRoutes.post(
     "/",
     zValidatorRfc7807("json", createPurchaseSchema),
     PurchaseController.create,
+);
+purchaseRoutes.post(
+    "/:id/charges",
+    zValidatorRfc7807("json", addPurchaseChargeSchema),
+    PurchaseController.addCharge,
 );
 
 export const purchaseItemRoutes = new Hono();

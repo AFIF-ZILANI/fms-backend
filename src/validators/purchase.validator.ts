@@ -36,6 +36,25 @@ const purchaseItemInput = z
     })
     .refine(discountRefine, discountRefineMessage);
 
+// A purchase's own charge (transport, labour, unloading): stored as an Expense with cost_type STOCK
+// and landed into the purchase's stock cost by value (lib/purchase-charges.ts).
+const purchaseChargeFields = {
+    category: z.string().min(1, "Category is required"),
+    amount: z.coerce.number().positive("Amount must be positive"),
+    remarks: z.string().trim().min(1).optional(),
+    paid_amount: z.coerce.number().nonnegative().optional(),
+    paid_from_instrument_id: z.string().uuid().optional(),
+};
+const chargePaidRefine = (d: { amount: number; paid_amount?: number | undefined }) =>
+    (d.paid_amount ?? 0) <= d.amount;
+const chargePaidMessage = { message: "Paid can't be more than the charge", path: ["paid_amount"] };
+const purchaseChargeInput = z.object(purchaseChargeFields).refine(chargePaidRefine, chargePaidMessage);
+
+/** A charge added after the purchase was recorded (the transport bill often comes later). */
+export const addPurchaseChargeSchema = z
+    .object({ ...purchaseChargeFields, date: z.coerce.date().optional() })
+    .refine(chargePaidRefine, chargePaidMessage);
+
 export const createPurchaseSchema = z
     .object({
         supplier_id: z.string().uuid().optional(),
@@ -51,6 +70,7 @@ export const createPurchaseSchema = z
         payment_note: z.string().trim().min(1).optional(),
         ...discountFields,
         items: z.array(purchaseItemInput).min(1, "At least one item is required"),
+        charges: z.array(purchaseChargeInput).max(10).optional(),
     })
     .refine(discountRefine, discountRefineMessage);
 
@@ -73,6 +93,8 @@ export const completePurchaseItemSchema = z.object({
 });
 
 export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema> & { recorded_by_id: string };
+export type PurchaseChargeInput = z.infer<typeof purchaseChargeInput>;
+export type AddPurchaseChargeInput = z.infer<typeof addPurchaseChargeSchema> & { recorded_by_id: string };
 export type ListPurchasesQuery = z.infer<typeof listPurchasesQuerySchema>;
 export type ListPurchaseItemsQuery = z.infer<typeof listPurchaseItemsQuerySchema>;
 export type CompletePurchaseItemInput = z.infer<typeof completePurchaseItemSchema>;

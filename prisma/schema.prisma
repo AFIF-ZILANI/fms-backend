@@ -118,6 +118,7 @@ enum CostType {
   DIRECT // traceable to one batch
   SHARED_PERIOD // recurring, farm-wide, allocated later by bird-days
   SHARED_CAPITAL // equipment/assets, depreciated via useful_life_batches
+  STOCK // a purchase's own charge (transport, labour) -- landed into that purchase's stock cost, never an expense line
 }
 
 enum DiscountType {
@@ -874,7 +875,8 @@ model Purchase {
   is_opening     Boolean       @default(false)
   created_at     DateTime      @default(now())
 
-  items PurchaseItem[]
+  items   PurchaseItem[]
+  charges Expense[]
 
   @@index([supplier_id, purchase_date])
 }
@@ -1311,6 +1313,10 @@ model Expense {
   id             String                @id @default(uuid())
   batch_id       String?
   batch          Batches?              @relation(fields: [batch_id], references: [id])
+  // Set exactly when cost_type = STOCK (CHECK Expense_stock_is_purchase_charge): the charge is split
+  // over this purchase's lines by value and costed with the stock (lib/purchase-charges.ts).
+  purchase_id    String?
+  purchase       Purchase?             @relation(fields: [purchase_id], references: [id], onDelete: Restrict)
   category       String
   categoryRef    ExpenseCategoryLookup @relation(fields: [category], references: [code], onUpdate: Cascade)
   cost_type      CostType
@@ -1322,6 +1328,7 @@ model Expense {
   created_at     DateTime              @default(now())
 
   @@index([batch_id, date])
+  @@index([purchase_id])
 }
 
 model Payment {

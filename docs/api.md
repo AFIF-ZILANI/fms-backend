@@ -302,7 +302,7 @@ Everything else below is still a real Prisma enum, fixed at deploy time:
 | `TimePeriods` | `MORNING`, `NOON`, `AFTERNOON`, `EVENING`, `NIGHT`, `MIDNIGHT`, `LATENIGHT` |
 | `FeedType` | `PRE_STARTER`, `STARTER`, `GROWER`, `FINISHER`, `LAYER` |
 | `BirdGrade` | `HIGH`, `LOW`, `CULL` |
-| `CostType` | `DIRECT`, `SHARED_PERIOD`, `SHARED_CAPITAL` |
+| `CostType` | `DIRECT`, `SHARED_PERIOD`, `SHARED_CAPITAL`, `STOCK` (a purchase's own charge — only created through `/purchases`, see §purchase charges) |
 | `Expense.category` | no longer a fixed enum — a string matching an active `ExpenseCategoryLookup.code`; fetch valid values from `GET /api/expense-categories?active=true` (§6.8) |
 | `PaymentMethod` | `CASH`, `BANK_TRANSFER`, `MFS` |
 | `MfsType` | `BKASH`, `NAGAD`, `ROCKET` |
@@ -801,8 +801,9 @@ never update.
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
 | GET | `/api/purchases` | 200 | query: `supplier_id?` |
-| GET | `/api/purchases/:id` | 200 | includes `items: [{ ..., item }]`, `supplier` |
+| GET | `/api/purchases/:id` | 200 | includes `items: [{ ..., item }]`, `supplier`, `charges` (its `STOCK` expenses) |
 | POST | `/api/purchases` | 201 | see below |
+| POST | `/api/purchases/:id/charges` | 201 | `{ category, amount, remarks?, paid_amount?, paid_from_instrument_id?, date? (default now) }` — a charge added later |
 | GET | `/api/purchase-items` | 200 | query: `item_id?`, `batch_id?` — cross-purchase lot lookup |
 
 **Create body**:
@@ -810,9 +811,19 @@ never update.
 {
   supplier_id?, invoice_no?, purchase_date, paid_amount? (default 0), paid_from_instrument_id?,
   payment_date?, payment_transaction_ref?, payment_note?, recorded_by_id,
-  items: [{ item_id, batch_id?, quantity, unit, unit_price, mfg_date?, expiration_date? }, ...] (min 1)
+  items: [{ item_id, batch_id?, quantity, unit, unit_price, mfg_date?, expiration_date? }, ...] (min 1),
+  charges?: [{ category, amount, remarks?, paid_amount?, paid_from_instrument_id? }, ...] (max 10)
 }
 ```
+**Purchase charges (landed cost).** Transport, labour, unloading paid for a purchase are
+`charges`: each is an `Expense` with `cost_type: STOCK` and `purchase_id`, written in the
+purchase's transaction (with its paid-at-create `Payment`). They're split over the purchase's
+lines **by value** and added to the stock's average cost, so whatever consumes that stock
+(batch P&L, farm P&L, stock value) pays the real per-unit price; a chick line's share lands on
+its batch. Computed on read — a charge added later via `/charges` re-costs stock already used.
+`STOCK` expenses are left out of expense cost lines, the monthly expense figure, the expense
+breakdown and revenue-vs-expenses (they're inside stock cost), but still count as money paid and
+owed. Opening-balance purchases can't take charges (**400**).
 `total_price` per line and `total_amount` for the purchase are computed
 server-side (`quantity × unit_price`, summed) — don't send them, they're not
 accepted by the request schema at all. `due_amount = total_amount -

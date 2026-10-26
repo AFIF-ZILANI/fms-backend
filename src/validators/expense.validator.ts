@@ -33,7 +33,8 @@ export const createExpenseSchema = z
 export const listExpensesQuerySchema = paginationQuerySchema.extend({
     batch_id: z.string().uuid().optional(),
     category: expenseCategory.optional(),
-    cost_type: costType.optional(),
+    // STOCK (a purchase's charge) is listable but only created through its purchase, never here.
+    cost_type: z.enum([...costType.options, "STOCK"]).optional(),
     date_from: z.coerce.date().optional(),
     date_to: z.coerce.date().optional(),
 });

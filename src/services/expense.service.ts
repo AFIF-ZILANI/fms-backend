@@ -56,6 +56,7 @@ export const ExpenseService = {
             direct: 0,
             shared: 0,
             capital: 0,
+            stock: 0,
             paid: 0,
             unpaid: 0,
         };
@@ -65,6 +66,7 @@ export const ExpenseService = {
             out.total += amount;
             if (r.cost_type === "DIRECT") out.direct += amount;
             else if (r.cost_type === "SHARED_PERIOD") out.shared += amount;
+            else if (r.cost_type === "STOCK") out.stock += amount;
             else out.capital += amount;
             if (PAYROLL_EXPENSE_CATEGORIES.includes(r.category)) out.paid += amount;
             else {
@@ -80,6 +82,8 @@ export const ExpenseService = {
             direct: r2(out.direct),
             shared: r2(out.shared),
             capital: r2(out.capital),
+            // Purchase charges: real money out (and owed), but costed through stock, not as an expense.
+            stock: r2(out.stock),
             paid: r2(out.paid),
             unpaid: r2(out.unpaid),
             by_category: [...byCategory.entries()]
@@ -114,43 +118,53 @@ export const ExpenseService = {
     /** The expense and, when something was paid, its Payment -- one transaction, so the cost and the
      * money leaving an account are never recorded one without the other. */
     async create(data: CreateExpenseInput) {
-        const paid = new Prisma.Decimal(data.paid_amount ?? 0);
-        if (paid.greaterThan(0) && PAYROLL_EXPENSE_CATEGORIES.includes(data.category)) {
-            throw AppError.badRequest(
-                "Salary and bonus expenses are paid through their payout, not a payment",
-            );
-        }
-        requirePaidInstrument(
-            paid,
-            data.paid_from_instrument_id,
-            "paid_from_instrument_id",
-            "EXPENSE",
-        );
+        checkExpensePaid(data);
         try {
-            return await prisma.$transaction(async (tx) => {
-                const expense = await tx.expense.create({
-                    data: {
-                        category: data.category,
-                        cost_type: data.cost_type,
-                        amount: data.amount,
-                        date: data.date,
-                        recorded_by_id: data.recorded_by_id,
-                        ...(data.batch_id !== undefined && { batch_id: data.batch_id }),
-                        ...(data.remarks !== undefined && { remarks: data.remarks }),
-                    },
-                });
-                await recordPaidAtCreate(tx, {
-                    ref_type: "EXPENSE",
-                    ref_id: expense.id,
-                    amount: paid,
-                    instrument_id: data.paid_from_instrument_id,
-                    date: data.date,
-                    actor_id: data.recorded_by_id,
-                });
-                return expense;
-            });
+            return await prisma.$transaction((tx) => writeExpense(tx, data));
         } catch (err) {
             return handlePrismaWriteError(err);
         }
     },
 };
+
+/** An expense as written -- the API's create body, or a purchase's own charge (cost_type STOCK). */
+export type ExpenseWrite = Omit<CreateExpenseInput, "cost_type"> & {
+    cost_type: CreateExpenseInput["cost_type"] | "STOCK";
+    purchase_id?: string;
+};
+
+/** Fail before any write: payroll expenses are paid by their payout; paid money names its account. */
+export function checkExpensePaid(data: Pick<ExpenseWrite, "category" | "paid_amount" | "paid_from_instrument_id">) {
+    const paid = new Prisma.Decimal(data.paid_amount ?? 0);
+    if (paid.greaterThan(0) && PAYROLL_EXPENSE_CATEGORIES.includes(data.category)) {
+        throw AppError.badRequest(
+            "Salary and bonus expenses are paid through their payout, not a payment",
+        );
+    }
+    requirePaidInstrument(paid, data.paid_from_instrument_id, "paid_from_instrument_id", "EXPENSE");
+}
+
+/** The Expense row and its paid-at-create Payment, inside the caller's transaction. */
+export async function writeExpense(tx: Prisma.TransactionClient, data: ExpenseWrite) {
+    const expense = await tx.expense.create({
+        data: {
+            category: data.category,
+            cost_type: data.cost_type,
+            amount: data.amount,
+            date: data.date,
+            recorded_by_id: data.recorded_by_id,
+            ...(data.batch_id !== undefined && { batch_id: data.batch_id }),
+            ...(data.purchase_id !== undefined && { purchase_id: data.purchase_id }),
+            ...(data.remarks !== undefined && { remarks: data.remarks }),
+        },
+    });
+    await recordPaidAtCreate(tx, {
+        ref_type: "EXPENSE",
+        ref_id: expense.id,
+        amount: new Prisma.Decimal(data.paid_amount ?? 0),
+        instrument_id: data.paid_from_instrument_id,
+        date: data.date,
+        actor_id: data.recorded_by_id,
+    });
+    return expense;
+}

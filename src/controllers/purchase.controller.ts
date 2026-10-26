@@ -5,6 +5,7 @@ import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { PurchaseService, PurchaseItemService } from "@services/purchase.service";
 import type {
+    AddPurchaseChargeInput,
     CreatePurchaseInput,
     ListPurchasesQuery,
     ListPurchaseItemsQuery,
@@ -35,6 +36,17 @@ export const PurchaseController = {
             };
             const purchase = await PurchaseService.create(body);
             return sendSuccess(c, purchase, "Purchase recorded", 201);
+        });
+    },
+
+    async addCharge(c: Context) {
+        return withHandler(c, async () => {
+            const body = {
+                ...getValid<Omit<AddPurchaseChargeInput, "recorded_by_id">>(c, "json"),
+                recorded_by_id: await getActorId(c),
+            };
+            const charge = await PurchaseService.addCharge(c.req.param("id") ?? "", body);
+            return sendSuccess(c, charge, "Charge added", 201);
         });
     },
 };

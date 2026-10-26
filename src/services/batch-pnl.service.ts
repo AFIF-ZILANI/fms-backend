@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemAvgCosts } from "@lib/stock-value";
+import { chargeRatios, landedTotal } from "@lib/purchase-charges";
 import { isNonDepleting } from "@lib/coded-stock";
 import { kgPerBaseUnit } from "@lib/unit-conversion";
 import { SharedCostService, type SharedMonth } from "@services/shared-cost.service";
@@ -65,7 +66,7 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
         prisma.mortalityLog.aggregate({ where: { batch_id: batchId }, _sum: { count_died: true } }),
         prisma.purchaseItem.findMany({
             where: { batch_id: batchId },
-            select: { item_id: true, total_price: true, quantity: true },
+            select: { item_id: true, purchase_id: true, total_price: true, quantity: true },
         }),
         prisma.consumption.findMany({
             where: { batch_id: batchId },
@@ -115,7 +116,9 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
         lines.set(key, l);
     };
     const boughtOnBatch = new Set(chicks.map((c) => c.item_id));
-    for (const c of chicks) add("CHICKS", "Chicks", c.total_price);
+    // Chicks at landed cost: their share of the purchase's charges (transport) is the batch's too.
+    const ratios = await chargeRatios(chicks.map((c) => c.purchase_id));
+    for (const c of chicks) add("CHICKS", "Chicks", landedTotal(c, ratios));
     const avg = await getItemAvgCosts([...new Set(consumed.map((c) => c.item_id))]);
     let feedKg = 0;
     let feedKgKnown = true;

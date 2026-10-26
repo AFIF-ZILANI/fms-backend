@@ -7,7 +7,9 @@ import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { toBaseQuantity } from "@lib/unit-conversion";
 import { StockLedgerService } from "@services/stock-ledger.service";
+import { checkExpensePaid, writeExpense } from "@services/expense.service";
 import type {
+    AddPurchaseChargeInput,
     CreatePurchaseInput,
     ListPurchasesQuery,
     ListPurchaseItemsQuery,
@@ -71,7 +73,10 @@ export const PurchaseService = {
     },
 
     async getById(id: string) {
-        const purchase = await prisma.purchase.findUnique({ where: { id }, include });
+        const purchase = await prisma.purchase.findUnique({
+            where: { id },
+            include: { ...include, charges: { orderBy: { date: "asc" } } },
+        });
         if (!purchase) throw AppError.notFound("Purchase");
         return purchase;
     },
@@ -114,6 +119,7 @@ export const PurchaseService = {
             "paid_from_instrument_id",
             "PURCHASE",
         );
+        for (const charge of data.charges ?? []) checkExpensePaid(charge);
 
         try {
             return await prisma.$transaction(async (tx) => {
@@ -197,6 +203,18 @@ export const PurchaseService = {
                     note: data.payment_note,
                 });
 
+                // Same transaction as the purchase: its charges can't go missing the way a separate
+                // "related expense" call could.
+                for (const charge of data.charges ?? []) {
+                    await writeExpense(tx, {
+                        ...charge,
+                        cost_type: "STOCK",
+                        purchase_id: purchase.id,
+                        date: data.purchase_date,
+                        recorded_by_id: data.recorded_by_id,
+                    });
+                }
+
                 await audit(tx, {
                     table: "Purchase",
                     record_id: purchase.id,
@@ -207,6 +225,7 @@ export const PurchaseService = {
                         total_amount: total_amount.toString(),
                         paid_at_create: paid_amount.toString(),
                         lines: data.items.length,
+                        ...(data.charges?.length && { charges: data.charges.length }),
                         ...(data.supplier_id !== undefined && { supplier_id: data.supplier_id }),
                         ...(data.invoice_no !== undefined && { invoice_no: data.invoice_no }),
                     },
@@ -214,6 +233,32 @@ export const PurchaseService = {
 
                 return tx.purchase.findUniqueOrThrow({ where: { id: purchase.id }, include });
             });
+        } catch (err) {
+            return handlePrismaWriteError(err);
+        }
+    },
+
+    /** A charge that arrives after the purchase (the transport bill). Landed cost is computed on read,
+     *  so stock this purchase already supplied is re-costed with it -- batch P&L stays real. */
+    async addCharge(id: string, input: AddPurchaseChargeInput) {
+        const purchase = await prisma.purchase.findUnique({
+            where: { id },
+            select: { is_opening: true, purchase_date: true },
+        });
+        if (!purchase) throw AppError.notFound("Purchase");
+        if (purchase.is_opening) {
+            throw AppError.badRequest("An opening balance isn't a purchase -- it can't carry charges");
+        }
+        checkExpensePaid(input);
+        try {
+            return await prisma.$transaction((tx) =>
+                writeExpense(tx, {
+                    ...input,
+                    cost_type: "STOCK",
+                    purchase_id: id,
+                    date: input.date ?? new Date(),
+                }),
+            );
         } catch (err) {
             return handlePrismaWriteError(err);
         }
