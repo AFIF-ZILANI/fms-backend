@@ -1,4 +1,4 @@
-import { app } from "./src/app";
+import { app } from "./src/App";
 import env from "./src/config/env";
 import { startAlertScanLoop } from "./src/lib/alert-scan-loop";
 
