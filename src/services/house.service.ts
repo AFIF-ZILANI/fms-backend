@@ -68,7 +68,9 @@ export const HouseService = {
               })
             : [];
 
-        const emptyHouseIds = houses.filter((h) => h.batchHouseBalances.length === 0).map((h) => h.id);
+        const emptyHouseIds = houses
+            .filter((h) => h.batchHouseBalances.length === 0)
+            .map((h) => h.id);
         // A house empties the moment its last balance hits zero -- that covers
         // birds leaving by sale or mortality too, which an outbound allocation
         // row wouldn't.
@@ -90,7 +92,9 @@ export const HouseService = {
                     );
                     const since = moves.reduce<Date | null>(
                         (earliest, move) =>
-                            earliest === null || move.occurred_at < earliest ? move.occurred_at : earliest,
+                            earliest === null || move.occurred_at < earliest
+                                ? move.occurred_at
+                                : earliest,
                         null,
                     );
                     return {
@@ -117,9 +121,10 @@ export const HouseService = {
 
     /** The coded (QR) units physically in this house and not yet used, per item: how many, and how much
      *  they hold when every lot has a bottle count. "In" a house = its latest move was into this house
-     *  (a return to the warehouse, or a move on to another house, takes it out). A unit already IN_USE
-     *  has been drawn on and no longer counts. */
-    async getCodedStock(id: string) {
+     *  (a return to the warehouse, or a move on to another house, takes it out). By default only unopened
+     *  (BOUND) units count; `includeInUse` adds opened ones (IN_USE) -- what "Use an item -> Consumed"
+     *  can still finish -- counted separately in `in_use`. */
+    async getCodedStock(id: string, includeInUse = false) {
         const house = await prisma.houses.findUnique({ where: { id } });
         if (!house) throw AppError.notFound("House");
 
@@ -130,6 +135,7 @@ export const HouseService = {
                 item_unit: string;
                 pack_unit: string | null;
                 units: number;
+                in_use: number;
                 unsized: number;
                 quantity: string | null;
             }[]
@@ -139,6 +145,7 @@ export const HouseService = {
                    i.unit AS item_unit,
                    CASE WHEN COUNT(DISTINCT pi.unit) = 1 THEN MIN(pi.unit) END AS pack_unit,
                    COUNT(*)::int AS units,
+                   COUNT(*) FILTER (WHERE su.status = 'IN_USE')::int AS in_use,
                    COUNT(*) FILTER (WHERE pi.unit_count IS NULL)::int AS unsized,
                    SUM(pi.base_quantity / NULLIF(pi.unit_count, 0))::text AS quantity
             FROM "StockUnit" su
@@ -150,7 +157,8 @@ export const HouseService = {
             ) cur ON TRUE
             JOIN "PurchaseItem" pi ON pi.id = su.purchase_item_id
             JOIN "Item" i ON i.id = pi.item_id
-            WHERE cur.house_id = ${id} AND su.status = 'BOUND'
+            WHERE cur.house_id = ${id}
+              AND su.status::text = ANY(${includeInUse ? ["BOUND", "IN_USE"] : ["BOUND"]})
             GROUP BY pi.item_id, i.name, i.unit
             ORDER BY i.name`;
 
@@ -162,6 +170,8 @@ export const HouseService = {
             /** What one coded unit is (BOTTLE), when every unit of this item here is the same. */
             pack_unit: r.pack_unit,
             units: r.units,
+            /** Of `units`, how many are already opened (only non-zero with includeInUse). */
+            in_use: r.in_use,
             /** Null when any lot of this item has no bottle count yet, so its size isn't known. */
             quantity: r.unsized > 0 || r.quantity === null ? null : Number(r.quantity),
         }));

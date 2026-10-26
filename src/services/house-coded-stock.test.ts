@@ -136,6 +136,11 @@ describe("HouseService.getCodedStock", () => {
         expect(a).toMatchObject({ units: 4, quantity: 4, pack_unit: "BOTTLE", unit: "LITER" }); // 3 + the one that came back
         expect(b).toMatchObject({ units: 2, quantity: null }); // lot never split: size unknown, not guessed
         expect(stock.length).toBe(2);
+
+        // "Consumed" can also finish an opened unit: includeInUse adds it, counted in in_use.
+        const withOpened = await HouseService.getCodedStock(houseId, true);
+        expect(withOpened.find((s) => s.item_id === itemA)).toMatchObject({ units: 5, in_use: 1 });
+        expect(a.in_use).toBe(0);
     });
 
     test("a house with nothing in it returns an empty list, and an unknown house is a 404", async () => {

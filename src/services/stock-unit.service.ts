@@ -4,12 +4,19 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { assertHouseActive } from "@lib/active-guards";
-import { lockLot, unitAmount, unitLocation } from "@lib/coded-stock";
+import {
+    assertUnitInHouse,
+    isNonDepleting,
+    lockLot,
+    unitAmount,
+    unitLocation,
+} from "@lib/coded-stock";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     BindStockUnitInput,
     ListStockUnitsQuery,
     SetStockUnitStatusInput,
+    UseStockUnitInput,
 } from "@validators/stock-unit.validator";
 
 // Latest allocation = current location. Included on reads so callers still get "where is it".
@@ -244,7 +251,10 @@ export const StockUnitService = {
                         // A return goes back to the warehouse its lot was bought into.
                         const to =
                             house_id === null
-                                ? { location_type: "WAREHOUSE" as const, location_id: lot.purchase.warehouse_id }
+                                ? {
+                                      location_type: "WAREHOUSE" as const,
+                                      location_id: lot.purchase.warehouse_id,
+                                  }
                                 : { location_type: "HOUSE" as const, location_id: house_id };
                         const transfer = await tx.stockTransfer.create({
                             data: {
@@ -305,6 +315,78 @@ export const StockUnitService = {
             if (unit.status !== "CONSUMED") await writeOffRemainder(tx, unit);
             return tx.stockUnit.update({ where: { id }, data: { status: "DISPOSED" } });
         });
+    },
+
+    /** "Use an item" on the floor, one scanned unit at a time, where it physically is.
+     *  - START: BOUND -> IN_USE (opened). Nothing leaves stock and no Consumption is logged.
+     *  - FINISH: BOUND/IN_USE -> CONSUMED, logging a Consumption of exactly what was left in the unit
+     *    (StockLedger OUT from this house), so the batch's P&L pays for it.
+     *  Equipment is used, not used up: it can be started, but leaves through dispose(), not FINISH. */
+    async use(id: string, input: UseStockUnitInput) {
+        try {
+            return await prisma.$transaction(async (tx) => {
+                await assertHouseActive(tx, input.house_id);
+                const unit = await lockedUnit(tx, id);
+                const lot = unit.purchase_item;
+                if (!lot) throw AppError.badRequest("That code isn't linked to a purchase lot yet");
+                const allowed = input.action === "START" ? ["BOUND"] : ["BOUND", "IN_USE"];
+                if (!allowed.includes(unit.status)) {
+                    throw AppError.conflict(
+                        unit.status === "IN_USE"
+                            ? "This unit is already in use"
+                            : `StockUnit is ${unit.status.toLowerCase().replace("_", " ")}`,
+                    );
+                }
+                await assertUnitInHouse(tx, id, input.house_id);
+
+                if (input.action === "START") {
+                    return tx.stockUnit.update({ where: { id }, data: { status: "IN_USE" } });
+                }
+                if (isNonDepleting(lot.item.category)) {
+                    throw AppError.badRequest(
+                        "Equipment isn't used up -- dispose it when it's done",
+                    );
+                }
+
+                await lockLot(tx, lot.id);
+                const amount = await unitAmount(tx, id, lot);
+                if (amount.greaterThan(0)) {
+                    const { unit: baseUnit } = await tx.item.findUniqueOrThrow({
+                        where: { id: lot.item_id },
+                        select: { unit: true },
+                    });
+                    const consumption = await tx.consumption.create({
+                        data: {
+                            house_id: input.house_id,
+                            item_id: lot.item_id,
+                            stock_unit_id: id,
+                            // What was left, in the item's base unit -- so quantity and base_quantity agree.
+                            quantity: amount,
+                            unit: baseUnit,
+                            base_quantity: amount,
+                            date: input.date,
+                            recorded_by_id: input.recorded_by_id,
+                            idempotency_key: input.idempotency_key ?? crypto.randomUUID(),
+                            ...(input.batch_id !== undefined && { batch_id: input.batch_id }),
+                        },
+                    });
+                    await StockLedgerService.record(tx, {
+                        item_id: lot.item_id,
+                        quantity: amount,
+                        direction: "OUT",
+                        reason: "CONSUMPTION",
+                        ref_type: "CONSUMPTION",
+                        ref_id: consumption.id,
+                        location_type: "HOUSE",
+                        location_id: input.house_id,
+                    });
+                }
+                return tx.stockUnit.update({ where: { id }, data: { status: "CONSUMED" } });
+            });
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            return handlePrismaWriteError(err);
+        }
     },
 
     /** The manual "change status" action. DISPOSED is final and goes through dispose(); CONSUMED can

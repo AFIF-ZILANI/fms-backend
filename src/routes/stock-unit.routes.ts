@@ -4,6 +4,7 @@ import { StockUnitController } from "@controllers/stock-unit.controller";
 import {
     provisionStockUnitsSchema,
     markPrintedStockUnitsSchema,
+    useStockUnitSchema,
     bindStockUnitSchema,
     relocateStockUnitSchema,
     setStockUnitStatusSchema,
@@ -38,6 +39,11 @@ stockUnitRoutes.post(
     "/:id/relocate",
     zValidatorRfc7807("json", relocateStockUnitSchema),
     StockUnitController.relocate,
+);
+stockUnitRoutes.post(
+    "/:id/use",
+    zValidatorRfc7807("json", useStockUnitSchema),
+    StockUnitController.use,
 );
 stockUnitRoutes.post("/:id/dispose", StockUnitController.dispose);
 stockUnitRoutes.patch(

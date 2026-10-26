@@ -3,10 +3,30 @@ import { canAccess } from "./permissions";
 import type { AuthContext } from "../types/app";
 
 const none = () => undefined;
-const admin: AuthContext = { profile_id: "a", role: "ADMIN", employee_role: null, employee_id: null };
-const worker: AuthContext = { profile_id: "w", role: "EMPLOYEE", employee_role: "WORKER", employee_id: "emp-w" };
-const manager: AuthContext = { profile_id: "m", role: "EMPLOYEE", employee_role: "MANAGER", employee_id: "emp-m" };
-const other: AuthContext = { profile_id: "o", role: "EMPLOYEE", employee_role: "ACCOUNTANT", employee_id: "emp-o" };
+const admin: AuthContext = {
+    profile_id: "a",
+    role: "ADMIN",
+    employee_role: null,
+    employee_id: null,
+};
+const worker: AuthContext = {
+    profile_id: "w",
+    role: "EMPLOYEE",
+    employee_role: "WORKER",
+    employee_id: "emp-w",
+};
+const manager: AuthContext = {
+    profile_id: "m",
+    role: "EMPLOYEE",
+    employee_role: "MANAGER",
+    employee_id: "emp-m",
+};
+const other: AuthContext = {
+    profile_id: "o",
+    role: "EMPLOYEE",
+    employee_role: "ACCOUNTANT",
+    employee_id: "emp-o",
+};
 
 describe("canAccess", () => {
     test("workers and managers may use their own notification inbox", () => {
@@ -32,7 +52,11 @@ describe("canAccess", () => {
     });
 
     test("admins reach everything", () => {
-        for (const [m, p] of [["GET", "/admins"], ["POST", "/payroll-payouts"], ["DELETE", "/houses/1"]] as const) {
+        for (const [m, p] of [
+            ["GET", "/admins"],
+            ["POST", "/payroll-payouts"],
+            ["DELETE", "/houses/1"],
+        ] as const) {
             expect(canAccess(admin, m, p, none)).toBe(true);
         }
     });
@@ -86,6 +110,7 @@ describe("canAccess", () => {
             expect(canAccess(who, "POST", "/stock-units/abc/relocate", none)).toBe(true);
         }
         expect(canAccess(other, "POST", "/stock-units/abc/relocate", none)).toBe(false);
+        expect(canAccess(worker, "POST", "/stock-units/abc/use", none)).toBe(true);
         // binding stays manager-only
         expect(canAccess(worker, "POST", "/stock-units/abc/bind", none)).toBe(false);
     });

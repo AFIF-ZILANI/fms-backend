@@ -56,7 +56,12 @@ const RULES: Rule[] = [
     { methods: GET, path: new RegExp(`^/(${READ_ANY.join("|")})(/.*)?$`), level: "worker" },
     // Own record for a worker, any record for a manager.
     { methods: GET, path: /^\/employees\/([^/]+)$/, level: "worker", own: "param" },
-    { methods: GET, path: /^\/(performance-score-entries|payroll-records)$/, level: "worker", own: "query" },
+    {
+        methods: GET,
+        path: /^\/(performance-score-entries|payroll-records)$/,
+        level: "worker",
+        own: "query",
+    },
     { methods: GET, path: /^\/employees$/, level: "manager" },
     // The five log forms, and finishing a task.
     {
@@ -76,6 +81,8 @@ const RULES: Rule[] = [
     { methods: POST, path: /^\/alerts\/[^/]+\/resolve$/, level: "manager" },
     // Scanning a coded unit into a house is floor work, not a manager action.
     { methods: POST, path: /^\/stock-units\/[^/]+\/relocate$/, level: "worker" },
+    // "Use an item" (start using / used up) is the coded counterpart of logging a consumption.
+    { methods: POST, path: /^\/stock-units\/[^/]+\/use$/, level: "worker" },
     { methods: POST, path: /^\/stock-units\/[^/]+\/bind$/, level: "manager" },
     // The lot picker on Link items. Manager-only like the bind it feeds: lines carry purchase data.
     { methods: GET, path: /^\/purchase-items$/, level: "manager" },
@@ -93,7 +100,11 @@ export function canAccess(
     if (auth.role !== "EMPLOYEE") return false;
 
     const level =
-        auth.employee_role === "MANAGER" ? "manager" : auth.employee_role === "WORKER" ? "worker" : null;
+        auth.employee_role === "MANAGER"
+            ? "manager"
+            : auth.employee_role === "WORKER"
+              ? "worker"
+              : null;
     if (!level) return false;
 
     const clean = path.length > 1 ? path.replace(/\/+$/, "") : path;

@@ -27,7 +27,10 @@ export const HouseController = {
 
     async getCodedStock(c: Context) {
         return withHandler(c, async () => {
-            const stock = await HouseService.getCodedStock(c.req.param("id") ?? "");
+            const stock = await HouseService.getCodedStock(
+                c.req.param("id") ?? "",
+                c.req.query("include_in_use") === "true",
+            );
             return sendSuccess(c, stock, "House coded stock fetched successfully");
         });
     },

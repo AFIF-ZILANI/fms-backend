@@ -555,6 +555,7 @@ which action endpoint you call.
 | POST | `/api/stock-units/:id/bind` | 200 | `{ purchase_item_id, initial_quantity?, bound_by_id? }` |
 | POST | `/api/stock-units/:id/relocate` | 200 | `{ house_id }` |
 | POST | `/api/stock-units/:id/dispose` | 200 | — |
+| POST | `/api/stock-units/:id/use` | 200 | `{ action: START\|FINISH, house_id, batch_id?, date, idempotency_key? }` — "Use an item". `START`: `BOUND → IN_USE`, no Consumption. `FINISH`: `BOUND/IN_USE → CONSUMED`, logs a Consumption of what was left in the unit (ledger OUT from the house). The unit must be in `house_id` (**409** otherwise); equipment can't `FINISH` (**400**, dispose it) |
 
 `initial_quantity` on bind is the depleting amount (e.g. 1000 mL in a
 bottle) — omit it for non-depleting equipment; `remaining_quantity` mirrors

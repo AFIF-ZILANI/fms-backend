@@ -7,6 +7,7 @@ import { StockUnitService } from "@services/stock-unit.service";
 import type {
     ProvisionStockUnitsInput,
     MarkPrintedStockUnitsInput,
+    UseStockUnitInput,
     BindStockUnitInput,
     RelocateStockUnitInput,
     SetStockUnitStatusInput,
@@ -41,6 +42,17 @@ export const StockUnitController = {
             const body = getValid<ProvisionStockUnitsInput>(c, "json");
             const units = await StockUnitService.provision(body.count);
             return sendSuccess(c, units, "Stock units provisioned", 201);
+        });
+    },
+
+    async use(c: Context) {
+        return withHandler(c, async () => {
+            const body = {
+                ...getValid<Omit<UseStockUnitInput, "recorded_by_id">>(c, "json"),
+                recorded_by_id: await getActorId(c),
+            };
+            const unit = await StockUnitService.use(c.req.param("id") ?? "", body);
+            return sendSuccess(c, unit, body.action === "START" ? "Unit in use" : "Unit used up");
         });
     },
 

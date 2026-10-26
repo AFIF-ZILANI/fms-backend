@@ -6,7 +6,7 @@ import { toSkipTake, buildMeta } from "@lib/pagination";
 import { toBaseQuantity } from "@lib/unit-conversion";
 import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
-import { codedRemaining, isNonDepleting, lockLot } from "@lib/coded-stock";
+import { assertUnitInHouse, codedRemaining, isNonDepleting, lockLot } from "@lib/coded-stock";
 import type {
     CreateConsumptionInput,
     ListConsumptionsQuery,
@@ -106,22 +106,7 @@ export const ConsumptionService = {
                             `StockUnit is ${unit.status.toLowerCase()}, cannot draw from it`,
                         );
                     }
-                    // A coded unit is used where it physically is: it has to have been moved into this
-                    // house first (a warehouse unit, or one in another house, can't be used here).
-                    const latest = await tx.stockHouseAllocation.findFirst({
-                        where: { stock_unit_id: unitId },
-                        orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }],
-                        include: { house: { select: { name: true } } },
-                    });
-                    if ((latest?.house_id ?? null) !== data.house_id) {
-                        const target = await tx.houses.findUnique({
-                            where: { id: data.house_id },
-                            select: { name: true },
-                        });
-                        throw AppError.conflict(
-                            `That unit is at ${latest?.house?.name ?? "the warehouse"}, not ${target?.name ?? "this house"} -- move it there first`,
-                        );
-                    }
+                    await assertUnitInHouse(tx, unitId, data.house_id);
                     // The ledger draw above is for data.item_id; a unit of some other item would
                     // flip that unit to IN_USE while the stock moved for a different item.
                     if (!unit.purchase_item)

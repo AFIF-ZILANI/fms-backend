@@ -41,6 +41,15 @@ export const relocateStockUnitSchema = z.object({
     stock_transfer_id: z.string().uuid().optional(),
 });
 
+/** "Use an item": START opens a unit (no log); FINISH logs what was left in it and marks it used up. */
+export const useStockUnitSchema = z.object({
+    action: z.enum(["START", "FINISH"]),
+    house_id: z.string().uuid(),
+    batch_id: z.string().uuid().optional(),
+    date: z.coerce.date(),
+    idempotency_key: z.string().min(1).optional(),
+});
+
 export const setStockUnitStatusSchema = z.object({
     status: stockUnitStatus,
 });
@@ -58,5 +67,6 @@ export type ProvisionStockUnitsInput = z.infer<typeof provisionStockUnitsSchema>
 export type MarkPrintedStockUnitsInput = z.infer<typeof markPrintedStockUnitsSchema>;
 export type BindStockUnitInput = z.infer<typeof bindStockUnitSchema> & { bound_by_id?: string };
 export type RelocateStockUnitInput = z.infer<typeof relocateStockUnitSchema>;
+export type UseStockUnitInput = z.infer<typeof useStockUnitSchema> & { recorded_by_id: string };
 export type SetStockUnitStatusInput = z.infer<typeof setStockUnitStatusSchema>;
 export type ListStockUnitsQuery = z.infer<typeof listStockUnitsQuerySchema>;

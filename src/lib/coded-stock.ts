@@ -1,4 +1,5 @@
 import { Prisma } from "../../prisma/generated/prisma/client";
+import { AppError } from "@lib/app-error";
 
 /** Equipment is used, not used up: a heater drawn for a batch is still a heater. Its cost reaches a
  * batch through AssetDepreciation, so a draw records the usage but moves no stock and costs nothing.
@@ -52,6 +53,25 @@ async function lotUnitIds(tx: Prisma.TransactionClient, lot_id: string) {
     return (
         await tx.stockUnit.findMany({ where: { purchase_item_id: lot_id }, select: { id: true } })
     ).map((u) => u.id);
+}
+
+/** A coded unit is used where it physically is: its latest allocation must be this house (a warehouse
+ *  unit, or one in another house, has to be moved here first). */
+export async function assertUnitInHouse(
+    tx: Prisma.TransactionClient,
+    unit_id: string,
+    house_id: string,
+) {
+    const latest = await tx.stockHouseAllocation.findFirst({
+        where: { stock_unit_id: unit_id },
+        orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }],
+        include: { house: { select: { name: true } } },
+    });
+    if ((latest?.house_id ?? null) === house_id) return;
+    const target = await tx.houses.findUnique({ where: { id: house_id }, select: { name: true } });
+    throw AppError.conflict(
+        `That unit is at ${latest?.house?.name ?? "the warehouse"}, not ${target?.name ?? "this house"} -- move it there first`,
+    );
 }
 
 /** Same per-lot lock bind() and complete() take. */

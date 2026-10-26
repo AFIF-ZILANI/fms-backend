@@ -81,6 +81,8 @@ describe("StockUnitService", () => {
     });
 
     afterAll(async () => {
+        // FINISH ("used up") logs a Consumption against the unit
+        await prisma.consumption.deleteMany({ where: { stock_unit_id: { in: createdUnitIds } } });
         await prisma.stockHouseAllocation.deleteMany({
             where: { stock_unit_id: { in: createdUnitIds } },
         });
@@ -131,11 +133,57 @@ describe("StockUnitService", () => {
         expect((await prisma.stockUnit.findUniqueOrThrow({ where: { id: bound.id } })).status).toBe(
             "BOUND",
         );
-        const printed = await StockUnitService.bind(blank!.id, { purchase_item_id: purchaseItemId });
+        const printed = await StockUnitService.bind(blank!.id, {
+            purchase_item_id: purchaseItemId,
+        });
         expect(printed.status).toBe("BOUND");
         await expect(StockUnitService.setStatus(bound.id, "PRINTED")).rejects.toMatchObject({
             status: 400,
         });
+    });
+
+    test("use START opens a unit with no consumption; FINISH logs what was left and marks it used up", async () => {
+        const unit = await boundUnit();
+        const at = { house_id: houseId, date: new Date(), recorded_by_id: profileId };
+        // Not in the house yet: a unit is used where it physically is.
+        await expect(
+            StockUnitService.use(unit.id, { ...at, action: "START" }),
+        ).rejects.toMatchObject({
+            status: 409,
+        });
+        await StockUnitService.relocate(unit.id, houseId, crypto.randomUUID());
+
+        expect((await StockUnitService.use(unit.id, { ...at, action: "START" })).status).toBe(
+            "IN_USE",
+        );
+        expect(await prisma.consumption.count({ where: { stock_unit_id: unit.id } })).toBe(0);
+        // Starting twice is refused; finishing an opened unit is the normal path.
+        await expect(
+            StockUnitService.use(unit.id, { ...at, action: "START" }),
+        ).rejects.toMatchObject({
+            status: 409,
+        });
+
+        const done = await StockUnitService.use(unit.id, { ...at, action: "FINISH" });
+        expect(done.status).toBe("CONSUMED");
+        const logged = await prisma.consumption.findMany({ where: { stock_unit_id: unit.id } });
+        expect(logged).toHaveLength(1);
+        expect(logged[0]!.base_quantity.greaterThan(0)).toBe(true);
+        const out = await prisma.stockLedger.findFirstOrThrow({ where: { ref_id: logged[0]!.id } });
+        expect(out.quantity.equals(logged[0]!.base_quantity)).toBe(true);
+        await expect(
+            StockUnitService.use(unit.id, { ...at, action: "FINISH" }),
+        ).rejects.toMatchObject({
+            status: 409,
+        });
+
+        // A never-opened unit can be finished straight away too.
+        const sealed = await boundUnit();
+        await StockUnitService.relocate(sealed.id, houseId, crypto.randomUUID());
+        expect((await StockUnitService.use(sealed.id, { ...at, action: "FINISH" })).status).toBe(
+            "CONSUMED",
+        );
+        expect(await prisma.consumption.count({ where: { stock_unit_id: sealed.id } })).toBe(1);
     });
 
     test("binding to a nonexistent purchase_item_id throws bad-request, not a raw 500", async () => {
@@ -358,14 +406,21 @@ describe("StockUnitService", () => {
         const moved = await StockUnitService.relocate(unit.id, houseId, crypto.randomUUID());
         const [inLeg, outLeg] = await legs(moved!.stock_transfer_id);
         expect(outLeg).toMatchObject({ direction: "OUT", location_type: "WAREHOUSE" });
-        expect(inLeg).toMatchObject({ direction: "IN", location_type: "HOUSE", location_id: houseId });
+        expect(inLeg).toMatchObject({
+            direction: "IN",
+            location_type: "HOUSE",
+            location_id: houseId,
+        });
         expect(inLeg!.quantity.toNumber()).toBeGreaterThan(0);
         expect(inLeg!.quantity.toNumber()).toBe(outLeg!.quantity.toNumber());
 
         const back = await StockUnitService.relocate(unit.id, null, crypto.randomUUID());
         const [backIn, backOut] = await legs(back!.stock_transfer_id);
         expect(backOut).toMatchObject({ location_type: "HOUSE", location_id: houseId });
-        expect(backIn).toMatchObject({ location_type: "WAREHOUSE", location_id: outLeg!.location_id });
+        expect(backIn).toMatchObject({
+            location_type: "WAREHOUSE",
+            location_id: outLeg!.location_id,
+        });
     }, 20_000);
 
     test("relocate infers ALLOCATION on first move, REALLOCATION on a house->house move, RETURN to warehouse", async () => {
