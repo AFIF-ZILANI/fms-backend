@@ -5,7 +5,7 @@ import { resourceCategorySchema } from "@lib/enums";
 const stockUnitStatus = z.enum(["UNASSIGNED", "IN_STOCK", "IN_USE", "CONSUMED", "DISPOSED"]);
 
 export const provisionStockUnitsSchema = z.object({
-    count: z.coerce.number().int().positive().max(500, "Provision at most 500 codes at a time"),
+    count: z.coerce.number().int().positive().max(1170, "Provision at most 1170 codes (10 A4 pages) at a time"),
 });
 
 export const bindStockUnitSchema = z.object({
