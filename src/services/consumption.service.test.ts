@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { ConsumptionService } from "./consumption.service";
 import { StockUnitService } from "./stock-unit.service";
 import { ItemService } from "./item.service";
-import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, provisionPrinted } from "@lib/test-fixtures";
 
 let houseId: string;
 let feedItemId: string;
@@ -139,8 +139,8 @@ describe("ConsumptionService", () => {
         expect(ledgerEntry?.quantity.toNumber()).toBe(25);
     });
 
-    test("coded draw flips the unit IN_STOCK -> IN_USE and posts a StockLedger OUT", async () => {
-        const [unit] = await StockUnitService.provision(1);
+    test("coded draw flips the unit BOUND -> IN_USE and posts a StockLedger OUT", async () => {
+        const [unit] = await provisionPrinted(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
         await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
@@ -184,7 +184,7 @@ describe("ConsumptionService", () => {
                 unit_count: 2,
             },
         });
-        const units = await StockUnitService.provision(2);
+        const units = await provisionPrinted(2);
         createdStockUnitIds.push(...units.map((u) => u.id));
         for (const u of units) {
             await StockUnitService.bind(u.id, { purchase_item_id: lot.id });
@@ -212,7 +212,7 @@ describe("ConsumptionService", () => {
     }, 20_000);
 
     test("a coded draw naming another item's unit is refused, and nothing is written", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId }); // a medicine unit
         await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
@@ -244,7 +244,7 @@ describe("ConsumptionService", () => {
         ).rejects.toMatchObject({ status: 400 });
 
         const after = await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit!.id } });
-        expect(after.status).toBe("IN_STOCK"); // not flipped to IN_USE for the wrong item
+        expect(after.status).toBe("BOUND"); // not flipped to IN_USE for the wrong item
     });
 
     test("an item's tracking mode is fixed once it has been purchased", async () => {
@@ -257,7 +257,7 @@ describe("ConsumptionService", () => {
     });
 
     test("a coded unit can only be used in the house it is in", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
         const draw = () =>
@@ -301,7 +301,7 @@ describe("ConsumptionService", () => {
     }, 20_000);
 
     test("drawing from a DISPOSED unit throws a conflict", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.dispose(unit!.id);
 
@@ -464,7 +464,7 @@ describe("ConsumptionService", () => {
         });
         createdPurchaseItemIds.push(mlPurchaseItem.id);
 
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdStockUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, {
             purchase_item_id: mlPurchaseItem.id,

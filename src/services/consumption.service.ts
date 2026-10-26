@@ -61,7 +61,7 @@ export const ConsumptionService = {
     },
 
     /** Two draw paths, branching on stock_unit_id:
-     *  - coded (medicine/vaccine/equipment): flips StockUnit status IN_STOCK -> IN_USE on first
+     *  - coded (medicine/vaccine/equipment): flips StockUnit status BOUND -> IN_USE on first
      *    use. StockUnit no longer tracks quantity, so there is no per-unit remaining/overdraw
      *    check and no auto-CONSUMED (dropped with the qty columns); CONSUMED/DISPOSED is manual.
      *  - aggregate (feed etc.): no StockUnit to flip.
@@ -101,7 +101,7 @@ export const ConsumptionService = {
                         },
                     });
                     if (!unit) throw AppError.notFound("StockUnit");
-                    if (unit.status !== "IN_STOCK" && unit.status !== "IN_USE") {
+                    if (unit.status !== "BOUND" && unit.status !== "IN_USE") {
                         throw AppError.conflict(
                             `StockUnit is ${unit.status.toLowerCase()}, cannot draw from it`,
                         );
@@ -148,8 +148,8 @@ export const ConsumptionService = {
                             );
                         }
                     }
-                    // A first draw flips IN_STOCK -> IN_USE; CONSUMED/DISPOSED stay manual.
-                    if (unit.status === "IN_STOCK") {
+                    // A first draw flips BOUND -> IN_USE; CONSUMED/DISPOSED stay manual.
+                    if (unit.status === "BOUND") {
                         await tx.stockUnit.update({
                             where: { id: unitId },
                             data: { status: "IN_USE" },

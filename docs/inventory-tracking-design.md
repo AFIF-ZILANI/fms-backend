@@ -89,7 +89,7 @@ enum BatchStatus {
 
 enum StockUnitStatus {
   UNASSIGNED // printed, not yet bound to a purchase
-  IN_STOCK   // bound, sitting in storage, untouched
+  BOUND   // bound, sitting in storage, untouched
   IN_USE     // opened and being drawn down (medicine/vaccine), or currently assigned to a batch (equipment)
   CONSUMED   // fully depleted — medicine/vaccine only, equipment never reaches this
   DISPOSED   // written off — expired, damaged, discarded
@@ -330,7 +330,7 @@ model StockLedger {
 [bulk print run] → StockUnit(status=UNASSIGNED, purchase_item_id=null)
        │
        ▼ (intake: bind to a purchase line)
-  StockUnit(status=IN_STOCK, purchase_item_id=X, initial_quantity, remaining_quantity, house_id?)
+  StockUnit(status=BOUND, purchase_item_id=X, initial_quantity, remaining_quantity, house_id?)
        │
        ▼ (first use: carried to a house, dosed against a batch)
   Consumption(batch_id, house_id, item_id, stock_unit_id, quantity, date)

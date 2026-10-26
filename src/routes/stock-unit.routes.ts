@@ -3,6 +3,7 @@ import { zValidatorRfc7807 } from "@lib/validator";
 import { StockUnitController } from "@controllers/stock-unit.controller";
 import {
     provisionStockUnitsSchema,
+    markPrintedStockUnitsSchema,
     bindStockUnitSchema,
     relocateStockUnitSchema,
     setStockUnitStatusSchema,
@@ -22,6 +23,11 @@ stockUnitRoutes.post(
     "/",
     zValidatorRfc7807("json", provisionStockUnitsSchema),
     StockUnitController.provision,
+);
+stockUnitRoutes.post(
+    "/mark-printed",
+    zValidatorRfc7807("json", markPrintedStockUnitsSchema),
+    StockUnitController.markPrinted,
 );
 stockUnitRoutes.post(
     "/:id/bind",

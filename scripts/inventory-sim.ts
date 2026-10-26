@@ -207,7 +207,7 @@ for (let i = 0; i < 4; i++) { const r = await bind(pool.shift()!, heaterLot, 4);
 probe("bind to a lot of a non-tracked item -> 400", await bind(pool[0]!, P1 ? lotOf(P1, 0) : "", 1), 400, "feed got a QR code");
 probe("bind an already-bound code -> 409", await bind(bound.vacc[0]!, vaccLot), 409, "rebind accepted");
 probe("bind needs a manager: worker -> 403", await bind(pool[0]!, heaterLot2, 2, "worker"), 403, "worker allowed to bind");
-check("bound units are IN_STOCK with bound_by", (await prisma.stockUnit.findMany({ where: { id: { in: bound.vacc } } })).every((u) => u.status === "IN_STOCK" && u.bound_by_id === managerP.id));
+check("bound units are BOUND with bound_by", (await prisma.stockUnit.findMany({ where: { id: { in: bound.vacc } } })).every((u) => u.status === "BOUND" && u.bound_by_id === managerP.id));
 // lot completion: bind without declaring a count, then complete
 for (let i = 0; i < 2; i++) { const r = await bind(pool.shift()!, heaterLot2); if (r.status === 200) bound.heater2.push(r.data.id); }
 probe("complete a lot with more units declared than linked -> 400", await api("manager", "POST", `/purchase-items/${heaterLot2}/complete`, { unit_count: 5 }), 400, "incomplete lot completed");
@@ -216,7 +216,7 @@ probe("complete it again -> 409", await api("manager", "POST", `/purchase-items/
 probe("complete a lot that already has a count -> 409", await api("manager", "POST", `/purchase-items/${vaccLot}/complete`, { unit_count: 4 }), 409, "re-size accepted");
 probe("complete a non-tracked lot -> 400", await api("manager", "POST", `/purchase-items/${P1 ? lotOf(P1, 0) : ""}/complete`, { unit_count: 2 }), 400, "feed lot completed");
 const counts = (await api("admin", "GET", "/stock-units/counts")).data;
-check("counts endpoint has UNASSIGNED and IN_STOCK", counts?.UNASSIGNED >= 1 && counts?.IN_STOCK >= 13, JSON.stringify(counts));
+check("counts endpoint has UNASSIGNED and BOUND", counts?.UNASSIGNED >= 1 && counts?.BOUND >= 13, JSON.stringify(counts));
 check("search by id fragment", ((await api("admin", "GET", `/stock-units?q=${bound.vacc[0]!.slice(0, 8)}`)).data ?? []).some((u: any) => u.id === bound.vacc[0]));
 check("filter by category=VACCINE", ((await api("admin", "GET", "/stock-units?category=VACCINE&limit=100")).data ?? []).every((u: any) => u.purchase_item?.item?.category === "VACCINE"));
 check("purchase-items list for the lot shows linked units", ((await api("manager", "GET", `/purchase-items?item_id=${it.vacc}`)).data ?? [])[0]?._count?.stockUnits === 4);
@@ -303,7 +303,7 @@ await eat("keyed consumption 5 kg", it.feed, houseA.id, 5, "KG", 5, { idempotenc
 probe("replayed consumption key -> 409", await use("worker", it.feed, houseA.id, 5, "KG", { idempotency_key: ckey }), 409, "replay consumed twice");
 // coded
 await eat("vaccine: 4,000 doses from vial 1 (in house A)", it.vacc, houseA.id, 4000, "DOSE", 4000, { stock_unit_id: v[0] });
-check("vial flips IN_STOCK -> IN_USE on first draw", (await prisma.stockUnit.findUniqueOrThrow({ where: { id: v[0]! } })).status === "IN_USE");
+check("vial flips BOUND -> IN_USE on first draw", (await prisma.stockUnit.findUniqueOrThrow({ where: { id: v[0]! } })).status === "IN_USE");
 await eat("same vial again (it is IN_USE)", it.vacc, houseA.id, 500, "DOSE", 500, { stock_unit_id: v[0] });
 probe("draw from a vial that is at the warehouse -> 409", await use("worker", it.vacc, houseA.id, 100, "DOSE", { stock_unit_id: v[1] }), 409, "draw from a unit not in the house");
 probe("draw from a vial in another house -> 409", await use("worker", it.vacc, houseB.id, 100, "DOSE", { stock_unit_id: v[0] }), 409, "draw from the wrong house");
@@ -383,11 +383,11 @@ const cons = await api("admin", "PATCH", `/stock-units/${v[2]}/status`, { status
 const wo2 = await prisma.stockLedger.findFirst({ where: { ref_id: v[2]!, location_type: "DISPOSAL" } });
 check("marking a vial CONSUMED writes off its unused remainder", cons.status === 200 && Number(wo2?.quantity) === 5000, `${cons.status} ${wo2?.quantity}`);
 if (wo2) mv(it.vacc, "DISPOSAL", null, -Number(wo2.quantity));
-probe("a CONSUMED unit can't go back to IN_STOCK -> 409", await api("admin", "PATCH", `/stock-units/${v[2]}/status`, { status: "IN_STOCK" }), 409, "used-up unit reopened");
+probe("a CONSUMED unit can't go back to BOUND -> 409", await api("admin", "PATCH", `/stock-units/${v[2]}/status`, { status: "BOUND" }), 409, "used-up unit reopened");
 probe("draw from a CONSUMED vial -> 409", await use("worker", it.vacc, houseA.id, 10, "DOSE", { stock_unit_id: v[2] }), 409, "consumed unit drawn again");
 const reDisposed = await reloc(v[3]!, houseB.id);
 probe("relocate a DISPOSED unit -> 4xx", reDisposed, [400, 409], "a disposed vial can still be moved into a house");
-probe("DISPOSED is final: back to IN_STOCK -> 409", await api("admin", "PATCH", `/stock-units/${v[3]}/status`, { status: "IN_STOCK" }), 409, "disposed unit revived with no trail");
+probe("DISPOSED is final: back to BOUND -> 409", await api("admin", "PATCH", `/stock-units/${v[3]}/status`, { status: "BOUND" }), 409, "disposed unit revived with no trail");
 probe("UNASSIGNED can't be set by hand -> 400", await api("admin", "PATCH", `/stock-units/${v[0]}/status`, { status: "UNASSIGNED" }), 400, "bound unit un-bound by a status pick");
 await api("admin", "POST", `/stock-units/${v[3]}/dispose`);
 check("consumed-from unit can't be hard-deleted -> 409", (await api("admin", "DELETE", `/stock-units/${v[0]}`)).status === 409);

@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { StockUnitService } from "./stock-unit.service";
 import { PurchaseItemService } from "./purchase.service";
 import { AppError } from "@lib/app-error";
-import { houseNumber, sharedWarehouseId } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, provisionPrinted } from "@lib/test-fixtures";
 
 const createdUnitIds: string[] = [];
 const createdTransferIds: string[] = [];
@@ -23,7 +23,7 @@ describe("StockUnitService", () => {
     // out-of-phase-order dependency, not a shortcut around real behavior.
     /** A provisioned code bound to the shared lot -- relocating needs a bound unit. */
     async function boundUnit() {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         return StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
     }
@@ -107,20 +107,39 @@ describe("StockUnitService", () => {
         expect(new Set(units.map((u) => u.id)).size).toBe(3);
     });
 
-    test("bind transitions UNASSIGNED -> IN_STOCK", async () => {
-        const [unit] = await StockUnitService.provision(1);
+    test("bind transitions PRINTED -> BOUND", async () => {
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const bound = await StockUnitService.bind(unit!.id, {
             purchase_item_id: purchaseItemId,
         });
-        expect(bound.status).toBe("IN_STOCK");
+        expect(bound.status).toBe("BOUND");
         expect(bound.purchase_item_id).toBe(purchaseItemId);
         expect(bound.bound_at).not.toBeNull();
     });
 
+    test("markPrinted flips only UNASSIGNED units; bind refuses an unprinted code", async () => {
+        const [blank] = await StockUnitService.provision(1);
+        createdUnitIds.push(blank!.id);
+        await expect(
+            StockUnitService.bind(blank!.id, { purchase_item_id: purchaseItemId }),
+        ).rejects.toMatchObject({ status: 409 });
+
+        const bound = await boundUnit();
+        expect(await StockUnitService.markPrinted([blank!.id, bound.id])).toEqual({ updated: 1 });
+        expect((await prisma.stockUnit.findUniqueOrThrow({ where: { id: bound.id } })).status).toBe(
+            "BOUND",
+        );
+        const printed = await StockUnitService.bind(blank!.id, { purchase_item_id: purchaseItemId });
+        expect(printed.status).toBe("BOUND");
+        await expect(StockUnitService.setStatus(bound.id, "PRINTED")).rejects.toMatchObject({
+            status: 400,
+        });
+    });
+
     test("binding to a nonexistent purchase_item_id throws bad-request, not a raw 500", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         await expect(
@@ -131,7 +150,7 @@ describe("StockUnitService", () => {
     });
 
     test("binding an already-bound unit throws a conflict", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
 
@@ -152,7 +171,7 @@ describe("StockUnitService", () => {
                 total_price: 20,
             },
         });
-        const units = await StockUnitService.provision(3);
+        const units = await provisionPrinted(3);
         createdUnitIds.push(...units.map((u) => u.id));
 
         await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id, unit_count: 2 });
@@ -183,7 +202,7 @@ describe("StockUnitService", () => {
                 total_price: 50,
             },
         });
-        const units = await StockUnitService.provision(3);
+        const units = await provisionPrinted(3);
         createdUnitIds.push(...units.map((u) => u.id));
         await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id });
         await StockUnitService.bind(units[1]!.id, { purchase_item_id: lot.id });
@@ -220,7 +239,7 @@ describe("StockUnitService", () => {
                 total_price: 30,
             },
         });
-        const units = await StockUnitService.provision(2);
+        const units = await provisionPrinted(2);
         createdUnitIds.push(...units.map((u) => u.id));
         const before = new Date();
         await StockUnitService.bind(units[0]!.id, { purchase_item_id: lot.id });
@@ -273,7 +292,7 @@ describe("StockUnitService", () => {
             },
         });
 
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         await expect(
             StockUnitService.bind(unit!.id, { purchase_item_id: untrackedPurchaseItem.id }),
@@ -396,7 +415,7 @@ describe("StockUnitService", () => {
     });
 
     test("relocate with a stock_transfer_id for the unit's own item stores it on the allocation row", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
 
@@ -426,7 +445,7 @@ describe("StockUnitService", () => {
     });
 
     test("relocate rejects a stock_transfer_id for a nonexistent transfer with a 404", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
 
@@ -441,7 +460,7 @@ describe("StockUnitService", () => {
     });
 
     test("relocate rejects a stock_transfer_id for a different item with a 400", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
 
@@ -479,7 +498,7 @@ describe("StockUnitService", () => {
     });
 
     test("dispose sets status DISPOSED and rejects double-dispose", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const disposed = await StockUnitService.dispose(unit!.id);
@@ -495,7 +514,7 @@ describe("StockUnitService", () => {
     });
 
     test("getAll includes item/house/asset and filters by category", async () => {
-        const [equipmentUnit] = await StockUnitService.provision(1);
+        const [equipmentUnit] = await provisionPrinted(1);
         createdUnitIds.push(equipmentUnit!.id);
 
         const equipmentItem = await prisma.item.create({
@@ -546,7 +565,7 @@ describe("StockUnitService", () => {
         expect(found!.purchase_item?.item.name).toBe(equipmentItem.name);
         expect(found!.houseAllocations[0]?.house?.id).toBe(houseId);
 
-        const [medicineUnit] = await StockUnitService.provision(1);
+        const [medicineUnit] = await provisionPrinted(1);
         createdUnitIds.push(medicineUnit!.id);
         await StockUnitService.bind(medicineUnit!.id, { purchase_item_id: purchaseItemId }); // medicine, from beforeAll
 
@@ -569,7 +588,7 @@ describe("StockUnitService", () => {
                 where: { ref_id: unit.id, reason: "WASTAGE" },
             }),
         ).toBe(before + 1);
-        await expect(StockUnitService.setStatus(unit.id, "IN_STOCK")).rejects.toMatchObject({
+        await expect(StockUnitService.setStatus(unit.id, "BOUND")).rejects.toMatchObject({
             status: 409,
         });
         expect((await StockUnitService.setStatus(unit.id, "DISPOSED")).status).toBe("DISPOSED");
@@ -588,7 +607,7 @@ describe("StockUnitService", () => {
     });
 
     test("relocate refuses a blank code, a disposed unit, and an inactive house", async () => {
-        const [blank] = await StockUnitService.provision(1);
+        const [blank] = await provisionPrinted(1);
         createdUnitIds.push(blank!.id);
         await expect(
             StockUnitService.relocate(blank!.id, houseId, crypto.randomUUID()),
@@ -623,7 +642,7 @@ describe("StockUnitService", () => {
     });
 
     test("remove refuses a unit that has consumption history", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
         const consumption = await prisma.consumption.create({
             data: {

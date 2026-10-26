@@ -76,13 +76,13 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [3 coded units] bind to a lot of a non-tracked item -> 400
 - PASS [3 coded units] bind an already-bound code -> 409
 - PASS [3 coded units] bind needs a manager: worker -> 403
-- PASS [3 coded units] bound units are IN_STOCK with bound_by
+- PASS [3 coded units] bound units are BOUND with bound_by
 - PASS [3 coded units] complete a lot with more units declared than linked -> 400
 - PASS [3 coded units] complete a lot -> ok
 - PASS [3 coded units] complete it again -> 409
 - PASS [3 coded units] complete a lot that already has a count -> 409
 - PASS [3 coded units] complete a non-tracked lot -> 400
-- PASS [3 coded units] counts endpoint has UNASSIGNED and IN_STOCK
+- PASS [3 coded units] counts endpoint has UNASSIGNED and BOUND
 - PASS [3 coded units] search by id fragment
 - PASS [3 coded units] filter by category=VACCINE
 - PASS [3 coded units] purchase-items list for the lot shows linked units
@@ -126,7 +126,7 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [5 consumption] keyed consumption 5 kg
 - PASS [5 consumption] replayed consumption key -> 409
 - PASS [5 consumption] vaccine: 4,000 doses from vial 1 (in house A)
-- PASS [5 consumption] vial flips IN_STOCK -> IN_USE on first draw
+- PASS [5 consumption] vial flips BOUND -> IN_USE on first draw
 - PASS [5 consumption] same vial again (it is IN_USE)
 - PASS [5 consumption] draw from a vial that is at the warehouse -> 409
 - PASS [5 consumption] draw from a vial in another house -> 409
@@ -160,10 +160,10 @@ Driven through the HTTP API as admin / manager / worker against the running batc
 - PASS [7 disposal] draw from a disposed vial -> 409
 - PASS [7 disposal] disposal reduces item stock (ledger OUT/WASTAGE/DISPOSAL row written)
 - PASS [7 disposal] marking a vial CONSUMED writes off its unused remainder
-- PASS [7 disposal] a CONSUMED unit can't go back to IN_STOCK -> 409
+- PASS [7 disposal] a CONSUMED unit can't go back to BOUND -> 409
 - PASS [7 disposal] draw from a CONSUMED vial -> 409
 - PASS [7 disposal] relocate a DISPOSED unit -> 4xx
-- PASS [7 disposal] DISPOSED is final: back to IN_STOCK -> 409
+- PASS [7 disposal] DISPOSED is final: back to BOUND -> 409
 - PASS [7 disposal] UNASSIGNED can't be set by hand -> 400
 - PASS [7 disposal] consumed-from unit can't be hard-deleted -> 409
 - PASS [7 disposal] a blank code can be deleted

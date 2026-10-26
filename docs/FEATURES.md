@@ -115,7 +115,7 @@ module.
 - **Coded units** (`StockUnit` — medicine, vaccine, equipment):
     - Provision a batch of blank codes (prints QR + text, `status UNASSIGNED`).
     - Bind a code to a `PurchaseItem` lot (scan or manual entry) →
-      `status IN_STOCK` — also reachable from the mobile app (§3.3), since
+      `status BOUND` — also reachable from the mobile app (§3.3), since
       deliveries often get received in the field, not at a desk.
     - Unit detail: remaining quantity, current location (`house_id`), status,
       who bound it and when, full consumption history.

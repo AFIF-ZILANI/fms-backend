@@ -4,7 +4,7 @@ import { PurchaseService, PurchaseItemService } from "./purchase.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
 import { createPurchaseSchema } from "@validators/purchase.validator";
-import { sharedInstrumentId, purgeAuditLog } from "@lib/test-fixtures";
+import { sharedInstrumentId, purgeAuditLog, provisionPrinted } from "@lib/test-fixtures";
 import { PaymentService } from "./payment.service";
 
 const createdPurchaseIds: string[] = [];
@@ -190,11 +190,11 @@ describe("PurchaseService", () => {
         createdPurchaseIds.push(purchase!.id);
         const purchaseItemId = purchase!.items[0]!.id;
 
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         const bound = await StockUnitService.bind(unit!.id, {
             purchase_item_id: purchaseItemId,
         });
-        expect(bound.status).toBe("IN_STOCK");
+        expect(bound.status).toBe("BOUND");
         expect(bound.purchase_item_id).toBe(purchaseItemId);
 
         await prisma.stockUnit.delete({ where: { id: unit!.id } });

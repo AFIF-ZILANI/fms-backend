@@ -292,7 +292,7 @@ Everything else below is still a real Prisma enum, fixed at deploy time:
 | `HouseType` | `BROODER`, `GROWER`, `LAYER` |
 | Units (`Item.unit`, `PurchaseItem.unit`, `SaleItem.unit`) | no longer a fixed enum — a string matching an active `Unit.code`; fetch valid values from `GET /api/units?active=true` (§6.8) |
 | `Item.category` | no longer a fixed enum — a string matching an active `ItemCategory.code`; fetch valid values from `GET /api/item-categories?active=true` (§6.8) |
-| `StockUnitStatus` (read-only, server-managed) | `UNASSIGNED`, `IN_STOCK`, `IN_USE`, `CONSUMED`, `DISPOSED` |
+| `StockUnitStatus` (read-only, server-managed) | `UNASSIGNED`, `PRINTED`, `BOUND`, `IN_USE`, `CONSUMED`, `DISPOSED` |
 | `AssetStatus` | `ACTIVE`, `RETIRED`, `DISPOSED` |
 | `OrganizationRole` | `MANUFACTURER`, `IMPORTER`, `MARKETER`, `DISTRIBUTOR` |
 | `BatchStatus` (read-only except via `/close`) | `RUNNING`, `CLOSED`, `SOLD` |
@@ -541,7 +541,7 @@ twice). `DELETE` → **404** if the link `:id` doesn't exist.
 
 Coded tracking for medicine/vaccine/equipment (feed and other bulk items use
 the aggregate `StockLedger`, §6.6, instead). Status only ever moves forward:
-`UNASSIGNED → IN_STOCK → IN_USE → CONSUMED` (or `→ DISPOSED` from almost any
+`UNASSIGNED → PRINTED → BOUND → IN_USE → CONSUMED` (or `→ DISPOSED` from almost any
 state). **The client never sets `status` directly** — it's a side effect of
 which action endpoint you call.
 
@@ -550,7 +550,8 @@ which action endpoint you call.
 | GET | `/api/stock-units` | 200 | query: `status?`, `house_id?` |
 | GET | `/api/stock-units/:id` | 200 | — |
 | GET | `/api/stock-units/code/:code` | 200 | look up by the printed code — this is the QR-scan endpoint |
-| POST | `/api/stock-units` | 201 | `{ count: int 1-500 }` — provisions that many blank codes, `status: UNASSIGNED` |
+| POST | `/api/stock-units` | 201 | `{ count: int 1-1170 }` — provisions that many blank codes, `status: UNASSIGNED` |
+| POST | `/api/stock-units/mark-printed` | 200 | `{ ids: uuid[1-1170] }` — `UNASSIGNED → PRINTED` once the print is confirmed; ids in any other status are skipped. Returns `{ updated }` |
 | POST | `/api/stock-units/:id/bind` | 200 | `{ purchase_item_id, initial_quantity?, bound_by_id? }` |
 | POST | `/api/stock-units/:id/relocate` | 200 | `{ house_id }` |
 | POST | `/api/stock-units/:id/dispose` | 200 | — |
@@ -560,11 +561,12 @@ bottle) — omit it for non-depleting equipment; `remaining_quantity` mirrors
 it and only moves via `Consumption` (§9.1), never a direct PATCH here.
 Provisioning returns an **array** of the newly created units (each with its
 own `code` and `id`) — that's what you print as QR labels. `count` outside
-1–500 → **400** before any codes are generated.
+1–1170 → **400** before any codes are generated.
 
 **Errors**: **404** unknown `:id`/`:code` on any of the `GET`/action
-routes. `bind` → **409** if the unit's current status isn't `UNASSIGNED`
-(`detail`: `"StockUnit is already <status, lowercased>"`); **400** if
+routes. `bind` → **409** if the unit's current status isn't `PRINTED`
+(`detail`: `"Print this code and confirm it printed before binding it"` for
+`UNASSIGNED`, else `"StockUnit is already <status, lowercased>"`); **400** if
 `purchase_item_id` or `bound_by_id` doesn't reference a real row (§1.7).
 `relocate` → **400** if `house_id` doesn't exist. `dispose` → **409** if
 already `DISPOSED`.
@@ -844,7 +846,7 @@ most important branch in the whole API to understand correctly**:
 
 - **Coded draw** (`stock_unit_id` set — medicine/vaccine/equipment):
   decrements `StockUnit.remaining_quantity`; flips status
-  `IN_STOCK → IN_USE`, or `→ CONSUMED` at exactly zero. Equipment
+  `BOUND → IN_USE`, or `→ CONSUMED` at exactly zero. Equipment
   (`remaining_quantity` was never set) just flips to `IN_USE` once,
   non-depleting.
 - **Aggregate draw** (no `stock_unit_id` — feed, etc.): no `StockUnit`
@@ -856,7 +858,7 @@ most important branch in the whole API to understand correctly**:
 | POST | `/api/consumptions` | 201 | `{ batch_id?, house_id, item_id, stock_unit_id?, quantity, date, note?, recorded_by_id, idempotency_key? }` |
 
 **Errors** (coded-draw path only, when `stock_unit_id` is set): **404** if
-that `StockUnit` doesn't exist; **409** if its status isn't `IN_STOCK` or
+that `StockUnit` doesn't exist; **409** if its status isn't `BOUND` or
 `IN_USE` (`detail`: `"StockUnit is <status>, cannot draw from it"`); **409**
 if `quantity` exceeds `remaining_quantity` (`detail`: `"Consumption
 quantity exceeds remaining stock in this unit"`). **Both paths**: **400** if

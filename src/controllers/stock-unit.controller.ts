@@ -6,6 +6,7 @@ import { getValid } from "@lib/valid";
 import { StockUnitService } from "@services/stock-unit.service";
 import type {
     ProvisionStockUnitsInput,
+    MarkPrintedStockUnitsInput,
     BindStockUnitInput,
     RelocateStockUnitInput,
     SetStockUnitStatusInput,
@@ -40,6 +41,14 @@ export const StockUnitController = {
             const body = getValid<ProvisionStockUnitsInput>(c, "json");
             const units = await StockUnitService.provision(body.count);
             return sendSuccess(c, units, "Stock units provisioned", 201);
+        });
+    },
+
+    async markPrinted(c: Context) {
+        return withHandler(c, async () => {
+            const body = getValid<MarkPrintedStockUnitsInput>(c, "json");
+            const result = await StockUnitService.markPrinted(body.ids);
+            return sendSuccess(c, result, "Stock units marked printed");
         });
     },
 

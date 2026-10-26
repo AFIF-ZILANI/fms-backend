@@ -72,13 +72,26 @@ export const StockUnitService = {
         });
     },
 
-    /** Binds a blank unit to a purchase lot -- UNASSIGNED -> IN_STOCK. Refused for a lot whose
+    /** UNASSIGNED -> PRINTED once the web print sheet's "did it print?" is confirmed. Reprinting
+     *  an already-PRINTED/bound code is a no-op here, so callers can send any printed selection. */
+    async markPrinted(ids: string[]) {
+        const { count } = await prisma.stockUnit.updateMany({
+            where: { id: { in: ids }, status: "UNASSIGNED" },
+            data: { status: "PRINTED" },
+        });
+        return { updated: count };
+    },
+
+    /** Binds a printed unit to a purchase lot -- PRINTED -> BOUND. Refused for a lot whose
      *  item isn't flagged is_unit_tracked, so a bulk item (feed, husk) can't end up QR-coded
      *  alongside its own aggregate StockLedger tracking. */
     async bind(id: string, input: BindStockUnitInput) {
         const unit = await prisma.stockUnit.findUnique({ where: { id } });
         if (!unit) throw AppError.notFound("StockUnit");
-        if (unit.status !== "UNASSIGNED") {
+        if (unit.status === "UNASSIGNED") {
+            throw AppError.conflict("Print this code and confirm it printed before binding it");
+        }
+        if (unit.status !== "PRINTED") {
             throw AppError.conflict(`StockUnit is already ${unit.status.toLowerCase()}`);
         }
 
@@ -125,7 +138,7 @@ export const StockUnitService = {
                     where: { id },
                     data: {
                         purchase_item_id: input.purchase_item_id,
-                        status: "IN_STOCK",
+                        status: "BOUND",
                         bound_at: new Date(),
                         ...(input.bound_by_id !== undefined && { bound_by_id: input.bound_by_id }),
                     },
@@ -170,7 +183,7 @@ export const StockUnitService = {
         if (!unit) throw AppError.notFound("StockUnit");
         // A blank code is just a sticker until it's bound to a lot; a used-up or disposed unit isn't
         // anywhere any more. Moving either would give it a location it can't have.
-        if (unit.status === "UNASSIGNED" || !unit.purchase_item) {
+        if (unit.status === "UNASSIGNED" || unit.status === "PRINTED" || !unit.purchase_item) {
             throw AppError.badRequest(
                 "This code isn't linked to a purchase lot yet -- bind it first",
             );
@@ -303,9 +316,14 @@ export const StockUnitService = {
             const unit = await lockedUnit(tx, id);
             if (unit.status === "DISPOSED")
                 throw AppError.conflict("A disposed unit can't change status");
-            if (status === "UNASSIGNED" || unit.status === "UNASSIGNED") {
+            if (
+                status === "UNASSIGNED" ||
+                status === "PRINTED" ||
+                unit.status === "UNASSIGNED" ||
+                unit.status === "PRINTED"
+            ) {
                 throw AppError.badRequest(
-                    "Bind the code to a lot instead of setting UNASSIGNED by hand",
+                    "Print and bind the code instead of setting UNASSIGNED/PRINTED by hand",
                 );
             }
             if (unit.status === "CONSUMED" && status !== "CONSUMED") {

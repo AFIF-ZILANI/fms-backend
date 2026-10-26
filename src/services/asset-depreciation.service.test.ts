@@ -4,7 +4,7 @@ import { BatchService } from "./batch.service";
 import { StockUnitService } from "./stock-unit.service";
 import { ConsumptionService } from "./consumption.service";
 import { AssetDepreciationService } from "./asset-depreciation.service";
-import { houseNumber, sharedWarehouseId, purgeAuditLog } from "@lib/test-fixtures";
+import { houseNumber, sharedWarehouseId, purgeAuditLog, provisionPrinted } from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;
@@ -65,7 +65,7 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
         });
         purchaseItemId = purchaseItem.id;
 
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         stockUnitId = unit!.id;
         await StockUnitService.bind(unit!.id, { purchase_item_id: purchaseItemId });
         await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());

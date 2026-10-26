@@ -91,7 +91,7 @@ describe("HouseService.getCodedStock", () => {
     /** A unit with a move history: each step is [house or null for a return, minutes after t0]. */
     const unit = async (
         lot: string,
-        status: "IN_STOCK" | "IN_USE",
+        status: "BOUND" | "IN_USE",
         moves: [string | null, number][],
     ) => {
         const u = await prisma.stockUnit.create({ data: { purchase_item_id: lot, status } });
@@ -111,23 +111,23 @@ describe("HouseService.getCodedStock", () => {
     };
 
     test("counts unused units whose latest move is into this house, per item", async () => {
-        for (let i = 0; i < 3; i++) await unit(lotA, "IN_STOCK", [[houseId, 1]]); // here
-        await unit(lotA, "IN_STOCK", [
+        for (let i = 0; i < 3; i++) await unit(lotA, "BOUND", [[houseId, 1]]); // here
+        await unit(lotA, "BOUND", [
             [houseId, 1],
             [otherId, 2],
         ]); //               moved on to another house
-        await unit(lotA, "IN_STOCK", [
+        await unit(lotA, "BOUND", [
             [houseId, 1],
             [null, 2],
         ]); //                  returned to the warehouse
         await unit(lotA, "IN_USE", [[houseId, 1]]); //                               here, but already used
-        await unit(lotA, "IN_STOCK", [
+        await unit(lotA, "BOUND", [
             [otherId, 1],
             [houseId, 2],
         ]); //               came back from another: counts
-        await unit(lotA, "IN_STOCK", []); //                                         never moved: warehouse
-        await unit(lotB, "IN_STOCK", [[houseId, 1]]);
-        await unit(lotB, "IN_STOCK", [[houseId, 1]]);
+        await unit(lotA, "BOUND", []); //                                         never moved: warehouse
+        await unit(lotB, "BOUND", [[houseId, 1]]);
+        await unit(lotB, "BOUND", [[houseId, 1]]);
 
         const stock = await HouseService.getCodedStock(houseId);
         const a = stock.find((s) => s.item_id === itemA)!;

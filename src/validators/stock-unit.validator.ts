@@ -2,10 +2,14 @@ import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 import { resourceCategorySchema } from "@lib/enums";
 
-const stockUnitStatus = z.enum(["UNASSIGNED", "IN_STOCK", "IN_USE", "CONSUMED", "DISPOSED"]);
+const stockUnitStatus = z.enum(["UNASSIGNED", "PRINTED", "BOUND", "IN_USE", "CONSUMED", "DISPOSED"]);
 
 export const provisionStockUnitsSchema = z.object({
     count: z.coerce.number().int().positive().max(1170, "Provision at most 1170 codes (10 A4 pages) at a time"),
+});
+
+export const markPrintedStockUnitsSchema = z.object({
+    ids: z.array(z.string().uuid()).min(1).max(1170),
 });
 
 export const bindStockUnitSchema = z.object({
@@ -40,6 +44,7 @@ export const listStockUnitsQuerySchema = paginationQuerySchema.extend({
 });
 
 export type ProvisionStockUnitsInput = z.infer<typeof provisionStockUnitsSchema>;
+export type MarkPrintedStockUnitsInput = z.infer<typeof markPrintedStockUnitsSchema>;
 export type BindStockUnitInput = z.infer<typeof bindStockUnitSchema> & { bound_by_id?: string };
 export type RelocateStockUnitInput = z.infer<typeof relocateStockUnitSchema>;
 export type SetStockUnitStatusInput = z.infer<typeof setStockUnitStatusSchema>;

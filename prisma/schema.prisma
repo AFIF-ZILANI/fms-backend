@@ -126,8 +126,9 @@ enum DiscountType {
 }
 
 enum StockUnitStatus {
-  UNASSIGNED // printed, not yet bound to a purchase
-  IN_STOCK // bound, sitting in storage, untouched
+  UNASSIGNED // provisioned, not yet printed
+  PRINTED // label printed (confirmed on the web print sheet), not yet bound -- only these can bind
+  BOUND // bound to a purchase lot, sitting in storage, untouched
   IN_USE // opened/depleting (medicine, vaccine) or currently assigned to a batch (equipment)
   CONSUMED // fully depleted — medicine/vaccine only
   DISPOSED // written off — expired, damaged, discarded

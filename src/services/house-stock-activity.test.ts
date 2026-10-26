@@ -96,7 +96,7 @@ describe("house stock activity", () => {
 
     const allocate = async (lot: string, house: string, ageMs: number) => {
         const unit = await prisma.stockUnit.create({
-            data: { purchase_item_id: lot, status: "IN_STOCK" },
+            data: { purchase_item_id: lot, status: "BOUND" },
         });
         unitIds.push(unit.id);
         const row = await prisma.stockHouseAllocation.create({

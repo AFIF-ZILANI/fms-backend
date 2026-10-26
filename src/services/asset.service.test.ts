@@ -3,7 +3,7 @@ import prisma from "@lib/db";
 import { AssetService } from "./asset.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
-import { houseNumber, boundStockUnit, removeBoundStockUnit } from "@lib/test-fixtures";
+import { houseNumber, boundStockUnit, removeBoundStockUnit, provisionPrinted } from "@lib/test-fixtures";
 import { getDefaultActorId } from "@lib/current-actor";
 
 const createdAssetIds: string[] = [];
@@ -23,7 +23,7 @@ describe("AssetService", () => {
     });
 
     test("create then getById round-trips", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const asset = await AssetService.create({
@@ -72,7 +72,7 @@ describe("AssetService", () => {
     });
 
     test("duplicate stock_unit_id throws a conflict", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const first = await AssetService.create({
@@ -102,7 +102,7 @@ describe("AssetService", () => {
     });
 
     test("setStatus transitions to RETIRED", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const asset = await AssetService.create({
@@ -119,7 +119,7 @@ describe("AssetService", () => {
     });
 
     test("remove hard-deletes an asset with no depreciation, freeing its unit", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const asset = await AssetService.create({
@@ -144,7 +144,7 @@ describe("AssetService", () => {
     });
 
     test("remove refuses an asset with depreciation history", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const asset = await AssetService.create({
@@ -177,7 +177,7 @@ describe("AssetService", () => {
     });
 
     test("getAll includes depreciations, getById includes depreciations with batch", async () => {
-        const [unit] = await StockUnitService.provision(1);
+        const [unit] = await provisionPrinted(1);
         createdUnitIds.push(unit!.id);
 
         const asset = await AssetService.create({

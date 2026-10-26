@@ -95,7 +95,7 @@ export async function unitAmount(
     if (isNonDepleting(lot.item.category)) return new Prisma.Decimal(1);
     const left = await codedRemaining(tx, unit_id, lot);
     const live = await tx.stockUnit.count({
-        where: { purchase_item_id: lot.id, status: { in: ["IN_STOCK", "IN_USE"] } },
+        where: { purchase_item_id: lot.id, status: { in: ["BOUND", "IN_USE"] } },
     });
     const amount = left.unit ?? (live > 0 ? left.lot.dividedBy(live) : new Prisma.Decimal(0));
     return Prisma.Decimal.max(0, Prisma.Decimal.min(amount, left.lot));

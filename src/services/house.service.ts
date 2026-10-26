@@ -150,7 +150,7 @@ export const HouseService = {
             ) cur ON TRUE
             JOIN "PurchaseItem" pi ON pi.id = su.purchase_item_id
             JOIN "Item" i ON i.id = pi.item_id
-            WHERE cur.house_id = ${id} AND su.status = 'IN_STOCK'
+            WHERE cur.house_id = ${id} AND su.status = 'BOUND'
             GROUP BY pi.item_id, i.name, i.unit
             ORDER BY i.name`;
 

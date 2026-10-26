@@ -132,7 +132,7 @@ export async function boundStockUnit(recorded_by_id: string, category = "EQUIPME
         },
     });
     const unit = await prisma.stockUnit.create({
-        data: { purchase_item_id: lot.id, status: "IN_STOCK", bound_at: new Date() },
+        data: { purchase_item_id: lot.id, status: "BOUND", bound_at: new Date() },
     });
     return { unitId: unit.id, itemId: item.id, purchaseId: purchase.id, lotId: lot.id };
 }
@@ -145,4 +145,11 @@ export async function removeBoundStockUnit(f: Awaited<ReturnType<typeof boundSto
     await prisma.purchaseItem.deleteMany({ where: { id: f.lotId } });
     await prisma.purchase.deleteMany({ where: { id: f.purchaseId } });
     await prisma.item.deleteMany({ where: { id: f.itemId } });
+}
+
+/** N blank codes already through the print step -- bind() only accepts PRINTED units. */
+export async function provisionPrinted(count: number) {
+    return prisma.stockUnit.createManyAndReturn({
+        data: Array.from({ length: count }, () => ({ status: "PRINTED" as const })),
+    });
 }
