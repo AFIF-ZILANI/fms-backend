@@ -3,7 +3,12 @@ import prisma from "@lib/db";
 import { AssetService } from "./asset.service";
 import { StockUnitService } from "./stock-unit.service";
 import { AppError } from "@lib/app-error";
-import { houseNumber, boundStockUnit, removeBoundStockUnit, provisionPrinted } from "@lib/test-fixtures";
+import {
+    houseNumber,
+    boundStockUnit,
+    removeBoundStockUnit,
+    provisionPrinted,
+} from "@lib/test-fixtures";
 import { getDefaultActorId } from "@lib/current-actor";
 
 const createdAssetIds: string[] = [];

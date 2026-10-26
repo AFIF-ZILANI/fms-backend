@@ -2,10 +2,21 @@ import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 import { resourceCategorySchema } from "@lib/enums";
 
-const stockUnitStatus = z.enum(["UNASSIGNED", "PRINTED", "BOUND", "IN_USE", "CONSUMED", "DISPOSED"]);
+const stockUnitStatus = z.enum([
+    "UNASSIGNED",
+    "PRINTED",
+    "BOUND",
+    "IN_USE",
+    "CONSUMED",
+    "DISPOSED",
+]);
 
 export const provisionStockUnitsSchema = z.object({
-    count: z.coerce.number().int().positive().max(1170, "Provision at most 1170 codes (10 A4 pages) at a time"),
+    count: z.coerce
+        .number()
+        .int()
+        .positive()
+        .max(1170, "Provision at most 1170 codes (10 A4 pages) at a time"),
 });
 
 export const markPrintedStockUnitsSchema = z.object({

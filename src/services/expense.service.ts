@@ -134,7 +134,9 @@ export type ExpenseWrite = Omit<CreateExpenseInput, "cost_type"> & {
 };
 
 /** Fail before any write: payroll expenses are paid by their payout; paid money names its account. */
-export function checkExpensePaid(data: Pick<ExpenseWrite, "category" | "paid_amount" | "paid_from_instrument_id">) {
+export function checkExpensePaid(
+    data: Pick<ExpenseWrite, "category" | "paid_amount" | "paid_from_instrument_id">,
+) {
     const paid = new Prisma.Decimal(data.paid_amount ?? 0);
     if (paid.greaterThan(0) && PAYROLL_EXPENSE_CATEGORIES.includes(data.category)) {
         throw AppError.badRequest(

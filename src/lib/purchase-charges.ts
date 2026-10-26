@@ -10,9 +10,7 @@ import { Prisma } from "../../prisma/generated/prisma/client";
  * ponytail: a purchase whose lines total 0 (all free) can't carry its charges by value, so they're
  * dropped from stock cost; split by quantity if that ever happens for real.
  */
-export async function chargeRatios(
-    purchaseIds: string[],
-): Promise<Map<string, Prisma.Decimal>> {
+export async function chargeRatios(purchaseIds: string[]): Promise<Map<string, Prisma.Decimal>> {
     const ids = [...new Set(purchaseIds)];
     if (ids.length === 0) return new Map();
     const charges = await prisma.expense.groupBy({

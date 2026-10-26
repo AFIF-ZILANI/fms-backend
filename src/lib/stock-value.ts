@@ -25,7 +25,10 @@ export async function getItemAvgCosts(itemIds: string[]): Promise<Map<string, Pr
 
     const sums = new Map<string, { qty: Prisma.Decimal; cost: Prisma.Decimal }>();
     for (const line of lines) {
-        const s = sums.get(line.item_id) ?? { qty: new Prisma.Decimal(0), cost: new Prisma.Decimal(0) };
+        const s = sums.get(line.item_id) ?? {
+            qty: new Prisma.Decimal(0),
+            cost: new Prisma.Decimal(0),
+        };
         s.qty = s.qty.plus(line.base_quantity);
         s.cost = s.cost.plus(landedTotal(line, ratios));
         sums.set(line.item_id, s);

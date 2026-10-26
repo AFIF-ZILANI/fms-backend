@@ -34,3 +34,6 @@ logs
 
 # local worktrees for isolated agent work
 .worktrees
+
+# bun build output (scripts.build: --outdir .)
+/index.js

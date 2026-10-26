@@ -48,7 +48,9 @@ const purchaseChargeFields = {
 const chargePaidRefine = (d: { amount: number; paid_amount?: number | undefined }) =>
     (d.paid_amount ?? 0) <= d.amount;
 const chargePaidMessage = { message: "Paid can't be more than the charge", path: ["paid_amount"] };
-const purchaseChargeInput = z.object(purchaseChargeFields).refine(chargePaidRefine, chargePaidMessage);
+const purchaseChargeInput = z
+    .object(purchaseChargeFields)
+    .refine(chargePaidRefine, chargePaidMessage);
 
 /** A charge added after the purchase was recorded (the transport bill often comes later). */
 export const addPurchaseChargeSchema = z
@@ -94,7 +96,9 @@ export const completePurchaseItemSchema = z.object({
 
 export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema> & { recorded_by_id: string };
 export type PurchaseChargeInput = z.infer<typeof purchaseChargeInput>;
-export type AddPurchaseChargeInput = z.infer<typeof addPurchaseChargeSchema> & { recorded_by_id: string };
+export type AddPurchaseChargeInput = z.infer<typeof addPurchaseChargeSchema> & {
+    recorded_by_id: string;
+};
 export type ListPurchasesQuery = z.infer<typeof listPurchasesQuerySchema>;
 export type ListPurchaseItemsQuery = z.infer<typeof listPurchaseItemsQuerySchema>;
 export type CompletePurchaseItemInput = z.infer<typeof completePurchaseItemSchema>;

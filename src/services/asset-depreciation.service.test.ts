@@ -4,7 +4,12 @@ import { BatchService } from "./batch.service";
 import { StockUnitService } from "./stock-unit.service";
 import { ConsumptionService } from "./consumption.service";
 import { AssetDepreciationService } from "./asset-depreciation.service";
-import { houseNumber, sharedWarehouseId, purgeAuditLog, provisionPrinted } from "@lib/test-fixtures";
+import {
+    houseNumber,
+    sharedWarehouseId,
+    purgeAuditLog,
+    provisionPrinted,
+} from "@lib/test-fixtures";
 
 let houseId: string;
 let profileId: string;

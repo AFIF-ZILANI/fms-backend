@@ -34,13 +34,18 @@ describe("purchase charges (landed cost)", () => {
             })
         ).id;
         warehouseId = (
-            await prisma.warehouses.create({ data: { name: `Charge Test Warehouse ${crypto.randomUUID()}` } })
+            await prisma.warehouses.create({
+                data: { name: `Charge Test Warehouse ${crypto.randomUUID()}` },
+            })
         ).id;
         instrumentId = await sharedInstrumentId();
     });
 
     afterAll(async () => {
-        const charges = await prisma.expense.findMany({ where: { purchase_id: purchaseId }, select: { id: true } });
+        const charges = await prisma.expense.findMany({
+            where: { purchase_id: purchaseId },
+            select: { id: true },
+        });
         await prisma.payment.deleteMany({ where: { ref_id: { in: charges.map((c) => c.id) } } });
         await prisma.expense.deleteMany({ where: { purchase_id: purchaseId } });
         await prisma.stockLedger.deleteMany({ where: { item_id: { in: itemIds } } });
@@ -64,7 +69,12 @@ describe("purchase charges (landed cost)", () => {
                 { item_id: itemIds[1]!, quantity: 5, unit: "BAG", unit_price: 200 },
             ],
             charges: [
-                { category: "TRANSPORT", amount: 150, paid_amount: 150, paid_from_instrument_id: instrumentId },
+                {
+                    category: "TRANSPORT",
+                    amount: 150,
+                    paid_amount: 150,
+                    paid_from_instrument_id: instrumentId,
+                },
                 { category: "LABOR", amount: 50 },
             ],
         });
@@ -72,7 +82,9 @@ describe("purchase charges (landed cost)", () => {
 
         const charges = await prisma.expense.findMany({ where: { purchase_id: purchaseId } });
         expect(charges.map((c) => c.cost_type)).toEqual(["STOCK", "STOCK"]);
-        expect(await prisma.payment.count({ where: { ref_id: { in: charges.map((c) => c.id) } } })).toBe(1);
+        expect(
+            await prisma.payment.count({ where: { ref_id: { in: charges.map((c) => c.id) } } }),
+        ).toBe(1);
 
         const avg = await getItemAvgCosts(itemIds);
         expect(avg.get(itemIds[0]!)?.toNumber()).toBe(110); // (1000 + 100) / 10
@@ -103,15 +115,16 @@ describe("purchase charges (landed cost)", () => {
     test("the database refuses a STOCK expense with no purchase", async () => {
         // async wrapper: a PrismaPromise is lazy and only runs (and rejects) once awaited.
         await expect(
-            (async () => prisma.expense.create({
-                data: {
-                    category: "TRANSPORT",
-                    cost_type: "STOCK",
-                    amount: 10,
-                    date: new Date(),
-                    recorded_by_id: profileId,
-                },
-            }))(),
+            (async () =>
+                prisma.expense.create({
+                    data: {
+                        category: "TRANSPORT",
+                        cost_type: "STOCK",
+                        amount: 10,
+                        date: new Date(),
+                        recorded_by_id: profileId,
+                    },
+                }))(),
         ).rejects.toThrow(/Expense_stock_is_purchase_charge/);
     });
 });

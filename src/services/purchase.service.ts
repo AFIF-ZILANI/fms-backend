@@ -247,7 +247,9 @@ export const PurchaseService = {
         });
         if (!purchase) throw AppError.notFound("Purchase");
         if (purchase.is_opening) {
-            throw AppError.badRequest("An opening balance isn't a purchase -- it can't carry charges");
+            throw AppError.badRequest(
+                "An opening balance isn't a purchase -- it can't carry charges",
+            );
         }
         checkExpensePaid(input);
         try {
