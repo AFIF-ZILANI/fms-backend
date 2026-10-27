@@ -453,6 +453,39 @@ describe("StockUnitService", () => {
         await prisma.houses.delete({ where: { id: houseTwo.id } });
     }, 20_000);
 
+    test("getAll house_id lists units currently in the house, not ones that have moved on", async () => {
+        const stays = await boundUnit();
+        const moves = await boundUnit();
+        const houseTwo = await prisma.houses.create({
+            data: { name: "Seed House Two", type: "BROODER", number: houseNumber() },
+        });
+        await StockUnitService.relocate(stays!.id, houseId, crypto.randomUUID());
+        await StockUnitService.relocate(moves!.id, houseId, crypto.randomUUID());
+        await StockUnitService.relocate(moves!.id, houseTwo.id, crypto.randomUUID());
+
+        const ids = async (house_id: string) =>
+            (await StockUnitService.getAll({ house_id, page: 1, limit: 100 })).stockUnits.map(
+                (u) => u.id,
+            );
+        const inOne = await ids(houseId);
+        const inTwo = await ids(houseTwo.id);
+
+        expect(inOne).toContain(stays!.id);
+        expect(inOne).not.toContain(moves!.id);
+        expect(inTwo).toEqual([moves!.id]);
+        // Combined with a search, both filters apply.
+        const searched = await StockUnitService.getAll({
+            house_id: houseId,
+            q: stays!.id,
+            page: 1,
+            limit: 100,
+        });
+        expect(searched.stockUnits.map((u) => u.id)).toEqual([stays!.id]);
+
+        await prisma.stockHouseAllocation.deleteMany({ where: { house_id: houseTwo.id } });
+        await prisma.houses.delete({ where: { id: houseTwo.id } });
+    }, 20_000);
+
     test("relocate rejects a no-op move (same house, or already at the warehouse)", async () => {
         const unit = await boundUnit();
         createdUnitIds.push(unit!.id);

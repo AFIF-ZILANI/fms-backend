@@ -32,13 +32,25 @@ const withRelations = {
 
 export const StockUnitService = {
     async getAll(query: ListStockUnitsQuery) {
+        // house_id = where the unit is now (its latest allocation), not every house it has passed through:
+        // the house screen lists what is physically there. Same rule as HouseService.getCodedStock.
+        const inHouse =
+            query.house_id === undefined
+                ? undefined
+                : (
+                      await prisma.$queryRaw<{ id: string }[]>`
+                          SELECT su.id FROM "StockUnit" su
+                          JOIN LATERAL (
+                              SELECT a.house_id FROM "StockHouseAllocation" a
+                              WHERE a.stock_unit_id = su.id
+                              ORDER BY a.occurred_at DESC, a.created_at DESC
+                              LIMIT 1
+                          ) cur ON TRUE
+                          WHERE cur.house_id = ${query.house_id}`
+                  ).map((r) => r.id);
         const where = {
             ...(query.status !== undefined && { status: query.status }),
-            // ponytail: matches "ever allocated to this house", not "currently there". Add
-            // latest-allocation filtering only if the UI needs strict current-location filtering.
-            ...(query.house_id !== undefined && {
-                houseAllocations: { some: { house_id: query.house_id } },
-            }),
+            ...(inHouse !== undefined && { AND: [{ id: { in: inHouse } }] }),
             ...(query.category !== undefined && {
                 purchase_item: { item: { category: query.category } },
             }),
