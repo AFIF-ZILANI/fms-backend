@@ -58,6 +58,62 @@ export async function createOpeningLot(
     });
 }
 
+/** Keeps a QR-tracked item's opening lot in step with a later correction at its warehouse, so the bottles
+ * the correction added (or took away) can still be linked on the phone. The latest opening lot there:
+ * - not split into bottles yet: its size follows the correction;
+ * - split into equal bottles and the correction is a whole number of them: it gains or loses that many
+ *   (never below the bottles already linked);
+ * otherwise an increase becomes its own unsplit opening lot, and a decrease leaves the lot alone -- bottles
+ * that are gone are disposed by code, not resized away. */
+async function followOpeningLot(
+    tx: Prisma.TransactionClient,
+    c: {
+        item_id: string;
+        unit: string;
+        warehouse_id: string;
+        delta: Prisma.Decimal;
+        recorded_by_id: string;
+        date: Date;
+    },
+) {
+    const lot = await tx.purchaseItem.findFirst({
+        where: { item_id: c.item_id, purchase: { is_opening: true, warehouse_id: c.warehouse_id } },
+        orderBy: { created_at: "desc" },
+        include: { _count: { select: { stockUnits: true } } },
+    });
+    const size = lot ? lot.base_quantity.plus(c.delta) : null;
+
+    if (lot && size!.isPositive()) {
+        if (lot.unit_count === null) {
+            await tx.purchaseItem.update({
+                where: { id: lot.id },
+                data: { base_quantity: size!, quantity: size! },
+            });
+            return;
+        }
+        const perBottle = lot.base_quantity.div(lot.unit_count);
+        const bottles = c.delta.div(perBottle);
+        const count = lot.unit_count + bottles.toNumber();
+        if (bottles.isInteger() && count >= lot._count.stockUnits) {
+            await tx.purchaseItem.update({
+                where: { id: lot.id },
+                data: { base_quantity: size!, quantity: size!, unit_count: count },
+            });
+            return;
+        }
+    }
+    if (c.delta.isPositive()) {
+        await createOpeningLot(tx, {
+            item_id: c.item_id,
+            unit: c.unit,
+            quantity: c.delta,
+            warehouse_id: c.warehouse_id,
+            recorded_by_id: c.recorded_by_id,
+            date: c.date,
+        });
+    }
+}
+
 export const InventoryAdjustmentService = {
     async getAll(query: ListInventoryAdjustmentsQuery) {
         const where = { ...(query.item_id !== undefined && { item_id: query.item_id }) };
@@ -79,7 +135,8 @@ export const InventoryAdjustmentService = {
      * mistyped figure would post the wrong delta and leave the ledger permanently off. */
     async create(data: CreateInventoryAdjustmentInput) {
         // house wins if the caller somehow set both (the web does when both are picked).
-        const location_type = data.house_id !== undefined ? ("HOUSE" as const) : ("WAREHOUSE" as const);
+        const location_type =
+            data.house_id !== undefined ? ("HOUSE" as const) : ("WAREHOUSE" as const);
         const location_id = (data.house_id ?? data.warehouse_id)!;
         const after = new Prisma.Decimal(data.quantity_after);
 
@@ -96,7 +153,10 @@ export const InventoryAdjustmentService = {
                 // already being tracked, and a second "start" would double-count it.
                 if (
                     data.reason === "Opening balance" &&
-                    (await tx.stockLedger.findFirst({ where: { item_id: data.item_id }, select: { id: true } }))
+                    (await tx.stockLedger.findFirst({
+                        where: { item_id: data.item_id },
+                        select: { id: true },
+                    }))
                 ) {
                     throw AppError.conflict(
                         "This item already has stock history -- use a count correction instead of an opening balance",
@@ -117,7 +177,9 @@ export const InventoryAdjustmentService = {
                 const before = current;
                 const delta = after.minus(before);
                 if (delta.isZero()) {
-                    throw AppError.badRequest("The count matches the current balance -- nothing to adjust");
+                    throw AppError.badRequest(
+                        "The count matches the current balance -- nothing to adjust",
+                    );
                 }
 
                 const adjustment = await tx.inventoryAdjustment.create({
@@ -158,6 +220,15 @@ export const InventoryAdjustmentService = {
                         recorded_by_id: data.recorded_by_id,
                         date: adjustment.created_at,
                     });
+                } else if (item.is_unit_tracked && location_type === "WAREHOUSE") {
+                    await followOpeningLot(tx, {
+                        item_id: data.item_id,
+                        unit: item.unit,
+                        warehouse_id: location_id,
+                        delta,
+                        recorded_by_id: data.recorded_by_id,
+                        date: adjustment.created_at,
+                    });
                 }
 
                 await audit(tx, {
@@ -167,7 +238,12 @@ export const InventoryAdjustmentService = {
                     actor_id: data.recorded_by_id,
                     note: `Stock adjusted: ${data.reason}`,
                     before: { item_id: data.item_id, quantity: before.toString() },
-                    after: { item_id: data.item_id, quantity: after.toString(), location_type, location_id },
+                    after: {
+                        item_id: data.item_id,
+                        quantity: after.toString(),
+                        location_type,
+                        location_id,
+                    },
                 });
 
                 return adjustment;
