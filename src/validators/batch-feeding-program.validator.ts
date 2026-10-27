@@ -7,13 +7,14 @@ export const createFeedingProgramSchema = z.object({
     batch_id: z.string().uuid(),
     feed_type: feedType,
     item_id: z.string().uuid(),
-    start_day: z.coerce.number().int().nonnegative(),
-    end_day: z.coerce.number().int().nonnegative().optional(),
+    // Day 1 is the placement day.
+    start_day: z.coerce.number().int().positive(),
+    end_day: z.coerce.number().int().positive().optional(),
     idempotency_key: z.string().min(1).optional(),
 });
 
 export const updateFeedingProgramSchema = z.object({
-    end_day: z.coerce.number().int().nonnegative(),
+    end_day: z.coerce.number().int().positive(),
 });
 
 export const listFeedingProgramsQuerySchema = paginationQuerySchema.extend({

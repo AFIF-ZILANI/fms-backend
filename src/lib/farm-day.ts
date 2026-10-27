@@ -12,3 +12,10 @@ export function farmDay(instant: Date): Date {
     const local = new Date(instant.getTime() + FARM_UTC_OFFSET_HOURS * 3_600_000);
     return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()));
 }
+
+/** Which day of a batch `at` falls on, the farm's way: the placement day is Day 1, the next farm calendar
+ * day Day 2. Never below 1. */
+export function cycleDay(startingDate: Date, at: Date = new Date()): number {
+    const days = Math.round((farmDay(at).getTime() - farmDay(startingDate).getTime()) / 86_400_000);
+    return Math.max(1, days + 1);
+}

@@ -13,6 +13,7 @@ import type { FinancialDashboardQuery } from "@validators/analytics.validator";
 // kgPerBaseUnit lives with the other unit maths; re-exported for existing callers.
 export { kgPerBaseUnit } from "@lib/unit-conversion";
 import { kgPerBaseUnit } from "@lib/unit-conversion";
+import { cycleDay } from "@lib/farm-day";
 
 // Reporting is deliberately read-only against every other module's tables
 // (system-design-arc.md §3) -- no state of its own, only queries.
@@ -84,7 +85,7 @@ export const AnalyticsService = {
             cumulative_died: died,
             cumulative_mortality_rate:
                 batch.initial_chick_count > 0 ? died / batch.initial_chick_count : 0,
-            age_days: Math.floor((Date.now() - batch.starting_date.getTime()) / 86_400_000),
+            age_days: cycleDay(batch.starting_date),
             expected_selling_date: batch.expected_selling_date,
             actual_end_date: batch.actual_end_date,
             latest_average_weight_grams: latestWeight?.average_wt_grams ?? null,
@@ -176,7 +177,10 @@ export const AnalyticsService = {
         for (const p of batchPurchases) {
             addCost(
                 p.batch_id,
-                landedTotal({ purchase_id: p.purchase_id, total_price: p._sum.total_price ?? zero }, ratios),
+                landedTotal(
+                    { purchase_id: p.purchase_id, total_price: p._sum.total_price ?? zero },
+                    ratios,
+                ),
             );
             purchasedOnBatch.add(`${p.batch_id}|${p.item_id}`);
         }
@@ -246,7 +250,7 @@ export const AnalyticsService = {
                 cumulative_died: died,
                 cumulative_mortality_rate:
                     batch.initial_chick_count > 0 ? died / batch.initial_chick_count : 0,
-                age_days: Math.floor((Date.now() - batch.starting_date.getTime()) / 86_400_000),
+                age_days: cycleDay(batch.starting_date),
                 expected_selling_date: batch.expected_selling_date,
                 actual_end_date: batch.actual_end_date,
                 latest_average_weight_grams: latestWeight?.average_wt_grams ?? null,
@@ -272,7 +276,9 @@ export const AnalyticsService = {
         // (batch detail page, simulations). `profit` is the contribution, before farm-wide costs.
         const st = await BatchPnlService.statement(batchId);
         const sum = (sections: string[]) =>
-            st.cost_lines.filter((l) => sections.includes(l.section)).reduce((a, l) => a + l.amount, 0);
+            st.cost_lines
+                .filter((l) => sections.includes(l.section))
+                .reduce((a, l) => a + l.amount, 0);
         const unallocated = await prisma.expense.aggregate({
             where: { batch_id: batchId, cost_type: "SHARED_PERIOD" },
             _sum: { amount: true },

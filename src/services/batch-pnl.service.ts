@@ -5,6 +5,7 @@ import { getItemAvgCosts } from "@lib/stock-value";
 import { chargeRatios, landedTotal } from "@lib/purchase-charges";
 import { isNonDepleting } from "@lib/coded-stock";
 import { kgPerBaseUnit } from "@lib/unit-conversion";
+import { cycleDay } from "@lib/farm-day";
 import { SharedCostService, type SharedMonth } from "@services/shared-cost.service";
 
 /**
@@ -184,10 +185,7 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
             status: batch.status,
             starting_date: batch.starting_date,
             actual_end_date: batch.actual_end_date,
-            age_days: Math.max(
-                0,
-                Math.floor((end.getTime() - batch.starting_date.getTime()) / 86_400_000),
-            ),
+            age_days: cycleDay(batch.starting_date, end),
         },
         revenue: { gross: n(gross), discounts: n(discounts), net: n(revenue) },
         cost_lines: costLines,
