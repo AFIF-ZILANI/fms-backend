@@ -268,7 +268,7 @@ export const HouseService = {
                         environmentRecords: true,
                         stockHouseAllocations: true,
                         inventoryAdjustments: true,
-                        birdSales: true,
+                        birdSaleHouses: true,
                     },
                 },
             },

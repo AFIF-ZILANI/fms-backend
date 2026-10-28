@@ -184,6 +184,102 @@ describe("BirdSaleService", () => {
         expect(balance?.quantity).toBe(50);
     });
 
+    test("a sale split across houses decrements each house by its own count", async () => {
+        const batch = await newRunningBatch(300);
+        const second = await prisma.houses.create({
+            data: { name: "BirdSale House 2", type: "GROWER", number: houseNumber() },
+        });
+        await prisma.batchHouseBalance.create({
+            data: { batch_id: batch.id, house_id: second.id, quantity: 100 },
+        });
+        try {
+            const sale = await BirdSaleService.create({
+                batch_id: batch.id,
+                houses: [
+                    { house_id: houseId, birds_count: 120 },
+                    { house_id: second.id, birds_count: 80 },
+                ],
+                sale_date: new Date(),
+                grade: "HIGH",
+                birds_count: 200,
+                dholta_in_g: 300,
+                total_katha: 20,
+                total_weight: 400,
+                net_weight: 394,
+                price_per_kg: 150,
+                paid_amount: 0,
+                recorded_by_id: profileId,
+            });
+            createdSaleIds.push(sale!.id);
+            expect(sale!.houses).toHaveLength(2);
+
+            const balances = await prisma.batchHouseBalance.findMany({
+                where: { batch_id: batch.id },
+            });
+            const left = Object.fromEntries(balances.map((b) => [b.house_id, b.quantity]));
+            expect(left).toEqual({ [houseId]: 180, [second.id]: 20 });
+
+            // One house short rolls the whole sale back, the other house included.
+            await expect(
+                BirdSaleService.create({
+                    batch_id: batch.id,
+                    houses: [
+                        { house_id: houseId, birds_count: 10 },
+                        { house_id: second.id, birds_count: 50 },
+                    ],
+                    sale_date: new Date(),
+                    grade: "HIGH",
+                    birds_count: 60,
+                    dholta_in_g: 300,
+                    total_katha: 6,
+                    total_weight: 120,
+                    net_weight: 118,
+                    price_per_kg: 150,
+                    paid_amount: 0,
+                    recorded_by_id: profileId,
+                }),
+            ).rejects.toMatchObject({ status: 409 });
+            const after = await prisma.batchHouseBalance.findUnique({
+                where: { batch_id_house_id: { batch_id: batch.id, house_id: houseId } },
+            });
+            expect(after?.quantity).toBe(180);
+        } finally {
+            await prisma.birdSale.deleteMany({ where: { batch_id: batch.id } });
+            await prisma.batchHouseBalance.deleteMany({ where: { house_id: second.id } });
+            await prisma.houses.delete({ where: { id: second.id } });
+        }
+    });
+
+    test("houses must add up to birds_count, and house_id and houses can't both be given", () => {
+        const base = {
+            batch_id: crypto.randomUUID(),
+            sale_date: new Date().toISOString(),
+            grade: "HIGH",
+            birds_count: 100,
+            dholta_in_g: 100,
+            total_katha: 5,
+            total_weight: 100,
+            net_weight: 98,
+            price_per_kg: 140,
+        };
+        const a = crypto.randomUUID();
+        const b = crypto.randomUUID();
+        const split = (x: number, y: number) => [
+            { house_id: a, birds_count: x },
+            { house_id: b, birds_count: y },
+        ];
+        expect(createBirdSaleSchema.safeParse({ ...base, houses: split(60, 40) }).success).toBe(
+            true,
+        );
+        expect(createBirdSaleSchema.safeParse({ ...base, houses: split(60, 30) }).success).toBe(
+            false,
+        );
+        expect(
+            createBirdSaleSchema.safeParse({ ...base, house_id: a, houses: split(60, 40) }).success,
+        ).toBe(false);
+        expect(createBirdSaleSchema.safeParse(base).success).toBe(false);
+    });
+
     test("mismatched male_count + female_count vs birds_count is rejected by the validator", () => {
         const result = createBirdSaleSchema.safeParse({
             batch_id: crypto.randomUUID(),

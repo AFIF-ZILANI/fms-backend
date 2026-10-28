@@ -4,7 +4,18 @@ import { paginationQuerySchema } from "@lib/pagination";
 export const createBirdSaleSchema = z
     .object({
         batch_id: z.string().uuid(),
-        house_id: z.string().uuid(),
+        // One house, or a split across several: give house_id for a single-house sale, or houses
+        // with how many birds came from each. Exactly one of the two.
+        house_id: z.string().uuid().optional(),
+        houses: z
+            .array(
+                z.object({
+                    house_id: z.string().uuid(),
+                    birds_count: z.coerce.number().int().positive("Bird count must be positive"),
+                }),
+            )
+            .min(1)
+            .optional(),
         customer_id: z.string().uuid().optional(),
         sale_date: z.coerce.date(),
         grade: z.enum(["HIGH", "LOW", "CULL"]),
@@ -40,6 +51,22 @@ export const createBirdSaleSchema = z
             message: "Enter the labour cost before saying which account paid it",
             path: ["labour_cost"],
         },
+    )
+    .refine((data) => (data.house_id === undefined) !== (data.houses === undefined), {
+        message: "Give either house_id or houses",
+        path: ["house_id"],
+    })
+    .refine(
+        (data) =>
+            data.houses === undefined ||
+            new Set(data.houses.map((h) => h.house_id)).size === data.houses.length,
+        { message: "Each house can appear only once", path: ["houses"] },
+    )
+    .refine(
+        (data) =>
+            data.houses === undefined ||
+            data.houses.reduce((sum, h) => sum + h.birds_count, 0) === data.birds_count,
+        { message: "The birds from each house must add up to birds_count", path: ["birds_count"] },
     )
     .refine(
         (data) =>

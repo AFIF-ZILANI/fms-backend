@@ -970,13 +970,14 @@ of only three things allowed to (with `MortalityLog` and
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
 | GET | `/api/bird-sales` | 200 | query: `batch_id?`, `customer_id?`, `date_from?`, `date_to?`, `grade?` (`BirdGrade`) |
-| GET | `/api/bird-sales/:id` | 200 | — |
+| GET | `/api/bird-sales/:id` | 200 | includes `houses: [{ house_id, birds_count }]` (list rows too) |
 | POST | `/api/bird-sales` | 201 | see below |
 
 **Create body**:
 ```
 {
-  batch_id, house_id, customer_id?, sale_date, grade: BirdGrade,
+  batch_id, house_id? or houses?: [{ house_id, birds_count }],
+  customer_id?, sale_date, grade: BirdGrade,
   male_count?, female_count?, birds_count,
   dholta_in_g, total_katha, avg_wt_per_katha_kg?,
   total_weight, net_weight, avg_weight_g?,
@@ -984,6 +985,10 @@ of only three things allowed to (with `MortalityLog` and
   discount_amount?, labour_cost?, labour_paid_from_instrument_id?
 }
 ```
+Exactly one of `house_id` (every bird from that house) or `houses` (a split
+across several, each house once, counts summing to `birds_count`). Each house's
+balance is checked and decremented in the same transaction -- one house short
+is a **409** and nothing is written.
 `total_katha` is the crate count and may be fractional (a part-filled last
 crate the operator didn't round). `labour_cost` books a DIRECT `LABOR`
 expense on the batch in the same transaction, paid from

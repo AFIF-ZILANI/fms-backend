@@ -141,7 +141,6 @@ describe("FinanceService", () => {
             await prisma.birdSale.create({
                 data: {
                     batch_id: batch.id,
-                    house_id: house.id,
                     sale_date: d(25),
                     grade: "HIGH",
                     birds_count: 8,

@@ -58,7 +58,6 @@ describe("bird-days, shared costs and the batch statement", () => {
             await prisma.birdSale.create({
                 data: {
                     batch_id: ids.b,
-                    house_id: ids.house,
                     sale_date: d(7, 15),
                     grade: "HIGH",
                     birds_count: 40,
