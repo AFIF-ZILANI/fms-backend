@@ -13,6 +13,9 @@ import type {
 } from "@validators/bird-sale.validator";
 import { markEmptiedHousesCleaning } from "@lib/house-turnaround";
 
+// Every read returns the per-house split; a sale is meaningless without where its birds came from.
+const withHouses = { houses: { select: { house_id: true, birds_count: true } } } as const;
+
 function buildWhere(query: BirdSalesSummaryQuery) {
     return {
         ...(query.batch_id !== undefined && { batch_id: query.batch_id }),
@@ -33,6 +36,7 @@ export const BirdSaleService = {
         const [birdSales, total] = await Promise.all([
             prisma.birdSale.findMany({
                 where,
+                include: withHouses,
                 orderBy: { sale_date: "desc" },
                 ...toSkipTake(query),
             }),
@@ -75,7 +79,7 @@ export const BirdSaleService = {
     },
 
     async getById(id: string) {
-        const birdSale = await prisma.birdSale.findUnique({ where: { id } });
+        const birdSale = await prisma.birdSale.findUnique({ where: { id }, include: withHouses });
         if (!birdSale) throw AppError.notFound("BirdSale");
         return birdSale;
     },
@@ -97,7 +101,9 @@ export const BirdSaleService = {
      * creates the sale as one unit, so a crash or a double-confirm can't leave a sale with no row
      * linked to it, or two sales for one weighing. */
     async createIn(tx: Prisma.TransactionClient, data: CreateBirdSaleInput) {
-        await assertHouseActive(tx, data.house_id);
+        // A single house_id is shorthand for one house holding every bird sold.
+        const houses = data.houses ?? [{ house_id: data.house_id!, birds_count: data.birds_count }];
+        for (const h of houses) await assertHouseActive(tx, h.house_id);
         const total_amount = new Prisma.Decimal(data.net_weight).times(data.price_per_kg);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         // Discount is money knocked off at the point of sale, not money owed --
@@ -120,23 +126,25 @@ export const BirdSaleService = {
             "BIRD_SALE",
         );
 
-        // One conditional UPDATE is the guard and the decrement (see MortalityLog).
-        const { count } = await tx.batchHouseBalance.updateMany({
-            where: {
-                batch_id: data.batch_id,
-                house_id: data.house_id,
-                quantity: { gte: data.birds_count },
-            },
-            data: { quantity: { decrement: data.birds_count } },
-        });
-        if (count === 0) {
-            throw AppError.conflict("Sale quantity exceeds live birds in this house");
+        // One conditional UPDATE per house is the guard and the decrement (see MortalityLog).
+        for (const h of houses) {
+            const { count } = await tx.batchHouseBalance.updateMany({
+                where: {
+                    batch_id: data.batch_id,
+                    house_id: h.house_id,
+                    quantity: { gte: h.birds_count },
+                },
+                data: { quantity: { decrement: h.birds_count } },
+            });
+            if (count === 0) {
+                throw AppError.conflict("Sale quantity exceeds live birds in this house");
+            }
         }
 
         const birdSale = await tx.birdSale.create({
             data: {
                 batch_id: data.batch_id,
-                house_id: data.house_id,
+                houses: { create: houses },
                 sale_date: data.sale_date,
                 grade: data.grade,
                 birds_count: data.birds_count,
@@ -158,6 +166,7 @@ export const BirdSaleService = {
                 }),
                 ...(data.avg_weight_g !== undefined && { avg_weight_g: data.avg_weight_g }),
             },
+            include: withHouses,
         });
 
         await recordPaidAtCreate(tx, {
@@ -193,7 +202,10 @@ export const BirdSaleService = {
             });
         }
 
-        await markEmptiedHousesCleaning(tx, [data.house_id]);
+        await markEmptiedHousesCleaning(
+            tx,
+            houses.map((h) => h.house_id),
+        );
 
         await audit(tx, {
             table: "BirdSale",
@@ -203,7 +215,7 @@ export const BirdSaleService = {
             note: "Bird sale recorded",
             after: {
                 batch_id: data.batch_id,
-                house_id: data.house_id,
+                houses,
                 birds_count: data.birds_count,
                 net_weight: String(data.net_weight),
                 price_per_kg: String(data.price_per_kg),

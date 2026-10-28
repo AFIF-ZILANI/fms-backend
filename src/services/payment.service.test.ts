@@ -91,7 +91,6 @@ describe("PaymentService", () => {
         const birdSale = await prisma.birdSale.create({
             data: {
                 batch_id: batchId,
-                house_id: houseId,
                 sale_date: longAgo,
                 grade: "HIGH",
                 birds_count: 100,

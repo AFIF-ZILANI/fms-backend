@@ -692,7 +692,7 @@ model Houses {
   environmentRecords    EnvironmentRecords[]
   stockHouseAllocations StockHouseAllocation[]
   inventoryAdjustments  InventoryAdjustment[]
-  birdSales             BirdSale[]
+  birdSaleHouses        BirdSaleHouse[]
   taskAssignments       EmployeeTaskAssignment[]
 
   // Numbers repeat across types on this farm (Brooder 1 and Grower 1 are different sheds) but never
@@ -1272,8 +1272,6 @@ model BirdSale {
   id                  String     @id @default(uuid())
   batch_id            String
   batch               Batches    @relation(fields: [batch_id], references: [id])
-  house_id            String // which house's BatchHouseBalance this sale depletes -- one of only three things allowed to touch it, alongside BatchHouseAllocation and MortalityLog
-  house               Houses     @relation(fields: [house_id], references: [id])
   customer_id         String?
   customer            Customers? @relation(fields: [customer_id], references: [id])
   sale_date           DateTime
@@ -1301,8 +1299,24 @@ model BirdSale {
   created_at          DateTime   @default(now())
 
   ingestedSale IngestedSale?
+  houses       BirdSaleHouse[]
 
   @@index([batch_id, sale_date])
+}
+
+// Which houses' BatchHouseBalance a bird sale depletes, and by how many -- one of only three things
+// allowed to touch it, alongside BatchHouseAllocation and MortalityLog. One row for a single-house
+// sale; one per house when a truck is loaded from several. The rows sum to BirdSale.birds_count.
+model BirdSaleHouse {
+  id           String   @id @default(uuid())
+  bird_sale_id String
+  bird_sale    BirdSale @relation(fields: [bird_sale_id], references: [id], onDelete: Cascade)
+  house_id     String
+  house        Houses   @relation(fields: [house_id], references: [id])
+  birds_count  Int
+
+  @@unique([bird_sale_id, house_id])
+  @@index([house_id])
 }
 
 // ════════════════════════════════════════════════════════════════════
