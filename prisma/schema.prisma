@@ -401,11 +401,11 @@ model ExpenseCategoryLookup {
 /// without a migration. The salary here is the standard for the role;
 /// Employees.reference_salary overrides it per person.
 model EmployeeRole {
-  id    String @id @default(uuid())
+  id               String   @id @default(uuid())
   /// Derived from the label once at create and never regenerated on rename --
   /// Employees.role routes on it, so a rename must not break the reference.
-  code  String @unique
-  label String
+  code             String   @unique
+  label            String
   /// R for anyone in this role who carries no override. Required: a role with no
   /// standard salary cannot be hired into, and making it optional would add an
   /// impossible-to-reach failure path to every payroll run.
@@ -485,21 +485,21 @@ model Tasks {
 // ════════════════════════════════════════════════════════════════════
 
 model Profiles {
-  id         String   @id @default(uuid())
-  email      String?  @unique
-  name       String
-  mobile     String   @unique
-  address    String?
-  avatar_id  String?
-  avatar     Avatars? @relation(fields: [avatar_id], references: [id], onDelete: SetNull)
-  role       UserRole
-  is_active  Boolean  @default(true) // never hard-delete a Profile — it's referenced by every accountability field below
+  id                   String    @id @default(uuid())
+  email                String?   @unique
+  name                 String
+  mobile               String    @unique
+  address              String?
+  avatar_id            String?
+  avatar               Avatars?  @relation(fields: [avatar_id], references: [id], onDelete: SetNull)
+  role                 UserRole
+  is_active            Boolean   @default(true) // never hard-delete a Profile — it's referenced by every accountability field below
   // Login credentials (ADMIN and EMPLOYEE profiles only). Null hash = cannot log in.
   password_hash        String? // scrypt, see lib/password.ts
   must_change_password Boolean   @default(false) // temp password handed out at hire / reset
   password_changed_at  DateTime? // stamped into every session token; changing it signs all sessions out
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
   employees Employees?
   admins    Admins?
@@ -518,41 +518,42 @@ model Profiles {
   salesRecorded           Sale[]
   birdSalesRecorded       BirdSale[]
   environmentRecordsTaken EnvironmentRecords[]
-  scoresGiven             PerformanceScoreEntry[] @relation("ScoreGivenBy")
-  scoresApproved          PerformanceScoreEntry[] @relation("ScoreApprovedBy")
-  payoutAccountsVerified  EmployeePayoutAccount[] @relation("PayoutAccountVerifiedBy")
-  payoutsPaid             EmployeePayout[]        @relation("PayoutPaidBy")
+  scoresGiven             PerformanceScoreEntry[]  @relation("ScoreGivenBy")
+  scoresApproved          PerformanceScoreEntry[]  @relation("ScoreApprovedBy")
+  payoutAccountsVerified  EmployeePayoutAccount[]  @relation("PayoutAccountVerifiedBy")
+  payoutsPaid             EmployeePayout[]         @relation("PayoutPaidBy")
   bonusEventsCreated      BonusEvent[]
-  scoresVoided            PerformanceScoreEntry[] @relation("ScoreVoidedBy")
-  scoresAcknowledged      PerformanceScoreEntry[] @relation("ScoreAcknowledgedBy")
-  payoutAccountsClosed    EmployeePayoutAccount[] @relation("PayoutAccountClosedBy")
-  devicesRevoked          Device[]                @relation("DeviceRevokedBy")
+  scoresVoided            PerformanceScoreEntry[]  @relation("ScoreVoidedBy")
+  scoresAcknowledged      PerformanceScoreEntry[]  @relation("ScoreAcknowledgedBy")
+  payoutAccountsClosed    EmployeePayoutAccount[]  @relation("PayoutAccountClosedBy")
+  devicesRevoked          Device[]                 @relation("DeviceRevokedBy")
   notifications           Notifications[]
-  employeesTerminated     Employees[]             @relation("EmployeeTerminatedBy")
+  employeesTerminated     Employees[]              @relation("EmployeeTerminatedBy")
   inventoryAdjustments    InventoryAdjustment[]
   stockTransfersRecorded  StockTransfer[]
   medicationsGiven        Medications[]
   vaccinationsGiven       Vaccinations[]
+  vaccinesConfirmed       BatchVaccineSchedule[]
   auditLogs               AuditLog[]
   tasksAssigned           EmployeeTaskAssignment[]
   stockUnitsBound         StockUnit[]
   devices                 Device[]
   pairingCodes            PairingCode[]
   ingestedSales           IngestedSale[]
-  ingestedSalesReviewed   IngestedSale[]         @relation("IngestedSaleReviewer")
+  ingestedSalesReviewed   IngestedSale[]           @relation("IngestedSaleReviewer")
 }
 
 model Employees {
-  id           String            @id @default(uuid())
-  profile_id   String            @unique
-  profile      Profiles          @relation(fields: [profile_id], references: [id], onDelete: Restrict)
-  role     String
-  roleRef  EmployeeRole @relation(fields: [role], references: [code], onUpdate: Cascade)
+  id               String       @id @default(uuid())
+  profile_id       String       @unique
+  profile          Profiles     @relation(fields: [profile_id], references: [id], onDelete: Restrict)
+  role             String
+  roleRef          EmployeeRole @relation(fields: [role], references: [code], onUpdate: Cascade)
   /// An exception to the role's standard salary. Null means "use the role's" --
   /// resolved by referenceSalaryFor() in lib/payroll-math.ts, never read raw.
-  reference_salary Decimal? @db.Decimal(10, 2)
-  joining_date DateTime          @default(now())
-  rating       Float?            @default(0)
+  reference_salary Decimal?     @db.Decimal(10, 2)
+  joining_date     DateTime     @default(now())
+  rating           Float?       @default(0)
 
   // ── Hire profile (docs/employee_hire.md) ────────────────────────────────
   // Nullable in the database, required in the create validator: rows that
@@ -592,10 +593,10 @@ model Employees {
   // left in -- the final month's wage is owed -- but not for months after it.
   terminated_at      DateTime?
   terminated_by_id   String? // who ended it; cleared on reinstate
-  terminated_by      Profiles?  @relation("EmployeeTerminatedBy", fields: [terminated_by_id], references: [id])
+  terminated_by      Profiles?        @relation("EmployeeTerminatedBy", fields: [terminated_by_id], references: [id])
 
-  created_at   DateTime          @default(now())
-  updated_at   DateTime          @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   performanceScores PerformanceScoreEntry[]
   payrollRecords    PayrollRecord[]
@@ -673,15 +674,15 @@ model Avatars {
 // ════════════════════════════════════════════════════════════════════
 
 model Houses {
-  id         String    @id @default(uuid())
+  id         String     @id @default(uuid())
   name       String
   type       HouseType
   number     Int
   capacity   Int? // max birds this house can hold; null = no limit tracked
   phase      HousePhase @default(READY) // operator-set turnaround stage; only meaningful while the house is empty
-  is_active  Boolean   @default(true) // never hard-delete -- mortality/allocation/environment history attaches once a batch runs through it
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  is_active  Boolean    @default(true) // never hard-delete -- mortality/allocation/environment history attaches once a batch runs through it
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
 
   weightRecords         WeightRecords[]
   allocationsTo         BatchHouseAllocation[]   @relation("ToHouse")
@@ -727,6 +728,7 @@ model Batches {
   birdSales          BirdSale[]
   feedingPrograms    BatchFeedingProgram[]
   assetDepreciations AssetDepreciation[]
+  vaccineSchedules   BatchVaccineSchedule[]
 
   @@index([status])
 }
@@ -827,6 +829,8 @@ model Item {
   itemOrganizations    ItemOrganization[]
   inventoryAdjustments InventoryAdjustment[]
   stockTransfers       StockTransfer[]
+  vaccineTemplateRows  VaccineTemplateEntry[]
+  vaccineSchedules     BatchVaccineSchedule[]
 
   @@index([category])
 }
@@ -1053,25 +1057,95 @@ model Medications {
 }
 
 model Vaccinations {
-  id                 String       @id @default(uuid())
+  id                 String                @id @default(uuid())
   batch_id           String
-  batch              Batches      @relation(fields: [batch_id], references: [id])
+  batch              Batches               @relation(fields: [batch_id], references: [id])
   consumption_id     String?
-  consumption        Consumption? @relation(fields: [consumption_id], references: [id])
+  consumption        Consumption?          @relation(fields: [consumption_id], references: [id])
   vaccine_name       String
-  dosage             Int
+  dosage             Decimal               @db.Decimal(10, 3) // vaccines come in doses or litres; litres are fractional
   cause              String?
   period             String?
   administered_by_id String
-  administered_by    Profiles     @relation(fields: [administered_by_id], references: [id])
+  administered_by    Profiles              @relation(fields: [administered_by_id], references: [id])
   doctor_id          String?
-  doctor             Doctors?     @relation(fields: [doctor_id], references: [id])
+  doctor             Doctors?              @relation(fields: [doctor_id], references: [id])
   remarks            String?
-  date               DateTime     @default(now())
-  created_at         DateTime     @default(now())
-  idempotency_key    String       @unique // client-generated; prevents double-insert on offline sync retry
+  date               DateTime              @default(now())
+  created_at         DateTime              @default(now())
+  idempotency_key    String                @unique // client-generated; prevents double-insert on offline sync retry
+  // Set when this dose confirmed a planned schedule row -- one Vaccinations row per bottle used.
+  schedule_id        String?
+  schedule           BatchVaccineSchedule? @relation(fields: [schedule_id], references: [id])
 
   @@index([batch_id])
+  @@index([schedule_id])
+}
+
+// ════════════════════════════════════════════════════════════════════
+// VACCINE SCHEDULE -- docs/superpowers/specs/2026-10-31-vaccine-schedule-design.md
+// ════════════════════════════════════════════════════════════════════
+
+// Stays a hard enum: it's the state machine reschedule/cancel/confirm enforce. "Rescheduled",
+// "due today" and "overdue" are derived (day vs planned_day, day vs the batch's cycle day).
+enum VaccineScheduleStatus {
+  PENDING
+  DONE
+  CANCELLED
+}
+
+model VaccineTemplate {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  is_active  Boolean  @default(true) // archive instead of delete; batches keep their own copies anyway
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  entries   VaccineTemplateEntry[]
+  schedules BatchVaccineSchedule[]
+}
+
+model VaccineTemplateEntry {
+  id          String          @id @default(uuid())
+  template_id String
+  template    VaccineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  day         Int // batch day, >= 1
+  item_id     String // the vaccine product
+  item        Item            @relation(fields: [item_id], references: [id])
+  purpose     String
+  method      String? // eye drop, drinking water, injection...
+  note        String?
+
+  @@index([template_id, day])
+}
+
+// A batch's own copy of a template's rows (plus any added by hand) -- copied, not linked, so editing
+// a template never moves a running batch's plan.
+model BatchVaccineSchedule {
+  id              String                @id @default(uuid())
+  batch_id        String
+  batch           Batches               @relation(fields: [batch_id], references: [id])
+  template_id     String? // where the row came from; null = added by hand
+  template        VaccineTemplate?      @relation(fields: [template_id], references: [id], onDelete: SetNull)
+  item_id         String
+  item            Item                  @relation(fields: [item_id], references: [id])
+  purpose         String
+  method          String?
+  note            String?
+  planned_day     Int // the original day; only an edit (a correction) moves it, never a reschedule
+  day             Int // current day; moves on reschedule
+  status          VaccineScheduleStatus @default(PENDING)
+  reason          String? // latest reschedule reason, or the cancel reason
+  confirmed_by_id String?
+  confirmed_by    Profiles?             @relation(fields: [confirmed_by_id], references: [id])
+  confirmed_at    DateTime?
+  confirm_key     String?               @unique // the confirm's idempotency_key; a retry returns the DONE row
+  created_at      DateTime              @default(now())
+  updated_at      DateTime              @updatedAt
+
+  vaccinations Vaccinations[]
+
+  @@index([batch_id, day])
 }
 
 model EnvironmentRecords {
@@ -1394,32 +1468,32 @@ model PaymentInstrument {
 // ════════════════════════════════════════════════════════════════════
 
 model PerformanceScoreEntry {
-  id              String               @id @default(uuid())
-  employee_id     String
-  employee        Employees            @relation(fields: [employee_id], references: [id])
-  given_by_id     String
-  given_by        Profiles             @relation("ScoreGivenBy", fields: [given_by_id], references: [id])
+  id                 String               @id @default(uuid())
+  employee_id        String
+  employee           Employees            @relation(fields: [employee_id], references: [id])
+  given_by_id        String
+  given_by           Profiles             @relation("ScoreGivenBy", fields: [given_by_id], references: [id])
   // Required when criterion = OTHER, which is also capped at ±5 per employee per
   // month -- enforced in the service, not expressible here.
-  approved_by_id  String?
-  approved_by     Profiles?            @relation("ScoreApprovedBy", fields: [approved_by_id], references: [id])
-  criterion       PerformanceCriterion
-  points          Int // signed; snapshot of the criterion's value at time of entry
-  reason          String // required — never optional
+  approved_by_id     String?
+  approved_by        Profiles?            @relation("ScoreApprovedBy", fields: [approved_by_id], references: [id])
+  criterion          PerformanceCriterion
+  points             Int // signed; snapshot of the criterion's value at time of entry
+  reason             String // required — never optional
   // The day it happened, not the day it was typed. A late write-up still belongs
   // to the month it occurred in, so this is what buckets the payroll month.
-  incident_date   DateTime
-  notice_doc_url  String? // required when points <= -4: written notice comes first
-  status          ScoreEntryStatus     @default(ACTIVE)
-  void_reason     String? // required when status = VOIDED
-  acknowledged_at DateTime? // when the employee confirmed they were shown it
+  incident_date      DateTime
+  notice_doc_url     String? // required when points <= -4: written notice comes first
+  status             ScoreEntryStatus     @default(ACTIVE)
+  void_reason        String? // required when status = VOIDED
+  acknowledged_at    DateTime? // when the employee confirmed they were shown it
   // Who did each of those, from the session. Null on rows from before logins existed.
   voided_by_id       String?
   voided_by          Profiles?            @relation("ScoreVoidedBy", fields: [voided_by_id], references: [id])
   acknowledged_by_id String?
   acknowledged_by    Profiles?            @relation("ScoreAcknowledgedBy", fields: [acknowledged_by_id], references: [id])
-  created_at      DateTime             @default(now())
-  idempotency_key String               @unique // client-generated; prevents double-insert on offline sync retry
+  created_at         DateTime             @default(now())
+  idempotency_key    String               @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([employee_id, incident_date])
 }
@@ -1472,10 +1546,10 @@ model EmployeePayoutAccount {
 
   payouts EmployeePayout[]
 
-  @@index([employee_id, active_to])
   // At most one open account per employee, enforced by the database -- the service closes the old
   // one in the same transaction, but two concurrent creates could each close it and insert.
   @@unique([employee_id], where: raw("active_to IS NULL"), map: "EmployeePayoutAccount_one_active_key")
+  @@index([employee_id, active_to])
 }
 
 /// Paying an employee, as distinct from calculating what they are owed. One payout per
@@ -1659,17 +1733,17 @@ model Notifications {
 // until an admin minted a fresh code. Revocation is immediate instead --
 // `revoked_at` is checked on every request.
 model Device {
-  id           String    @id @default(uuid())
-  profile_id   String
-  profile      Profiles  @relation(fields: [profile_id], references: [id])
-  label        String
-  platform     String?
-  token_hash   String    @unique // sha256; plaintext is returned once at pairing
-  last_seen_at DateTime?
-  revoked_at   DateTime?
+  id            String    @id @default(uuid())
+  profile_id    String
+  profile       Profiles  @relation(fields: [profile_id], references: [id])
+  label         String
+  platform      String?
+  token_hash    String    @unique // sha256; plaintext is returned once at pairing
+  last_seen_at  DateTime?
+  revoked_at    DateTime?
   revoked_by_id String?
-  revoked_by   Profiles? @relation("DeviceRevokedBy", fields: [revoked_by_id], references: [id])
-  created_at   DateTime  @default(now())
+  revoked_by    Profiles? @relation("DeviceRevokedBy", fields: [revoked_by_id], references: [id])
+  created_at    DateTime  @default(now())
 
   ingestedSales IngestedSale[]
 
@@ -1705,14 +1779,14 @@ model IngestedSale {
   payload          Json
   portion          IngestPortion
   device_sale_date DateTime
-  received_at      DateTime @default(now())
+  received_at      DateTime      @default(now())
 
   status           IngestStatus @default(PENDING)
-  bird_sale_id     String?   @unique
-  birdSale         BirdSale? @relation(fields: [bird_sale_id], references: [id])
+  bird_sale_id     String?      @unique
+  birdSale         BirdSale?    @relation(fields: [bird_sale_id], references: [id])
   dismissed_reason String?
   reviewed_by_id   String?
-  reviewed_by      Profiles? @relation("IngestedSaleReviewer", fields: [reviewed_by_id], references: [id])
+  reviewed_by      Profiles?    @relation("IngestedSaleReviewer", fields: [reviewed_by_id], references: [id])
   reviewed_at      DateTime?
 
   @@index([status, received_at])

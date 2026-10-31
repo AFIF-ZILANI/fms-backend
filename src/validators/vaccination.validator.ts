@@ -5,7 +5,7 @@ export const createVaccinationSchema = z.object({
     batch_id: z.string().uuid(),
     consumption_id: z.string().uuid().optional(),
     vaccine_name: z.string().min(1, "Vaccine name is required"),
-    dosage: z.coerce.number().int().positive("Dosage must be positive"),
+    dosage: z.coerce.number().positive("Dosage must be positive"),
     cause: z.string().optional(),
     period: z.string().optional(),
     doctor_id: z.string().uuid().optional(),
