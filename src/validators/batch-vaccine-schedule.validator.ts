@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { unitSchema } from "@lib/enums";
 import { vaccineEntrySchema } from "@validators/vaccine-template.validator";
 
 const reason = z.string().trim().min(1, "Reason is required");
@@ -31,13 +30,8 @@ export const confirmVaccineSchema = z.object({
     // The house being vaccinated; every bottle must be in it. A batch in two houses confirms twice.
     house_id: z.string().uuid(),
     bottles: z
-        .array(
-            z.object({
-                stock_unit_id: z.string().uuid(),
-                quantity: z.coerce.number().positive("Amount must be positive"),
-                unit: unitSchema,
-            }),
-        )
+        // Just the codes: each bottle is used up, and the server knows what's left in it.
+        .array(z.object({ stock_unit_id: z.string().uuid() }))
         .min(1, "Scan at least one bottle")
         .refine((b) => new Set(b.map((x) => x.stock_unit_id)).size === b.length, {
             message: "The same bottle was scanned twice",

@@ -44,11 +44,7 @@ const confirm = (
         {
             idempotency_key: key,
             house_id,
-            bottles: bottles.map((stock_unit_id) => ({
-                stock_unit_id,
-                quantity: 1,
-                unit: "BOTTLE",
-            })),
+            bottles: bottles.map((stock_unit_id) => ({ stock_unit_id })),
         },
         profileId,
     );
@@ -218,27 +214,33 @@ describe("BatchVaccineScheduleService", () => {
                 {
                     idempotency_key: crypto.randomUUID(),
                     house_id: houseId,
-                    bottles: [{ stock_unit_id: b, quantity: 1, unit: "BOTTLE" }],
+                    bottles: [{ stock_unit_id: b }],
                 },
                 profileId,
             ),
         ).rejects.toThrow("due on day 7");
     });
 
-    test("confirm with two bottles draws both, logs two vaccinations, and a retry is a no-op", async () => {
+    test("confirm with two bottles uses both up, logs two vaccinations, and a retry is a no-op", async () => {
         const r = await row(5);
         const [b1, b2] = [await bottle(), await bottle()];
         const key = crypto.randomUUID();
         const body = {
             idempotency_key: key,
             house_id: houseId,
-            bottles: [
-                { stock_unit_id: b1, quantity: 1, unit: "BOTTLE" },
-                { stock_unit_id: b2, quantity: 0.5, unit: "BOTTLE" },
-            ],
+            bottles: [{ stock_unit_id: b1 }, { stock_unit_id: b2 }],
         };
         const done = await S.confirm(r.id, body, profileId);
         expect(done.status).toBe("DONE");
+        // Each bottle is used up: drawn in full (nothing typed) and marked CONSUMED.
+        for (const b of [b1, b2]) {
+            const unit = await prisma.stockUnit.findUniqueOrThrow({ where: { id: b } });
+            expect(unit.status).toBe("CONSUMED");
+            const draw = await prisma.consumption.findFirstOrThrow({ where: { stock_unit_id: b } });
+            expect(Number(draw.quantity)).toBeGreaterThan(0);
+            const v = done.vaccinations.find((x) => x.consumption?.stock_unit_id === b)!;
+            expect(Number(v.dosage)).toBe(Number(draw.quantity));
+        }
         expect(done.confirmed_by?.id).toBe(profileId);
         expect(done.vaccinations).toHaveLength(2);
 
@@ -260,10 +262,7 @@ describe("BatchVaccineScheduleService", () => {
                 {
                     idempotency_key: crypto.randomUUID(),
                     house_id: houseId,
-                    bottles: [
-                        { stock_unit_id: good, quantity: 1, unit: "BOTTLE" },
-                        { stock_unit_id: warehouse, quantity: 1, unit: "BOTTLE" },
-                    ],
+                    bottles: [{ stock_unit_id: good }, { stock_unit_id: warehouse }],
                 },
                 profileId,
             ),
@@ -282,7 +281,7 @@ describe("BatchVaccineScheduleService", () => {
                 {
                     idempotency_key: crypto.randomUUID(),
                     house_id: houseId,
-                    bottles: [{ stock_unit_id: b, quantity: 1, unit: "BOTTLE" }],
+                    bottles: [{ stock_unit_id: b }],
                 },
                 profileId,
             ),
@@ -353,5 +352,17 @@ describe("BatchVaccineScheduleService", () => {
         expect(
             (await prisma.batchVaccineSchedule.findUniqueOrThrow({ where: { id: r.id } })).status,
         ).toBe("DONE");
+    });
+
+    test("a bottle already used up can't be confirmed again", async () => {
+        const first = await row(5);
+        const b = await bottle(houseId);
+        await prisma.batchHouseBalance.updateMany({
+            where: { batch_id: batchId, house_id: houseYId },
+            data: { quantity: 0 },
+        });
+        await confirm(first.id, houseId, [b]);
+        const second = await row(5);
+        await expect(confirm(second.id, houseId, [b])).rejects.toThrow("already consumed");
     });
 });

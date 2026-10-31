@@ -4,6 +4,7 @@ import { audit } from "@lib/audit";
 import { cycleDay } from "@lib/farm-day";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { drawConsumption } from "@services/consumption.service";
+import { lockLot, unitAmount } from "@lib/coded-stock";
 import type { Prisma } from "../../prisma/generated/prisma/client";
 import type {
     ApplyVaccineTemplateInput,
@@ -110,9 +111,13 @@ async function lockPending(tx: Tx, id: string) {
     return row;
 }
 
+// The confirm is ~25 round trips in one transaction; Prisma's default 5s budget runs out over a slow link
+// to the database (a phone -> laptop API -> remote DB did), so give it room. The row lock keeps it safe.
+const TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 };
+
 const run = async <T>(fn: (tx: Tx) => Promise<T>) => {
     try {
-        return await prisma.$transaction(fn);
+        return await prisma.$transaction(fn, TX_OPTIONS);
     } catch (err) {
         return handlePrismaWriteError(err);
     }
@@ -301,8 +306,8 @@ export const BatchVaccineScheduleService = {
         });
     },
 
-    /** The worker's one action, for the house they're in: every scanned bottle (all in that house) is drawn
-     *  there, one Vaccinations row per bottle, and the house is marked confirmed. The row goes DONE once
+    /** The worker's one action, for the house they're in: every scanned bottle (all in that house) is used
+     *  up there -- drawn in full and marked CONSUMED -- one Vaccinations row per bottle, and the house is marked confirmed. The row goes DONE once
      *  every house the batch occupies has confirmed. All or nothing. */
     async confirm(id: string, data: ConfirmVaccineInput, actor_id: string) {
         return run(async (tx) => {
@@ -346,18 +351,38 @@ export const BatchVaccineScheduleService = {
                 const unit = await tx.stockUnit.findUnique({
                     where: { id: bottle.stock_unit_id },
                     select: {
+                        status: true,
                         purchase_item: {
-                            select: { item: { select: { id: true, name: true, category: true } } },
+                            select: {
+                                id: true,
+                                base_quantity: true,
+                                unit_count: true,
+                                item: {
+                                    select: { id: true, name: true, category: true, unit: true },
+                                },
+                            },
                         },
                     },
                 });
                 if (!unit) throw AppError.notFound("StockUnit");
-                const item = unit.purchase_item?.item;
-                if (!item) throw AppError.badRequest("A bottle isn't linked to a purchase lot yet");
+                const lot = unit.purchase_item;
+                if (!lot) throw AppError.badRequest("A bottle isn't linked to a purchase lot yet");
+                const item = lot.item;
                 // ponytail: "VACCINE" is a live ItemCategory.code (renamable in Settings), same caveat as
                 // the web's "FEED"/"VACCINE" filters; needs a stable key if renaming it becomes a real risk.
                 if (item.category !== "VACCINE")
                     throw AppError.badRequest(`${item.name} isn't a vaccine`);
+                if (unit.status !== "BOUND" && unit.status !== "IN_USE")
+                    throw AppError.conflict(
+                        `A bottle of ${item.name} is already ${unit.status.toLowerCase()}`,
+                    );
+
+                // A scanned bottle is used up: whatever is left in it is what was given -- the same amount
+                // "Use an item -> Consumed" records. Nobody types an amount.
+                await lockLot(tx, lot.id);
+                const left = await unitAmount(tx, bottle.stock_unit_id, lot);
+                if (left.lessThanOrEqualTo(0))
+                    throw AppError.conflict(`A bottle of ${item.name} is already empty`);
 
                 // drawConsumption also refuses a bottle that isn't in this house ("move it there first").
                 const consumption = await drawConsumption(tx, {
@@ -365,12 +390,16 @@ export const BatchVaccineScheduleService = {
                     house_id: house.id,
                     item_id: item.id,
                     stock_unit_id: bottle.stock_unit_id,
-                    quantity: bottle.quantity,
-                    unit: bottle.unit,
+                    quantity: left.toNumber(),
+                    unit: item.unit,
                     date: now,
                     note: "Vaccine schedule",
                     recorded_by_id: actor_id,
                     idempotency_key: `${data.idempotency_key}:${i}`,
+                });
+                await tx.stockUnit.update({
+                    where: { id: bottle.stock_unit_id },
+                    data: { status: "CONSUMED" },
                 });
                 await tx.vaccinations.create({
                     data: {
@@ -378,7 +407,7 @@ export const BatchVaccineScheduleService = {
                         consumption_id: consumption.id,
                         schedule_id: id,
                         vaccine_name: item.name,
-                        dosage: bottle.quantity,
+                        dosage: consumption.quantity,
                         cause: purpose.label,
                         administered_by_id: actor_id,
                         date: now,

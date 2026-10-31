@@ -28,6 +28,12 @@ export const handlePrismaWriteError = (err: unknown): never => {
         if (err.code === "P2025") {
             throw AppError.badRequest("A related record referenced in this request does not exist");
         }
+        if (err.code === "P2028") {
+            throw AppError.serviceUnavailable(
+                "The database took too long and nothing was saved -- try again",
+                err,
+            );
+        }
     }
     throw err;
 };
