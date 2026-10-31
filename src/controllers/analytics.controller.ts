@@ -4,6 +4,7 @@ import { sendSuccess } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { AnalyticsService } from "@services/analytics.service";
 import { BatchPnlService } from "@services/batch-pnl.service";
+import { BatchStockService } from "@services/batch-stock.service";
 import { SharedCostService } from "@services/shared-cost.service";
 import type {
     BatchesPerformanceQuery,
@@ -47,6 +48,13 @@ export const AnalyticsController = {
         return withHandler(c, async () =>
             sendSuccess(c, await SharedCostService.byMonth(), "Shared costs computed"),
         );
+    },
+
+    async batchStock(c: Context) {
+        return withHandler(c, async () => {
+            const stock = await BatchStockService.summary(c.req.param("id") ?? "");
+            return sendSuccess(c, stock, "Batch stock computed");
+        });
     },
 
     async batchPnl(c: Context) {
