@@ -12,9 +12,6 @@ import { chargeRatios, landedTotal } from "@lib/purchase-charges";
  * entered quantity) so a mix of units across purchases (e.g. one line in BAG,
  * another in KG) still averages correctly. Items never purchased are absent
  * from the map -- callers must treat missing as "unknown cost", not zero.
- *
- * Opening balances with a value (their OPENING_BALANCE ledger row's unit_cost) count as one more
- * "purchase" at that price for their quantity -- the only cost basis an item that was never bought has.
  */
 export async function getItemAvgCosts(itemIds: string[]): Promise<Map<string, Prisma.Decimal>> {
     if (itemIds.length === 0) return new Map();
@@ -26,25 +23,16 @@ export async function getItemAvgCosts(itemIds: string[]): Promise<Map<string, Pr
     // Each line at its landed cost: goods plus its by-value share of the purchase's charges.
     const ratios = await chargeRatios(lines.map((l) => l.purchase_id));
 
-    const openings = await prisma.stockLedger.findMany({
-        where: {
-            item_id: { in: itemIds },
-            reason: "OPENING_BALANCE",
-            direction: "IN",
-            unit_cost: { not: null },
-        },
-        select: { item_id: true, quantity: true, unit_cost: true },
-    });
-
     const sums = new Map<string, { qty: Prisma.Decimal; cost: Prisma.Decimal }>();
-    const add = (item_id: string, qty: Prisma.Decimal, cost: Prisma.Decimal) => {
-        const s = sums.get(item_id) ?? { qty: new Prisma.Decimal(0), cost: new Prisma.Decimal(0) };
-        s.qty = s.qty.plus(qty);
-        s.cost = s.cost.plus(cost);
-        sums.set(item_id, s);
-    };
-    for (const line of lines) add(line.item_id, line.base_quantity, landedTotal(line, ratios));
-    for (const o of openings) add(o.item_id, o.quantity, o.quantity.times(o.unit_cost!));
+    for (const line of lines) {
+        const s = sums.get(line.item_id) ?? {
+            qty: new Prisma.Decimal(0),
+            cost: new Prisma.Decimal(0),
+        };
+        s.qty = s.qty.plus(line.base_quantity);
+        s.cost = s.cost.plus(landedTotal(line, ratios));
+        sums.set(line.item_id, s);
+    }
     const costs = new Map<string, Prisma.Decimal>();
     for (const [itemId, s] of sums) {
         if (s.qty.isZero()) continue;
