@@ -829,8 +829,6 @@ model Item {
   itemOrganizations    ItemOrganization[]
   inventoryAdjustments InventoryAdjustment[]
   stockTransfers       StockTransfer[]
-  vaccineTemplateRows  VaccineTemplateEntry[]
-  vaccineSchedules     BatchVaccineSchedule[]
 
   @@index([category])
 }
@@ -1094,6 +1092,30 @@ enum VaccineScheduleStatus {
   CANCELLED
 }
 
+// How a dose gets into the bird. A hard enum: it's a fixed set of techniques, not farm data.
+enum VaccineMethod {
+  EYE_DROP
+  NASAL_DROP
+  DRINKING_WATER
+  MUSCLE_INJECTION
+  NECK_INJECTION
+  SPRAY
+}
+
+// What a vaccine is for (Gumboro, Ranikhet, ND + IB...) -- soft-coded like the other lookups, managed in
+// Settings. Templates name a purpose, not a product, so a template outlives a change of vaccine brand.
+model VaccinePurpose {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  templateEntries VaccineTemplateEntry[]
+  schedules       BatchVaccineSchedule[]
+}
+
 model VaccineTemplate {
   id         String   @id @default(uuid())
   name       String   @unique
@@ -1110,10 +1132,9 @@ model VaccineTemplateEntry {
   template_id String
   template    VaccineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
   day         Int // batch day, >= 1
-  item_id     String // the vaccine product
-  item        Item            @relation(fields: [item_id], references: [id])
   purpose     String
-  method      String? // eye drop, drinking water, injection...
+  purposeRef  VaccinePurpose  @relation(fields: [purpose], references: [code], onUpdate: Cascade)
+  method      VaccineMethod?
   note        String?
 
   @@index([template_id, day])
@@ -1127,10 +1148,10 @@ model BatchVaccineSchedule {
   batch           Batches               @relation(fields: [batch_id], references: [id])
   template_id     String? // where the row came from; null = added by hand
   template        VaccineTemplate?      @relation(fields: [template_id], references: [id], onDelete: SetNull)
-  item_id         String
-  item            Item                  @relation(fields: [item_id], references: [id])
+  // No product: whichever vaccine bottles get scanned at confirm are what was given (see vaccinations).
   purpose         String
-  method          String?
+  purposeRef      VaccinePurpose        @relation(fields: [purpose], references: [code], onUpdate: Cascade)
+  method          VaccineMethod?
   note            String?
   planned_day     Int // the original day; only an edit (a correction) moves it, never a reschedule
   day             Int // current day; moves on reschedule

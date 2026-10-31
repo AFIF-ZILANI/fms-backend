@@ -2,11 +2,20 @@ import { z } from "zod";
 
 const optionalText = z.string().trim().min(1).optional();
 
+export const VACCINE_METHODS = [
+    "EYE_DROP",
+    "NASAL_DROP",
+    "DRINKING_WATER",
+    "MUSCLE_INJECTION",
+    "NECK_INJECTION",
+    "SPRAY",
+] as const;
+
 export const vaccineEntrySchema = z.object({
     day: z.coerce.number().int().min(1, "Day must be 1 or later"),
-    item_id: z.string().uuid(),
+    // A VaccinePurpose code; the foreign key rejects an unknown one.
     purpose: z.string().trim().min(1, "Purpose is required"),
-    method: optionalText,
+    method: z.enum(VACCINE_METHODS).optional(),
     note: optionalText,
 });
 

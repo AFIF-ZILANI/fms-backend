@@ -18,19 +18,19 @@ let otherItemId: string;
 let templateId: string;
 let purchaseId: string;
 let lotId: string;
+let otherLotId: string;
 const unitIds: string[] = [];
 
 /** A bottle of the vaccine, bound to the lot; moved into the batch's house unless `inWarehouse`. */
-async function bottle(inWarehouse = false) {
+async function bottle(inWarehouse = false, lot = () => lotId) {
     const [unit] = await provisionPrinted(1);
     unitIds.push(unit!.id);
-    await StockUnitService.bind(unit!.id, { purchase_item_id: lotId });
+    await StockUnitService.bind(unit!.id, { purchase_item_id: lot() });
     if (!inWarehouse) await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
     return unit!.id;
 }
 
-const row = (day: number) =>
-    S.create({ batch_id: batchId, item_id: vaccineId, purpose: "ND", day }, profileId);
+const row = (day: number) => S.create({ batch_id: batchId, purpose: "RANIKHET", day }, profileId);
 
 describe("BatchVaccineScheduleService", () => {
     beforeAll(async () => {
@@ -48,18 +48,18 @@ describe("BatchVaccineScheduleService", () => {
                 },
             })
         ).id;
-        const mkItem = (name: string) =>
+        const mkItem = (name: string, category: string) =>
             prisma.item.create({
                 data: {
                     name: `${name} ${crypto.randomUUID()}`,
                     normalized_key: `${name} ${crypto.randomUUID()}`,
-                    category: "MEDICINE",
+                    category,
                     unit: "BOTTLE",
                     is_unit_tracked: true,
                 },
             });
-        vaccineId = (await mkItem("ND Vaccine")).id;
-        otherItemId = (await mkItem("IB Vaccine")).id;
+        vaccineId = (await mkItem("ND Vaccine", "VACCINE")).id;
+        otherItemId = (await mkItem("Antibiotic", "MEDICINE")).id;
 
         purchaseId = (
             await prisma.purchase.create({
@@ -87,6 +87,20 @@ describe("BatchVaccineScheduleService", () => {
             })
         ).id;
 
+        otherLotId = (
+            await prisma.purchaseItem.create({
+                data: {
+                    purchase_id: purchaseId,
+                    item_id: otherItemId,
+                    quantity: 10,
+                    unit: "BOTTLE",
+                    base_quantity: 10,
+                    unit_price: 1,
+                    total_price: 10,
+                },
+            })
+        ).id;
+
         // Placed 4 days ago -> today is Day 5.
         batchId = (
             await prisma.batches.create({
@@ -108,8 +122,8 @@ describe("BatchVaccineScheduleService", () => {
             await VaccineTemplateService.create({
                 name: `Broiler ${crypto.randomUUID()}`,
                 entries: [
-                    { day: 9, item_id: vaccineId, purpose: "IB booster" },
-                    { day: 5, item_id: vaccineId, purpose: "ND", method: "Eye drop" },
+                    { day: 9, purpose: "ND_IB" },
+                    { day: 5, purpose: "GUMBORO", method: "EYE_DROP" },
                 ],
             })
         ).id;
@@ -126,7 +140,7 @@ describe("BatchVaccineScheduleService", () => {
             where: { item_id: { in: [vaccineId, otherItemId] } },
         });
         await prisma.stockUnit.deleteMany({ where: { id: { in: unitIds } } });
-        await prisma.purchaseItem.deleteMany({ where: { id: lotId } });
+        await prisma.purchaseItem.deleteMany({ where: { id: { in: [lotId, otherLotId] } } });
         await prisma.purchase.deleteMany({ where: { id: purchaseId } });
         await prisma.batchVaccineSchedule.deleteMany({ where: { batch_id: batchId } });
         await prisma.vaccineTemplate.deleteMany({ where: { id: templateId } });
@@ -226,12 +240,9 @@ describe("BatchVaccineScheduleService", () => {
         expect(await prisma.consumption.count({ where: { stock_unit_id: good } })).toBe(0);
     });
 
-    test("a bottle of a different vaccine is refused", async () => {
-        const r = await S.create(
-            { batch_id: batchId, item_id: otherItemId, purpose: "IB", day: 5 },
-            profileId,
-        );
-        const b = await bottle();
+    test("a bottle that isn't a vaccine is refused", async () => {
+        const r = await row(5);
+        const b = await bottle(false, () => otherLotId);
         await expect(
             S.confirm(
                 r.id,
@@ -241,6 +252,6 @@ describe("BatchVaccineScheduleService", () => {
                 },
                 profileId,
             ),
-        ).rejects.toThrow("different item");
+        ).rejects.toThrow("isn't a vaccine");
     });
 });

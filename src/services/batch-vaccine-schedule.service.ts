@@ -4,7 +4,6 @@ import { audit } from "@lib/audit";
 import { cycleDay } from "@lib/farm-day";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { drawConsumption } from "@services/consumption.service";
-import { assertVaccineItems } from "@services/vaccine-template.service";
 import type { Prisma } from "../../prisma/generated/prisma/client";
 import type {
     ApplyVaccineTemplateInput,
@@ -18,19 +17,13 @@ import type {
 type Tx = Prisma.TransactionClient;
 
 const include = {
-    item: {
-        select: {
-            id: true,
-            name: true,
-            unit: true,
-            itemUnits: { where: { is_usable: true }, select: { unit: true } },
-        },
-    },
+    purposeRef: { select: { code: true, label: true } },
     confirmed_by: { select: { id: true, name: true } },
     vaccinations: {
         select: {
             id: true,
             dosage: true,
+            vaccine_name: true,
             consumption: {
                 select: {
                     quantity: true,
@@ -106,7 +99,6 @@ export const BatchVaccineScheduleService = {
                 data: template.entries.map((e) => ({
                     batch_id: data.batch_id,
                     template_id: template.id,
-                    item_id: e.item_id,
                     purpose: e.purpose,
                     method: e.method,
                     note: e.note,
@@ -131,11 +123,9 @@ export const BatchVaccineScheduleService = {
 
     async create(data: CreateBatchVaccineScheduleInput, actor_id: string) {
         return run(async (tx) => {
-            await assertVaccineItems(tx, [data.item_id]);
             const row = await tx.batchVaccineSchedule.create({
                 data: {
                     batch_id: data.batch_id,
-                    item_id: data.item_id,
                     purpose: data.purpose,
                     method: data.method ?? null,
                     note: data.note ?? null,
@@ -159,11 +149,9 @@ export const BatchVaccineScheduleService = {
     async update(id: string, data: UpdateBatchVaccineScheduleInput, actor_id: string) {
         return run(async (tx) => {
             const before = await lockPending(tx, id);
-            if (data.item_id !== undefined) await assertVaccineItems(tx, [data.item_id]);
             const row = await tx.batchVaccineSchedule.update({
                 where: { id },
                 data: {
-                    ...(data.item_id !== undefined && { item_id: data.item_id }),
                     ...(data.purpose !== undefined && { purpose: data.purpose }),
                     ...(data.method !== undefined && { method: data.method }),
                     ...(data.note !== undefined && { note: data.note }),
@@ -177,8 +165,8 @@ export const BatchVaccineScheduleService = {
                 action: "UPDATE",
                 actor_id,
                 note: "Vaccine edited",
-                before: { day: before.day, item_id: before.item_id, purpose: before.purpose },
-                after: { day: row.day, item_id: row.item_id, purpose: row.purpose },
+                before: { day: before.day, purpose: before.purpose },
+                after: { day: row.day, purpose: row.purpose },
             });
             return row;
         });
@@ -195,7 +183,7 @@ export const BatchVaccineScheduleService = {
                 action: "DELETE",
                 actor_id,
                 note: "Vaccine removed from schedule",
-                before: { day: before.day, item_id: before.item_id, purpose: before.purpose },
+                before: { day: before.day, purpose: before.purpose },
             });
         });
     },
@@ -257,12 +245,28 @@ export const BatchVaccineScheduleService = {
                     `This vaccine is due on day ${row.day}; today is day ${today}. Ask an admin to reschedule it to give it early.`,
                 );
 
-            const item = await tx.item.findUniqueOrThrow({
-                where: { id: row.item_id },
-                select: { name: true },
+            const purpose = await tx.vaccinePurpose.findUniqueOrThrow({
+                where: { code: row.purpose },
             });
             const now = new Date();
             for (const [i, bottle] of data.bottles.entries()) {
+                // The row names a purpose, not a product: any QR-coded vaccine bottle will do, and the
+                // bottle's own item is what gets drawn and recorded.
+                const unit = await tx.stockUnit.findUnique({
+                    where: { id: bottle.stock_unit_id },
+                    select: {
+                        purchase_item: {
+                            select: { item: { select: { id: true, name: true, category: true } } },
+                        },
+                    },
+                });
+                if (!unit) throw AppError.notFound("StockUnit");
+                const item = unit.purchase_item?.item;
+                if (!item) throw AppError.badRequest("A bottle isn't linked to a purchase lot yet");
+                // ponytail: "VACCINE" is a live ItemCategory.code (renamable in Settings), same caveat as
+                // the web's "FEED"/"VACCINE" filters; needs a stable key if renaming it becomes a real risk.
+                if (item.category !== "VACCINE")
+                    throw AppError.badRequest(`${item.name} isn't a vaccine`);
                 const house_id = await unitHouse(tx, bottle.stock_unit_id);
                 if (!house_id)
                     throw AppError.conflict(
@@ -277,12 +281,12 @@ export const BatchVaccineScheduleService = {
                 const consumption = await drawConsumption(tx, {
                     batch_id: row.batch_id,
                     house_id,
-                    item_id: row.item_id,
+                    item_id: item.id,
                     stock_unit_id: bottle.stock_unit_id,
                     quantity: bottle.quantity,
                     unit: bottle.unit,
                     date: now,
-                    note: `Vaccine schedule: ${row.purpose}`,
+                    note: "Vaccine schedule",
                     recorded_by_id: actor_id,
                     idempotency_key: `${data.idempotency_key}:${i}`,
                 });
@@ -293,7 +297,7 @@ export const BatchVaccineScheduleService = {
                         schedule_id: id,
                         vaccine_name: item.name,
                         dosage: bottle.quantity,
-                        cause: row.purpose,
+                        cause: purpose.label,
                         administered_by_id: actor_id,
                         date: now,
                         idempotency_key: `${data.idempotency_key}:${i}`,
