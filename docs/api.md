@@ -797,7 +797,7 @@ this house"` — nothing written on rejection, verified via rollback test);
 ## 8. Purchases
 
 `Purchase` + `PurchaseItem`. **Append-only** (§1.10) — create, list, get,
-never update.
+never update. The one way back is removing a purchase entered by mistake (`DELETE` below), and re-entering it.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
@@ -805,6 +805,7 @@ never update.
 | GET | `/api/purchases/:id` | 200 | includes `items: [{ ..., item }]`, `supplier`, `charges` (its `STOCK` expenses) |
 | POST | `/api/purchases` | 201 | see below |
 | POST | `/api/purchases/:id/charges` | 201 | `{ category, amount, remarks?, paid_amount?, paid_from_instrument_id?, date? (default now) }` — a charge added later |
+| DELETE | `/api/purchases/:id` | 200 | Removes a purchase entered by mistake with everything it posted (stock IN, payments, charges and their payments); full record kept in the audit log. 409 if QR units are bound to it or its warehouse stock was already used or moved, or for an opening-balance lot |
 | GET | `/api/purchase-items` | 200 | query: `item_id?`, `batch_id?` — cross-purchase lot lookup |
 
 **Create body**:

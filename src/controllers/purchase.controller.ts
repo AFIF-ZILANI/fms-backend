@@ -49,6 +49,13 @@ export const PurchaseController = {
             return sendSuccess(c, charge, "Charge added", 201);
         });
     },
+
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            await PurchaseService.remove(c.req.param("id") ?? "", await getActorId(c));
+            return sendSuccess(c, null, "Purchase removed");
+        });
+    },
 };
 
 export const PurchaseItemController = {

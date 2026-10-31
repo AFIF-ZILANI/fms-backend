@@ -6,6 +6,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { toBaseQuantity } from "@lib/unit-conversion";
+import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import { checkExpensePaid, writeExpense } from "@services/expense.service";
 import type {
@@ -264,6 +265,81 @@ export const PurchaseService = {
         } catch (err) {
             return handlePrismaWriteError(err);
         }
+    },
+
+    /** Removes a purchase entered by mistake, with everything it posted: its stock IN, its payments,
+     *  its charges and their payments -- so every payable, cash and spend figure is right again with no
+     *  reader knowing removal exists. The whole record goes to the audit log first; the user then
+     *  re-enters the purchase correctly. Refused once something downstream depends on it: bound QR
+     *  units, or warehouse stock already used or moved (removing it would drive the balance negative). */
+    async remove(id: string, actor_id: string) {
+        return prisma.$transaction(async (tx) => {
+            const purchase = await tx.purchase.findUnique({
+                where: { id },
+                include: {
+                    items: {
+                        include: {
+                            item: { select: { name: true } },
+                            _count: { select: { stockUnits: true } },
+                        },
+                    },
+                    charges: true,
+                },
+            });
+            if (!purchase) throw AppError.notFound("Purchase");
+            if (purchase.is_opening) {
+                throw AppError.conflict("An opening balance isn't a purchase -- it can't be removed here");
+            }
+            const bound = purchase.items.reduce((n, l) => n + l._count.stockUnits, 0);
+            if (bound > 0) {
+                throw AppError.conflict(
+                    `${bound} QR-coded unit${bound === 1 ? " is" : "s are"} bound to this purchase -- it can't be removed`,
+                );
+            }
+
+            const ledger = await tx.stockLedger.findMany({
+                where: { ref_type: "PURCHASE", ref_id: { in: purchase.items.map((l) => l.id) } },
+            });
+            const posted = new Map<string, Prisma.Decimal>();
+            for (const e of ledger) {
+                posted.set(e.item_id, (posted.get(e.item_id) ?? new Prisma.Decimal(0)).plus(e.quantity));
+            }
+            for (const [item_id, quantity] of posted) {
+                const balance = await getItemLocationBalance(tx, item_id, "WAREHOUSE", purchase.warehouse_id);
+                if (balance.lessThan(quantity)) {
+                    const name = purchase.items.find((l) => l.item_id === item_id)?.item.name ?? "an item";
+                    throw AppError.conflict(
+                        `Some of the ${name} from this purchase has already been used or moved -- it can't be removed`,
+                    );
+                }
+            }
+
+            const chargeIds = purchase.charges.map((c) => c.id);
+            const payments = await tx.payment.findMany({
+                where: {
+                    OR: [
+                        { ref_type: "PURCHASE", ref_id: id },
+                        { ref_type: "EXPENSE", ref_id: { in: chargeIds } },
+                    ],
+                },
+            });
+
+            await audit(tx, {
+                table: "Purchase",
+                record_id: id,
+                action: "DELETE",
+                actor_id,
+                note: "Purchase removed (entered by mistake)",
+                // Round-trip through JSON so Decimals and Dates land as plain strings.
+                before: JSON.parse(JSON.stringify({ ...purchase, payments, stock_ledger: ledger })),
+            });
+
+            await tx.payment.deleteMany({ where: { id: { in: payments.map((p) => p.id) } } });
+            await tx.stockLedger.deleteMany({ where: { id: { in: ledger.map((e) => e.id) } } });
+            await tx.expense.deleteMany({ where: { id: { in: chargeIds } } });
+            await tx.purchaseItem.deleteMany({ where: { purchase_id: id } });
+            await tx.purchase.delete({ where: { id } });
+        });
     },
 };
 

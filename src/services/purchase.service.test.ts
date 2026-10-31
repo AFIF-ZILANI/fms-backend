@@ -472,4 +472,101 @@ describe("PurchaseService", () => {
         await prisma.warehouses.delete({ where: { id: warehouse.id } });
         await prisma.item.delete({ where: { id: item.id } });
     });
+
+    describe("remove", () => {
+        const warehouseBalance = async (wid: string) => {
+            const rows = await prisma.stockLedger.findMany({
+                where: { item_id: itemId, location_type: "WAREHOUSE", location_id: wid },
+            });
+            return rows.reduce((n, r) => n + (r.direction === "IN" ? 1 : -1) * Number(r.quantity), 0);
+        };
+
+        test("takes the purchase, its stock, payments, charges and their payments with it, and audits it", async () => {
+            const instrumentId = await sharedInstrumentId();
+            const warehouse = await prisma.warehouses.create({ data: { name: `Remove WH ${crypto.randomUUID()}` } });
+            const purchase = await PurchaseService.create({
+                warehouse_id: warehouse.id,
+                purchase_date: new Date(),
+                paid_amount: 60,
+                paid_from_instrument_id: instrumentId,
+                recorded_by_id: profileId,
+                items: [{ item_id: itemId, quantity: 5, unit: "BOTTLE", unit_price: 20 }],
+                charges: [{ category: "TRANSPORT", amount: 15, paid_amount: 15, paid_from_instrument_id: instrumentId }],
+            });
+            const chargeIds = (await prisma.expense.findMany({ where: { purchase_id: purchase.id } })).map((c) => c.id);
+            expect(chargeIds).toHaveLength(1);
+            expect(await warehouseBalance(warehouse.id)).toBe(5);
+
+            await PurchaseService.remove(purchase.id, profileId);
+
+            expect(await prisma.purchase.findUnique({ where: { id: purchase.id } })).toBeNull();
+            expect(await prisma.purchaseItem.count({ where: { purchase_id: purchase.id } })).toBe(0);
+            expect(await prisma.expense.count({ where: { id: { in: chargeIds } } })).toBe(0);
+            expect(await prisma.payment.count({ where: { ref_id: { in: [purchase.id, ...chargeIds] } } })).toBe(0);
+            expect(await warehouseBalance(warehouse.id)).toBe(0);
+
+            const log = await prisma.auditLog.findFirstOrThrow({
+                where: { table_name: "Purchase", record_id: purchase.id, action: "DELETE" },
+            });
+            const before = log.before_data as { total_amount: string; items: unknown[]; payments: unknown[]; charges: unknown[] };
+            expect(before.total_amount).toBe("100");
+            expect(before.items).toHaveLength(1);
+            expect(before.payments).toHaveLength(2);
+            expect(before.charges).toHaveLength(1);
+
+            await prisma.warehouses.delete({ where: { id: warehouse.id } });
+        });
+
+        test("is refused once its stock has been used or moved", async () => {
+            const warehouse = await prisma.warehouses.create({ data: { name: `Remove WH ${crypto.randomUUID()}` } });
+            const purchase = await PurchaseService.create({
+                warehouse_id: warehouse.id,
+                purchase_date: new Date(),
+                paid_amount: 0,
+                recorded_by_id: profileId,
+                items: [{ item_id: itemId, quantity: 5, unit: "BOTTLE", unit_price: 20 }],
+            });
+            const used = await prisma.stockLedger.create({
+                data: {
+                    item_id: itemId,
+                    quantity: 3,
+                    direction: "OUT",
+                    reason: "CONSUMPTION",
+                    ref_type: "CONSUMPTION",
+                    ref_id: crypto.randomUUID(),
+                    location_type: "WAREHOUSE",
+                    location_id: warehouse.id,
+                    idempotency_key: crypto.randomUUID(),
+                },
+            });
+
+            await expect(PurchaseService.remove(purchase.id, profileId)).rejects.toThrow(/already been used or moved/);
+            expect(await prisma.purchase.findUnique({ where: { id: purchase.id } })).not.toBeNull();
+
+            await prisma.stockLedger.delete({ where: { id: used.id } });
+            await PurchaseService.remove(purchase.id, profileId);
+            await prisma.warehouses.delete({ where: { id: warehouse.id } });
+        });
+
+        test("is refused while QR-coded units are bound to it", async () => {
+            const purchase = await PurchaseService.create({
+                warehouse_id: warehouseId,
+                purchase_date: new Date(),
+                paid_amount: 0,
+                recorded_by_id: profileId,
+                items: [{ item_id: itemId, quantity: 2, unit: "BOTTLE", unit_price: 20 }],
+            });
+            createdPurchaseIds.push(purchase.id);
+            const [unit] = await provisionPrinted(1);
+            await StockUnitService.bind(unit!.id, { purchase_item_id: purchase.items[0]!.id });
+
+            await expect(PurchaseService.remove(purchase.id, profileId)).rejects.toThrow(/QR-coded unit is bound/);
+
+            await prisma.stockUnit.delete({ where: { id: unit!.id } });
+        });
+
+        test("an unknown id is not-found", async () => {
+            await expect(PurchaseService.remove(crypto.randomUUID(), profileId)).rejects.toBeInstanceOf(AppError);
+        });
+    });
 });

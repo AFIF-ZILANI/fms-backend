@@ -17,6 +17,7 @@ purchaseRoutes.get(
     PurchaseController.getAll,
 );
 purchaseRoutes.get("/:id", PurchaseController.getById);
+purchaseRoutes.delete("/:id", PurchaseController.remove);
 purchaseRoutes.post(
     "/",
     zValidatorRfc7807("json", createPurchaseSchema),
