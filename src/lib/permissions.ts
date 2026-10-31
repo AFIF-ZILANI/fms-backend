@@ -40,6 +40,7 @@ const READ_ANY = [
     "stock-house-allocations",
     "medications",
     "vaccinations",
+    "batch-vaccine-schedules",
     "weight-records",
     "mortality-logs",
     "environment-records",
@@ -70,6 +71,8 @@ const RULES: Rule[] = [
         level: "worker",
     },
     { methods: POST, path: /^\/task-assignments\/[^/]+\/complete$/, level: "worker" },
+    // Confirming a due vaccine (bottle scan) is floor work; planning the schedule is admin-only.
+    { methods: POST, path: /^\/batch-vaccine-schedules\/[^/]+\/confirm$/, level: "worker" },
     // Manager actions.
     {
         methods: POST,
