@@ -11,32 +11,61 @@ import { VaccineTemplateService } from "./vaccine-template.service";
 import { StockUnitService } from "./stock-unit.service";
 
 let houseId: string;
+let houseYId: string;
 let profileId: string;
 let batchId: string;
 let vaccineId: string;
 let otherItemId: string;
 let templateId: string;
+// Its own purpose, so the suite doesn't depend on (or trip over edits to) the seeded ones.
+const PURPOSE = `TEST_${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
 let purchaseId: string;
 let lotId: string;
 let otherLotId: string;
 const unitIds: string[] = [];
 
-/** A bottle of the vaccine, bound to the lot; moved into the batch's house unless `inWarehouse`. */
-async function bottle(inWarehouse = false, lot = () => lotId) {
+/** A bottle of the vaccine, bound to the lot and moved into house X (or `where`; null = left in the warehouse). */
+async function bottle(where: string | null = houseId, lot = () => lotId) {
     const [unit] = await provisionPrinted(1);
     unitIds.push(unit!.id);
     await StockUnitService.bind(unit!.id, { purchase_item_id: lot() });
-    if (!inWarehouse) await StockUnitService.relocate(unit!.id, houseId, crypto.randomUUID());
+    if (where) await StockUnitService.relocate(unit!.id, where, crypto.randomUUID());
     return unit!.id;
 }
 
-const row = (day: number) => S.create({ batch_id: batchId, purpose: "RANIKHET", day }, profileId);
+const confirm = (
+    id: string,
+    house_id: string,
+    bottles: string[],
+    key: string = crypto.randomUUID(),
+) =>
+    S.confirm(
+        id,
+        {
+            idempotency_key: key,
+            house_id,
+            bottles: bottles.map((stock_unit_id) => ({
+                stock_unit_id,
+                quantity: 1,
+                unit: "BOTTLE",
+            })),
+        },
+        profileId,
+    );
+
+const row = (day: number) => S.create({ batch_id: batchId, purpose: PURPOSE, day }, profileId);
 
 describe("BatchVaccineScheduleService", () => {
     beforeAll(async () => {
+        await prisma.vaccinePurpose.create({ data: { code: PURPOSE, label: "Test purpose" } });
         houseId = (
             await prisma.houses.create({
-                data: { name: "Vaccine House", type: "GROWER", number: houseNumber() },
+                data: { name: "Vaccine House X", type: "GROWER", number: houseNumber() },
+            })
+        ).id;
+        houseYId = (
+            await prisma.houses.create({
+                data: { name: "Vaccine House Y", type: "GROWER", number: houseNumber() },
             })
         ).id;
         profileId = (
@@ -122,8 +151,8 @@ describe("BatchVaccineScheduleService", () => {
             await VaccineTemplateService.create({
                 name: `Broiler ${crypto.randomUUID()}`,
                 entries: [
-                    { day: 9, purpose: "ND_IB" },
-                    { day: 5, purpose: "GUMBORO", method: "EYE_DROP" },
+                    { day: 9, purpose: PURPOSE },
+                    { day: 5, purpose: PURPOSE, method: "EYE_DROP" },
                 ],
             })
         ).id;
@@ -144,11 +173,12 @@ describe("BatchVaccineScheduleService", () => {
         await prisma.purchase.deleteMany({ where: { id: purchaseId } });
         await prisma.batchVaccineSchedule.deleteMany({ where: { batch_id: batchId } });
         await prisma.vaccineTemplate.deleteMany({ where: { id: templateId } });
+        await prisma.vaccinePurpose.deleteMany({ where: { code: PURPOSE } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
         await prisma.batches.delete({ where: { id: batchId } });
         await prisma.item.deleteMany({ where: { id: { in: [vaccineId, otherItemId] } } });
-        await prisma.houses.delete({ where: { id: houseId } });
+        await prisma.houses.deleteMany({ where: { id: { in: [houseId, houseYId] } } });
         await prisma.profiles.delete({ where: { id: profileId } });
     });
 
@@ -187,6 +217,7 @@ describe("BatchVaccineScheduleService", () => {
                 r.id,
                 {
                     idempotency_key: crypto.randomUUID(),
+                    house_id: houseId,
                     bottles: [{ stock_unit_id: b, quantity: 1, unit: "BOTTLE" }],
                 },
                 profileId,
@@ -200,6 +231,7 @@ describe("BatchVaccineScheduleService", () => {
         const key = crypto.randomUUID();
         const body = {
             idempotency_key: key,
+            house_id: houseId,
             bottles: [
                 { stock_unit_id: b1, quantity: 1, unit: "BOTTLE" },
                 { stock_unit_id: b2, quantity: 0.5, unit: "BOTTLE" },
@@ -221,12 +253,13 @@ describe("BatchVaccineScheduleService", () => {
     test("one bad bottle rolls the whole confirm back", async () => {
         const r = await row(5);
         const good = await bottle();
-        const warehouse = await bottle(true);
+        const warehouse = await bottle(null);
         await expect(
             S.confirm(
                 r.id,
                 {
                     idempotency_key: crypto.randomUUID(),
+                    house_id: houseId,
                     bottles: [
                         { stock_unit_id: good, quantity: 1, unit: "BOTTLE" },
                         { stock_unit_id: warehouse, quantity: 1, unit: "BOTTLE" },
@@ -234,7 +267,7 @@ describe("BatchVaccineScheduleService", () => {
                 },
                 profileId,
             ),
-        ).rejects.toThrow("move it to the house first");
+        ).rejects.toThrow("move it there first");
         const after = await prisma.batchVaccineSchedule.findUniqueOrThrow({ where: { id: r.id } });
         expect(after.status).toBe("PENDING");
         expect(await prisma.consumption.count({ where: { stock_unit_id: good } })).toBe(0);
@@ -242,16 +275,83 @@ describe("BatchVaccineScheduleService", () => {
 
     test("a bottle that isn't a vaccine is refused", async () => {
         const r = await row(5);
-        const b = await bottle(false, () => otherLotId);
+        const b = await bottle(houseId, () => otherLotId);
         await expect(
             S.confirm(
                 r.id,
                 {
                     idempotency_key: crypto.randomUUID(),
+                    house_id: houseId,
                     bottles: [{ stock_unit_id: b, quantity: 1, unit: "BOTTLE" }],
                 },
                 profileId,
             ),
         ).rejects.toThrow("isn't a vaccine");
+    });
+
+    // From here on the batch is split across houses X and Y.
+    test("a split batch is DONE only once every house has confirmed, each from its own bottles", async () => {
+        await prisma.batchHouseBalance.create({
+            data: { batch_id: batchId, house_id: houseYId, quantity: 400 },
+        });
+        const r = await row(5);
+
+        const inX = await bottle(houseId);
+        await expect(confirm(r.id, houseYId, [inX])).rejects.toThrow("move it there first");
+
+        const afterX = await confirm(r.id, houseId, [await bottle(houseId)]);
+        expect(afterX.status).toBe("PENDING");
+        expect(afterX.houses.map((h) => [h.id, !!h.confirm])).toEqual(
+            expect.arrayContaining([
+                [houseId, true],
+                [houseYId, false],
+            ]),
+        );
+        await expect(confirm(r.id, houseId, [await bottle(houseId)])).rejects.toThrow(
+            "already confirmed",
+        );
+
+        const yBottle = await bottle(houseYId);
+        const key = crypto.randomUUID();
+        const afterY = await confirm(r.id, houseYId, [yBottle], key);
+        expect(afterY.status).toBe("DONE");
+        expect(afterY.houses.every((h) => h.confirm)).toBe(true);
+        // The draw is booked to the house that used it.
+        const draw = await prisma.consumption.findFirstOrThrow({
+            where: { stock_unit_id: yBottle },
+        });
+        expect(draw.house_id).toBe(houseYId);
+
+        // A retry of Y's confirm is a no-op, not a second draw.
+        expect((await confirm(r.id, houseYId, [yBottle], key)).status).toBe("DONE");
+        expect(await prisma.consumption.count({ where: { stock_unit_id: yBottle } })).toBe(1);
+    });
+
+    test("a house the batch isn't in can't confirm", async () => {
+        const r = await row(5);
+        const empty = await prisma.houses.create({
+            data: { name: "Empty House", type: "GROWER", number: houseNumber() },
+        });
+        try {
+            await expect(confirm(r.id, empty.id, [await bottle(houseId)])).rejects.toThrow(
+                "no birds in that house",
+            );
+        } finally {
+            await prisma.houses.delete({ where: { id: empty.id } });
+        }
+    });
+
+    test("a house that empties after the others confirmed closes the row on read", async () => {
+        const r = await row(5);
+        await confirm(r.id, houseId, [await bottle(houseId)]);
+        await prisma.batchHouseBalance.updateMany({
+            where: { batch_id: batchId, house_id: houseYId },
+            data: { quantity: 0 },
+        });
+        const listed = (await S.getAll(batchId)).find((x) => x.id === r.id)!;
+        expect(listed.status).toBe("DONE");
+        expect(
+            (await prisma.batchVaccineSchedule.findUniqueOrThrow({ where: { id: r.id } })).status,
+        ).toBe("DONE");
     });
 });

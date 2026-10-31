@@ -28,6 +28,8 @@ export const cancelVaccineSchema = z.object({ reason });
 
 export const confirmVaccineSchema = z.object({
     idempotency_key: z.string().min(1),
+    // The house being vaccinated; every bottle must be in it. A batch in two houses confirms twice.
+    house_id: z.string().uuid(),
     bottles: z
         .array(
             z.object({

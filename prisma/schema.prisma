@@ -518,29 +518,30 @@ model Profiles {
   salesRecorded           Sale[]
   birdSalesRecorded       BirdSale[]
   environmentRecordsTaken EnvironmentRecords[]
-  scoresGiven             PerformanceScoreEntry[]  @relation("ScoreGivenBy")
-  scoresApproved          PerformanceScoreEntry[]  @relation("ScoreApprovedBy")
-  payoutAccountsVerified  EmployeePayoutAccount[]  @relation("PayoutAccountVerifiedBy")
-  payoutsPaid             EmployeePayout[]         @relation("PayoutPaidBy")
+  scoresGiven             PerformanceScoreEntry[]    @relation("ScoreGivenBy")
+  scoresApproved          PerformanceScoreEntry[]    @relation("ScoreApprovedBy")
+  payoutAccountsVerified  EmployeePayoutAccount[]    @relation("PayoutAccountVerifiedBy")
+  payoutsPaid             EmployeePayout[]           @relation("PayoutPaidBy")
   bonusEventsCreated      BonusEvent[]
-  scoresVoided            PerformanceScoreEntry[]  @relation("ScoreVoidedBy")
-  scoresAcknowledged      PerformanceScoreEntry[]  @relation("ScoreAcknowledgedBy")
-  payoutAccountsClosed    EmployeePayoutAccount[]  @relation("PayoutAccountClosedBy")
-  devicesRevoked          Device[]                 @relation("DeviceRevokedBy")
+  scoresVoided            PerformanceScoreEntry[]    @relation("ScoreVoidedBy")
+  scoresAcknowledged      PerformanceScoreEntry[]    @relation("ScoreAcknowledgedBy")
+  payoutAccountsClosed    EmployeePayoutAccount[]    @relation("PayoutAccountClosedBy")
+  devicesRevoked          Device[]                   @relation("DeviceRevokedBy")
   notifications           Notifications[]
-  employeesTerminated     Employees[]              @relation("EmployeeTerminatedBy")
+  employeesTerminated     Employees[]                @relation("EmployeeTerminatedBy")
   inventoryAdjustments    InventoryAdjustment[]
   stockTransfersRecorded  StockTransfer[]
   medicationsGiven        Medications[]
   vaccinationsGiven       Vaccinations[]
   vaccinesConfirmed       BatchVaccineSchedule[]
+  vaccineHouseConfirms    BatchVaccineHouseConfirm[]
   auditLogs               AuditLog[]
   tasksAssigned           EmployeeTaskAssignment[]
   stockUnitsBound         StockUnit[]
   devices                 Device[]
   pairingCodes            PairingCode[]
   ingestedSales           IngestedSale[]
-  ingestedSalesReviewed   IngestedSale[]           @relation("IngestedSaleReviewer")
+  ingestedSalesReviewed   IngestedSale[]             @relation("IngestedSaleReviewer")
 }
 
 model Employees {
@@ -685,8 +686,8 @@ model Houses {
   updated_at DateTime   @updatedAt
 
   weightRecords         WeightRecords[]
-  allocationsTo         BatchHouseAllocation[]   @relation("ToHouse")
-  allocationsFrom       BatchHouseAllocation[]   @relation("FromHouse")
+  allocationsTo         BatchHouseAllocation[]     @relation("ToHouse")
+  allocationsFrom       BatchHouseAllocation[]     @relation("FromHouse")
   batchHouseBalances    BatchHouseBalance[]
   mortalityLogs         MortalityLog[]
   consumptions          Consumption[]
@@ -695,6 +696,7 @@ model Houses {
   inventoryAdjustments  InventoryAdjustment[]
   birdSaleHouses        BirdSaleHouse[]
   taskAssignments       EmployeeTaskAssignment[]
+  vaccineConfirms       BatchVaccineHouseConfirm[]
 
   // Numbers repeat across types on this farm (Brooder 1 and Grower 1 are different sheds) but never
   // within one. Also serves lookups by type, so no separate index on it.
@@ -1157,16 +1159,34 @@ model BatchVaccineSchedule {
   day             Int // current day; moves on reschedule
   status          VaccineScheduleStatus @default(PENDING)
   reason          String? // latest reschedule reason, or the cancel reason
+  // Set when the last house the batch occupies confirms -- DONE means every house got it.
   confirmed_by_id String?
   confirmed_by    Profiles?             @relation(fields: [confirmed_by_id], references: [id])
   confirmed_at    DateTime?
-  confirm_key     String?               @unique // the confirm's idempotency_key; a retry returns the DONE row
   created_at      DateTime              @default(now())
   updated_at      DateTime              @updatedAt
 
-  vaccinations Vaccinations[]
+  vaccinations  Vaccinations[]
+  houseConfirms BatchVaccineHouseConfirm[]
 
   @@index([batch_id, day])
+}
+
+// One house's confirmation of a schedule row. A batch split across houses is vaccinated house by house,
+// each from bottles in that house, so the stock draw lands on the house that actually used it.
+model BatchVaccineHouseConfirm {
+  id              String               @id @default(uuid())
+  schedule_id     String
+  schedule        BatchVaccineSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  house_id        String
+  house           Houses               @relation(fields: [house_id], references: [id])
+  confirmed_by_id String
+  confirmed_by    Profiles             @relation(fields: [confirmed_by_id], references: [id])
+  confirmed_at    DateTime             @default(now())
+  confirm_key     String               @unique // the confirm's idempotency_key; a retry returns the same row
+  created_at      DateTime             @default(now())
+
+  @@unique([schedule_id, house_id])
 }
 
 model EnvironmentRecords {

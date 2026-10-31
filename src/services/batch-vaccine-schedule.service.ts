@@ -34,7 +34,64 @@ const include = {
             },
         },
     },
+    houseConfirms: {
+        select: {
+            house_id: true,
+            confirmed_at: true,
+            confirmed_by: { select: { id: true, name: true } },
+        },
+    },
 } satisfies Prisma.BatchVaccineScheduleInclude;
+
+type Db = Tx | typeof prisma;
+type Row = Prisma.BatchVaccineScheduleGetPayload<{ include: typeof include }>;
+
+/** Houses the batch has birds in right now -- the ones a vaccine has to reach before it's DONE. */
+const occupiedHouses = async (db: Db, batch_id: string) =>
+    (
+        await db.batchHouseBalance.findMany({
+            where: { batch_id, quantity: { gt: 0 } },
+            select: { house: { select: { id: true, name: true } } },
+            orderBy: { house: { name: "asc" } },
+        })
+    ).map((b) => b.house);
+
+/** Each row's per-house picture: every house the batch is in now, plus any that confirmed and has
+ *  since emptied, each with its confirmation or null while still waiting. */
+async function withHouses(db: Db, batch_id: string, rows: Row[]) {
+    const occupied = await occupiedHouses(db, batch_id);
+    const confirmedIds = [...new Set(rows.flatMap((r) => r.houseConfirms.map((c) => c.house_id)))];
+    const gone = confirmedIds.filter((id) => !occupied.some((h) => h.id === id));
+    const names = new Map(
+        [
+            ...occupied,
+            ...(gone.length
+                ? await db.houses.findMany({
+                      where: { id: { in: gone } },
+                      select: { id: true, name: true },
+                  })
+                : []),
+        ].map((h) => [h.id, h.name]),
+    );
+    return rows.map(({ houseConfirms, ...r }) => {
+        const ids = [
+            ...new Set([...occupied.map((h) => h.id), ...houseConfirms.map((c) => c.house_id)]),
+        ];
+        return {
+            ...r,
+            houses: ids.map((id) => ({
+                id,
+                name: names.get(id) ?? "",
+                confirm: houseConfirms.find((c) => c.house_id === id) ?? null,
+            })),
+        };
+    });
+}
+
+const one = async (db: Db, id: string) => {
+    const row = await db.batchVaccineSchedule.findUniqueOrThrow({ where: { id }, include });
+    return (await withHouses(db, row.batch_id, [row]))[0]!;
+};
 
 const TABLE = "BatchVaccineSchedule";
 
@@ -53,16 +110,6 @@ async function lockPending(tx: Tx, id: string) {
     return row;
 }
 
-/** The house a coded unit sits in now, or null for the warehouse. Same lookup assertUnitInHouse uses. */
-async function unitHouse(tx: Tx, stock_unit_id: string) {
-    const latest = await tx.stockHouseAllocation.findFirst({
-        where: { stock_unit_id },
-        orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }],
-        select: { house_id: true },
-    });
-    return latest?.house_id ?? null;
-}
-
 const run = async <T>(fn: (tx: Tx) => Promise<T>) => {
     try {
         return await prisma.$transaction(fn);
@@ -73,11 +120,37 @@ const run = async <T>(fn: (tx: Tx) => Promise<T>) => {
 
 export const BatchVaccineScheduleService = {
     async getAll(batch_id: string) {
-        return prisma.batchVaccineSchedule.findMany({
+        const rows = await prisma.batchVaccineSchedule.findMany({
             where: { batch_id },
             include,
             orderBy: [{ day: "asc" }, { created_at: "asc" }],
         });
+        const result = await withHouses(prisma, batch_id, rows);
+        // A house that empties after the others confirmed leaves nothing waiting; close those rows here.
+        // ponytail: done on read, not on the move/sale that emptied the house -- hook those if it matters.
+        const settled = result.filter(
+            (r) =>
+                r.status === "PENDING" && r.houses.length > 0 && r.houses.every((h) => h.confirm),
+        );
+        for (const r of settled) {
+            const last = r.houses
+                .map((h) => h.confirm!)
+                .reduce((a, b) => (a.confirmed_at > b.confirmed_at ? a : b));
+            await prisma.batchVaccineSchedule.update({
+                where: { id: r.id },
+                data: {
+                    status: "DONE",
+                    confirmed_by_id: last.confirmed_by.id,
+                    confirmed_at: last.confirmed_at,
+                },
+            });
+            Object.assign(r, {
+                status: "DONE",
+                confirmed_by: last.confirmed_by,
+                confirmed_at: last.confirmed_at,
+            });
+        }
+        return result;
     },
 
     /** Copies a template's rows into the batch. Only onto an empty schedule -- afterwards rows are
@@ -113,11 +186,12 @@ export const BatchVaccineScheduleService = {
                 actor_id,
                 note: `Vaccine template "${template.name}" applied`,
             });
-            return tx.batchVaccineSchedule.findMany({
+            const rows = await tx.batchVaccineSchedule.findMany({
                 where: { batch_id: data.batch_id },
                 include,
                 orderBy: [{ day: "asc" }, { created_at: "asc" }],
             });
+            return withHouses(tx, data.batch_id, rows);
         });
     },
 
@@ -141,7 +215,7 @@ export const BatchVaccineScheduleService = {
                 actor_id,
                 note: `Vaccine added on day ${data.day}`,
             });
-            return row;
+            return one(tx, row.id);
         });
     },
 
@@ -168,7 +242,7 @@ export const BatchVaccineScheduleService = {
                 before: { day: before.day, purpose: before.purpose },
                 after: { day: row.day, purpose: row.purpose },
             });
-            return row;
+            return one(tx, row.id);
         });
     },
 
@@ -204,7 +278,7 @@ export const BatchVaccineScheduleService = {
                 actor_id,
                 note: `Vaccine rescheduled: day ${before.day} -> ${data.day} (${data.reason})`,
             });
-            return row;
+            return one(tx, row.id);
         });
     },
 
@@ -223,17 +297,24 @@ export const BatchVaccineScheduleService = {
                 actor_id,
                 note: `Vaccine cancelled (${data.reason})`,
             });
-            return row;
+            return one(tx, row.id);
         });
     },
 
-    /** The worker's one action: every scanned bottle is drawn (the same coded draw as "record use"),
-     *  one Vaccinations row per bottle, and the row goes DONE -- all or nothing. */
+    /** The worker's one action, for the house they're in: every scanned bottle (all in that house) is drawn
+     *  there, one Vaccinations row per bottle, and the house is marked confirmed. The row goes DONE once
+     *  every house the batch occupies has confirmed. All or nothing. */
     async confirm(id: string, data: ConfirmVaccineInput, actor_id: string) {
         return run(async (tx) => {
             const row = await lockRow(tx, id);
-            if (row.status === "DONE" && row.confirm_key === data.idempotency_key)
-                return tx.batchVaccineSchedule.findUniqueOrThrow({ where: { id }, include });
+            const replay = await tx.batchVaccineHouseConfirm.findUnique({
+                where: { confirm_key: data.idempotency_key },
+            });
+            if (replay) {
+                if (replay.schedule_id !== id)
+                    throw AppError.conflict("idempotency_key already used");
+                return one(tx, id);
+            }
             if (row.status !== "PENDING")
                 throw AppError.conflict(`This vaccine is already ${row.status.toLowerCase()}`);
 
@@ -244,6 +325,16 @@ export const BatchVaccineScheduleService = {
                 throw AppError.conflict(
                     `This vaccine is due on day ${row.day}; today is day ${today}. Ask an admin to reschedule it to give it early.`,
                 );
+
+            const occupied = await occupiedHouses(tx, row.batch_id);
+            const house = occupied.find((h) => h.id === data.house_id);
+            if (!house) throw AppError.conflict("This batch has no birds in that house");
+            const confirmed = await tx.batchVaccineHouseConfirm.findMany({
+                where: { schedule_id: id },
+                select: { house_id: true },
+            });
+            if (confirmed.some((c) => c.house_id === house.id))
+                throw AppError.conflict(`${house.name} is already confirmed for this vaccine`);
 
             const purpose = await tx.vaccinePurpose.findUniqueOrThrow({
                 where: { code: row.purpose },
@@ -267,20 +358,11 @@ export const BatchVaccineScheduleService = {
                 // the web's "FEED"/"VACCINE" filters; needs a stable key if renaming it becomes a real risk.
                 if (item.category !== "VACCINE")
                     throw AppError.badRequest(`${item.name} isn't a vaccine`);
-                const house_id = await unitHouse(tx, bottle.stock_unit_id);
-                if (!house_id)
-                    throw AppError.conflict(
-                        "A bottle is still in the warehouse -- move it to the house first",
-                    );
-                const occupied = await tx.batchHouseBalance.count({
-                    where: { batch_id: row.batch_id, house_id, quantity: { gt: 0 } },
-                });
-                if (occupied === 0)
-                    throw AppError.conflict("A bottle is in a house this batch isn't in");
 
+                // drawConsumption also refuses a bottle that isn't in this house ("move it there first").
                 const consumption = await drawConsumption(tx, {
                     batch_id: row.batch_id,
-                    house_id,
+                    house_id: house.id,
                     item_id: item.id,
                     stock_unit_id: bottle.stock_unit_id,
                     quantity: bottle.quantity,
@@ -305,16 +387,22 @@ export const BatchVaccineScheduleService = {
                 });
             }
 
-            return tx.batchVaccineSchedule.update({
-                where: { id },
+            await tx.batchVaccineHouseConfirm.create({
                 data: {
-                    status: "DONE",
+                    schedule_id: id,
+                    house_id: house.id,
                     confirmed_by_id: actor_id,
                     confirmed_at: now,
                     confirm_key: data.idempotency_key,
                 },
-                include,
             });
+            const done = new Set([...confirmed.map((c) => c.house_id), house.id]);
+            if (occupied.every((h) => done.has(h.id)))
+                await tx.batchVaccineSchedule.update({
+                    where: { id },
+                    data: { status: "DONE", confirmed_by_id: actor_id, confirmed_at: now },
+                });
+            return one(tx, id);
         });
     },
 };
