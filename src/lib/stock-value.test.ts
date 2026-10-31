@@ -81,6 +81,28 @@ describe("getItemAvgCosts", () => {
         expect(costs.get(itemId)?.toNumber()).toBeCloseTo(19.1667, 3);
     });
 
+    test("an opening balance with a value averages in like one more purchase", async () => {
+        // 40 kg opening worth 400 -> (1000 + 150 + 400) / (50 + 10 + 40) = 15.5
+        const row = await prisma.stockLedger.create({
+            data: {
+                item_id: itemId,
+                quantity: 40,
+                direction: "IN",
+                reason: "OPENING_BALANCE",
+                unit_cost: 10,
+                ref_type: "ADJUSTMENT",
+                ref_id: crypto.randomUUID(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+        try {
+            const costs = await getItemAvgCosts([itemId]);
+            expect(costs.get(itemId)?.toNumber()).toBeCloseTo(15.5, 4);
+        } finally {
+            await prisma.stockLedger.delete({ where: { id: row.id } });
+        }
+    });
+
     test("an item never purchased is absent from the map", async () => {
         const costs = await getItemAvgCosts(["00000000-0000-0000-0000-000000000000"]);
         expect(costs.has("00000000-0000-0000-0000-000000000000")).toBe(false);
