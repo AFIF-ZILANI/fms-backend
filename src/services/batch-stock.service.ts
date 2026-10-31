@@ -193,6 +193,8 @@ export const BatchStockService = {
                 item_name: item.name,
                 category: item.category,
                 unit: item.unit,
+                // so the page can read feed as "3 Bag 12.5 kg"
+                itemUnits: item.itemUnits,
                 non_depleting: isNonDepleting(item.category),
                 used: q(t.used),
                 in_use: q(t.in_use),
