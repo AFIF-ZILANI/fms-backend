@@ -46,9 +46,10 @@ export function stayWindows(
 const D = (v: Prisma.Decimal | number | string | null | undefined) => new Prisma.Decimal(v ?? 0);
 const q = (d: Prisma.Decimal) => Number(d.toFixed(3));
 const money = (d: Prisma.Decimal) => Number(d.toFixed(2));
-const HEALTH = new Set(["MEDICINE", "VACCINE"]);
-type Bucket = "FEED" | "HEALTH" | "OTHER";
-const bucketOf = (cat: string): Bucket => (cat === "FEED" ? "FEED" : HEALTH.has(cat) ? "HEALTH" : "OTHER");
+// Supplements are given the way medicine is (in water, by course), so the farm reads them together.
+type Bucket = "FEED" | "MEDICINE" | "VACCINE" | "OTHER";
+const bucketOf = (cat: string): Bucket =>
+    cat === "SUPPLEMENT" ? "MEDICINE" : cat === "FEED" || cat === "MEDICINE" || cat === "VACCINE" ? cat : "OTHER";
 
 type Tally = { used: Prisma.Decimal; in_use: Prisma.Decimal; in_use_units: number; allocated: Prisma.Decimal };
 const tally = (): Tally => ({ used: D(0), in_use: D(0), in_use_units: 0, allocated: D(0) });
@@ -177,7 +178,7 @@ export const BatchStockService = {
             cost === null ? null : t.used.plus(t.in_use).times(cost);
 
         let total = D(0);
-        const byBucket: Record<Bucket, Prisma.Decimal> = { FEED: D(0), HEALTH: D(0), OTHER: D(0) };
+        const byBucket: Record<Bucket, Prisma.Decimal> = { FEED: D(0), MEDICINE: D(0), VACCINE: D(0), OTHER: D(0) };
         const rows = itemIds.map((item_id) => {
             const item = itemById.get(item_id)!;
             const { total: t, houses: hs } = byItem.get(item_id)!;
@@ -220,7 +221,8 @@ export const BatchStockService = {
         const daily = Array.from({ length: days }, (_, i) => ({
             day: i + 1,
             feed_cost: 0,
-            health_cost: 0,
+            medicine_cost: 0,
+            vaccine_cost: 0,
             other_cost: 0,
             feed_kg: 0,
             birds: 0,
@@ -234,7 +236,8 @@ export const BatchStockService = {
                 const v = c.base_quantity.times(cost).toNumber();
                 const b = bucketOf(item.category);
                 if (b === "FEED") row.feed_cost += v;
-                else if (b === "HEALTH") row.health_cost += v;
+                else if (b === "MEDICINE") row.medicine_cost += v;
+                else if (b === "VACCINE") row.vaccine_cost += v;
                 else row.other_cost += v;
             }
             if (item.category === "FEED") {
@@ -250,7 +253,8 @@ export const BatchStockService = {
             row.birds = alive;
             alive -= lost[i]!;
             row.feed_cost = Number(row.feed_cost.toFixed(2));
-            row.health_cost = Number(row.health_cost.toFixed(2));
+            row.medicine_cost = Number(row.medicine_cost.toFixed(2));
+            row.vaccine_cost = Number(row.vaccine_cost.toFixed(2));
             row.other_cost = Number(row.other_cost.toFixed(2));
             row.feed_kg = Number(row.feed_kg.toFixed(3));
         }
@@ -263,7 +267,8 @@ export const BatchStockService = {
             total_cost: money(total),
             cost_by_category: {
                 feed: money(byBucket.FEED),
-                health: money(byBucket.HEALTH),
+                medicine: money(byBucket.MEDICINE),
+                vaccine: money(byBucket.VACCINE),
                 other: money(byBucket.OTHER),
             },
             /** Items with no purchase price to cost them at -- left out of total_cost. */
