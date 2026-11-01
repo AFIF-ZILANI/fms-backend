@@ -14,8 +14,7 @@ type LedgerEntryInput = {
         | "SALE"
         | "WASTAGE"
         | "EXPIRED"
-        | "ADJUSTMENT"
-        | "OPENING_BALANCE";
+        | "ADJUSTMENT";
     ref_type: "PURCHASE" | "CONSUMPTION" | "SALE" | "ADJUSTMENT" | "TRANSFER";
     ref_id: string;
     unit_cost?: Prisma.Decimal | number;

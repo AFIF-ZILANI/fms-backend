@@ -631,14 +631,13 @@ transaction).
 The server reads the current balance from the stock ledger, so `quantity_before`
 on the stored row is the real balance, and `adjustment_quantity`
 (= `quantity_after - balance`) is computed from it. The paired `StockLedger`
-entry's direction follows the sign. The reasons `"Wastage"`, `"Expired"` and
-`"Opening balance"` are recorded on the ledger as `WASTAGE`, `EXPIRED` and
-`OPENING_BALANCE`; any other reason is `ADJUSTMENT`. Only the location actually
-used is stored on the row.
+entry's direction follows the sign. The reasons `"Wastage"` and `"Expired"` are
+recorded on the ledger as `WASTAGE` and `EXPIRED`; any other reason is
+`ADJUSTMENT`. Only the location actually used is stored on the row. Stock that
+arrives (QR-tracked or not) comes in through a purchase, not an adjustment.
 
 **Errors**: **400** if `quantity_after` equals the current balance (nothing to
-adjust); **409** if `reason` is `"Opening balance"` and stock is already
-recorded at that location (use a count correction); **400** if
+adjust); **400** if
 `item_id`/`warehouse_id`/`house_id` don't reference real rows (§1.7); **400** if
 neither `warehouse_id` nor `house_id` is given.
 

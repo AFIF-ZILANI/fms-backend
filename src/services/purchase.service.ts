@@ -48,8 +48,6 @@ function computeDiscount(
 export const PurchaseService = {
     async getAll(query: ListPurchasesQuery) {
         const where = {
-            // Opening lots aren't purchases anyone made (Purchase.is_opening).
-            is_opening: false,
             ...(query.supplier_id !== undefined && { supplier_id: query.supplier_id }),
             ...((query.date_from !== undefined || query.date_to !== undefined) && {
                 purchase_date: {
@@ -244,14 +242,9 @@ export const PurchaseService = {
     async addCharge(id: string, input: AddPurchaseChargeInput) {
         const purchase = await prisma.purchase.findUnique({
             where: { id },
-            select: { is_opening: true, purchase_date: true },
+            select: { purchase_date: true },
         });
         if (!purchase) throw AppError.notFound("Purchase");
-        if (purchase.is_opening) {
-            throw AppError.badRequest(
-                "An opening balance isn't a purchase -- it can't carry charges",
-            );
-        }
         checkExpensePaid(input);
         try {
             return await prisma.$transaction((tx) =>
@@ -287,9 +280,6 @@ export const PurchaseService = {
                 },
             });
             if (!purchase) throw AppError.notFound("Purchase");
-            if (purchase.is_opening) {
-                throw AppError.conflict("An opening balance isn't a purchase -- it can't be removed here");
-            }
             const bound = purchase.items.reduce((n, l) => n + l._count.stockUnits, 0);
             if (bound > 0) {
                 throw AppError.conflict(

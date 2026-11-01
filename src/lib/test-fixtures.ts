@@ -87,7 +87,7 @@ export async function seedStock(item_id: string, warehouse_id: string, quantity:
             item_id,
             quantity,
             direction: "IN",
-            reason: "OPENING_BALANCE",
+            reason: "ADJUSTMENT",
             ref_type: "ADJUSTMENT",
             ref_id: crypto.randomUUID(),
             location_type: "WAREHOUSE",

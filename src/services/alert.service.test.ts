@@ -79,7 +79,7 @@ describe("AlertService", () => {
                 item_id: item.id,
                 quantity: 10,
                 direction: "IN",
-                reason: "OPENING_BALANCE",
+                reason: "ADJUSTMENT",
                 ref_type: "ADJUSTMENT",
                 ref_id: crypto.randomUUID(),
                 idempotency_key: crypto.randomUUID(),

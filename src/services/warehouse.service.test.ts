@@ -44,7 +44,7 @@ describe("WarehouseService", () => {
                 item_id: item.id,
                 quantity: 20,
                 direction: "IN",
-                reason: "OPENING_BALANCE",
+                reason: "ADJUSTMENT",
                 ref_type: "ADJUSTMENT",
                 ref_id: crypto.randomUUID(),
                 idempotency_key: crypto.randomUUID(),

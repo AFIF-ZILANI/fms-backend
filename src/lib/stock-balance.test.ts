@@ -28,7 +28,7 @@ describe("getItemBalances", () => {
                     item_id: item.id,
                     quantity: 100,
                     direction: "IN",
-                    reason: "OPENING_BALANCE",
+                    reason: "ADJUSTMENT",
                     ref_type: "ADJUSTMENT",
                     ref_id: crypto.randomUUID(),
                     idempotency_key: crypto.randomUUID(),
@@ -210,7 +210,7 @@ describe("getStockByLocation", () => {
                 },
                 // Untagged (no location) -- must not appear in any location's breakdown.
                 {
-                    item_id: item.id, quantity: 999, direction: "IN", reason: "OPENING_BALANCE",
+                    item_id: item.id, quantity: 999, direction: "IN", reason: "ADJUSTMENT",
                     ref_type: "ADJUSTMENT", ref_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(),
                 },
                 // DISPOSAL -- excluded: not stock at a warehouse or house.

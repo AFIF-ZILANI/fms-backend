@@ -343,10 +343,9 @@ check("Wastage adjustment posts ledger reason WASTAGE", (await prisma.stockLedge
 const a4 = await adj("manager", it.premix, { warehouse_id: wh1.id }, bal(it.premix, "WAREHOUSE", wh1.id) - 1, "Expired");
 if (a4.status === 201) mv(it.premix, "WAREHOUSE", wh1.id, -1);
 check("Expired adjustment posts ledger reason EXPIRED", (await prisma.stockLedger.count({ where: { ref_type: "ADJUSTMENT", ref_id: a4.data?.id, reason: "EXPIRED" } })) === 1);
-const a5 = await adj("admin", it.premix, { warehouse_id: wh2!.id }, 6, "Opening balance");
+const a5 = await adj("admin", it.premix, { warehouse_id: wh2!.id }, 6, "Recount");
 if (a5.status === 201) mv(it.premix, "WAREHOUSE", wh2!.id, 6);
-check("opening balance on an empty location", a5.status === 201 && (await prisma.stockLedger.count({ where: { ref_id: a5.data?.id, reason: "OPENING_BALANCE" } })) === 1);
-probe("opening balance where stock exists -> 409", await adj("admin", it.feed, { warehouse_id: wh1.id }, 5, "Opening balance"), 409, "opening balance silently became a correction");
+check("recount up from an empty location", a5.status === 201 && (await prisma.stockLedger.count({ where: { ref_id: a5.data?.id, reason: "ADJUSTMENT" } })) === 1);
 probe("count equal to the balance -> 400", await adj("admin", it.feed, { warehouse_id: wh1.id }, bal(it.feed, "WAREHOUSE", wh1.id), "Recount"), 400, "no-op adjustment recorded");
 probe("negative count -> 400", await adj("admin", it.feed, { warehouse_id: wh1.id }, -5, "Recount"), 400, "negative stock count accepted");
 probe("no location -> 400", await adj("admin", it.feed, {}, 5, "Recount"), 400, "location-less adjustment accepted");

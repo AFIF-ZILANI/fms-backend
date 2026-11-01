@@ -12,7 +12,6 @@ export const listStockLedgerQuerySchema = paginationQuerySchema.extend({
             "WASTAGE",
             "EXPIRED",
             "ADJUSTMENT",
-            "OPENING_BALANCE",
         ])
         .optional(),
 });

@@ -16,8 +16,7 @@ import { chargeRatios, landedTotal } from "@lib/purchase-charges";
 export async function getItemAvgCosts(itemIds: string[]): Promise<Map<string, Prisma.Decimal>> {
     if (itemIds.length === 0) return new Map();
     const lines = await prisma.purchaseItem.findMany({
-        // Opening lots are zero-cost placeholders, not a price paid -- they'd drag the average down.
-        where: { item_id: { in: itemIds }, purchase: { is_opening: false } },
+        where: { item_id: { in: itemIds } },
         select: { item_id: true, purchase_id: true, base_quantity: true, total_price: true },
     });
     // Each line at its landed cost: goods plus its by-value share of the purchase's charges.
