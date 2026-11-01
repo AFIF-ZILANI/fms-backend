@@ -110,6 +110,9 @@ describe("canAccess", () => {
             expect(canAccess(who, "POST", "/stock-units/abc/relocate", none)).toBe(true);
         }
         expect(canAccess(other, "POST", "/stock-units/abc/relocate", none)).toBe(false);
+        // uncoded stock moves by quantity, same tier
+        expect(canAccess(worker, "POST", "/stock-transfers", none)).toBe(true);
+        expect(canAccess(other, "POST", "/stock-transfers", none)).toBe(false);
         expect(canAccess(worker, "POST", "/stock-units/abc/use", none)).toBe(true);
         // binding stays manager-only
         expect(canAccess(worker, "POST", "/stock-units/abc/bind", none)).toBe(false);

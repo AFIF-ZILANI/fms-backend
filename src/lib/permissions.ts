@@ -84,6 +84,8 @@ const RULES: Rule[] = [
     { methods: POST, path: /^\/alerts\/[^/]+\/resolve$/, level: "manager" },
     // Scanning a coded unit into a house is floor work, not a manager action.
     { methods: POST, path: /^\/stock-units\/[^/]+\/relocate$/, level: "worker" },
+    // Its uncoded counterpart: feed, husk and other bulk stock moved or returned by quantity.
+    { methods: POST, path: /^\/stock-transfers$/, level: "worker" },
     // "Use an item" (start using / used up) is the coded counterpart of logging a consumption.
     { methods: POST, path: /^\/stock-units\/[^/]+\/use$/, level: "worker" },
     { methods: POST, path: /^\/stock-units\/[^/]+\/bind$/, level: "manager" },
