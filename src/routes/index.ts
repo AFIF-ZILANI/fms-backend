@@ -55,6 +55,7 @@ import { employeePayoutAccountRoutes } from "@routes/employee-payout-account.rou
 import { payrollPayoutRoutes } from "@routes/payroll-payout.routes";
 import { bonusEventRoutes } from "@routes/bonus-event.routes";
 import { employeeRoleRoutes } from "@routes/employee-role.routes";
+import { farmSettingsRoutes } from "@routes/farm-settings.routes";
 
 export const appRoutes = new Hono();
 
@@ -65,6 +66,7 @@ appRoutes.route("/devices", deviceRoutes);
 appRoutes.route("/ingest", ingestRoutes);
 appRoutes.route("/employees", employeeRoutes);
 appRoutes.route("/employee-roles", employeeRoleRoutes);
+appRoutes.route("/farm-settings", farmSettingsRoutes);
 appRoutes.route("/uploads", uploadRoutes);
 appRoutes.route("/employee-payout-accounts", employeePayoutAccountRoutes);
 appRoutes.route("/payroll-payouts", payrollPayoutRoutes);

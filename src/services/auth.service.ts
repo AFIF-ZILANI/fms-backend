@@ -6,6 +6,7 @@ import { AppError } from "@lib/app-error";
 import { generateTempPassword, hashPassword, verifyPassword } from "@lib/password";
 import { signSession, type SessionClient } from "@lib/session";
 import { audit } from "@lib/audit";
+import { getDayStartHour } from "@lib/farm-day";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import type { UpdateAccountInput } from "@validators/auth.validator";
 
@@ -39,6 +40,8 @@ function shapeMe(p: Me) {
         employee_id: p.employees?.id ?? null,
         employee_role: p.employees?.role ?? null,
         must_change_password: p.must_change_password,
+        // Both apps count batch days and "today" with it (see lib/farm-day.ts).
+        farm_day_start_hour: getDayStartHour(),
     };
 }
 

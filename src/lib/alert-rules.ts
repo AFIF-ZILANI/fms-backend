@@ -1,4 +1,6 @@
-import { farmDay } from "@lib/farm-day";
+import { farmDay, farmDayStart } from "@lib/farm-day";
+
+export { farmDayStart };
 
 /**
  * The numbers and pure decisions behind the alert scan, kept apart from the database work so each one
@@ -37,9 +39,6 @@ export const farmHour = (now: Date): number =>
 
 export const pastDailyCutoff = (now: Date): boolean => farmHour(now) >= DAILY_LOG_CUTOFF_HOUR;
 
-/** The instant the farm-local day began, for "logged today" queries. */
-export const farmDayStart = (now: Date): Date =>
-    new Date(farmDay(now).getTime() - FARM_UTC_OFFSET_MS);
 
 // ── Selling date ─────────────────────────────────────────────────────────────
 /** How far ahead of a running batch's expected selling date to start reminding: enough to book buyers. */

@@ -1826,3 +1826,12 @@ model IngestedSale {
 
   @@index([status, received_at])
 }
+
+/// Farm-wide settings: a single row, id 1.
+model FarmSettings {
+  id             Int      @id @default(1)
+  /// Farm-local hour (0-6) the farm day starts at: with 4, 01:30 still belongs to the previous day.
+  /// Capped at 6 so a stored date (midnight UTC = 06:00 Dhaka) never shifts to the day before.
+  day_start_hour Int      @default(0)
+  updated_at     DateTime @updatedAt
+}
