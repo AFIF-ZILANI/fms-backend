@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { AppError } from "@lib/app-error";
 import { getItemAvgCosts } from "@lib/stock-value";
+import { getLocationStock } from "@lib/stock-balance";
 import { isNonDepleting, unitAmount } from "@lib/coded-stock";
 import { kgPerBaseUnit } from "@lib/unit-conversion";
 import { cycleDay } from "@lib/farm-day";
@@ -14,12 +15,14 @@ import { cycleDay } from "@lib/farm-day";
  *              Latest draw, so a half-used bottle the next batch picks up moves to that batch. A unit
  *              opened but never drawn from ("Start" logs nothing until "Finish") belongs to the batch
  *              in its house: the last one to move in there.
- *   allocated  stock moved INTO a house while this batch was in it (its stay window)
+ *   allocated  what's in its houses right now and not opened yet: the house's stock balance minus the
+ *              in-use amount above. Only houses it's still in (and no later batch moved into); a
+ *              closed batch has none. So allocated + in use = what's physically there today.
  *   cost       (used + in use) at average landed cost, like the P&L. Equipment costs nothing here
  *              (it reaches a batch through depreciation); an item never bought has no known cost.
  *
- * ponytail: allocated assumes one batch per house at a time; two batches sharing a house during a window
- * both see the same transfers. Split by bird count if that ever happens on this farm.
+ * ponytail: allocated assumes one batch per house at a time; two batches sharing a house would both see
+ * its stock. Split by bird count if that ever happens on this farm.
  */
 
 export type Stay = { house_id: string; from: Date; to: Date };
@@ -148,21 +151,24 @@ export const BatchStockService = {
             ),
         );
 
-        // allocated: transfers into each house inside its stay window
-        const transfersIn = stays.length
-            ? await prisma.stockLedger.findMany({
-                  where: {
-                      reason: "TRANSFER",
-                      direction: "IN",
-                      location_type: "HOUSE",
-                      OR: stays.map((s) => ({
-                          location_id: s.house_id,
-                          occurred_at: { gte: s.from, lte: s.to },
-                      })),
-                  },
-                  select: { item_id: true, location_id: true, quantity: true },
-              })
-            : [];
+        // allocated: the stock balance of each house it's still in, less what's counted as in use there
+        const current =
+            batch.status === "RUNNING"
+                ? batch.houseBalances
+                      .filter((b) => b.quantity > 0)
+                      .map((b) => b.house_id)
+                      .filter((h) => {
+                          const stay = stayIn.get(h);
+                          return !(stay && laterArrivals.some((a) => a.to_house_id === h && a.occurred_at > stay.from));
+                      })
+                : [];
+        const onHand = (
+            await Promise.all(
+                current.map(async (house_id) =>
+                    (await getLocationStock("HOUSE", house_id)).map((b) => ({ house_id, ...b })),
+                ),
+            )
+        ).flat();
 
         // ── per item, per house ──
         const byItem = new Map<string, { total: Tally; houses: Map<string, Tally> }>();
@@ -179,8 +185,14 @@ export const BatchStockService = {
                 t.in_use = t.in_use.plus(u.amount);
                 t.in_use_units += 1;
             }
-        for (const r of transfersIn)
-            for (const t of at(r.item_id, r.location_id!)) t.allocated = t.allocated.plus(r.quantity);
+        for (const b of onHand) {
+            const opened = inUse
+                .filter((u) => u.house_id === b.house_id && u.item_id === b.item_id)
+                .reduce((sum, u) => sum.plus(u.amount), D(0));
+            const unopened = b.balance.minus(opened);
+            if (unopened.isPositive())
+                for (const t of at(b.item_id, b.house_id)) t.allocated = t.allocated.plus(unopened);
+        }
 
         const itemIds = [...byItem.keys()];
         const houseIds = [...new Set(stays.map((s) => s.house_id))];
