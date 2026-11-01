@@ -11,7 +11,9 @@ import { cycleDay } from "@lib/farm-day";
  *
  *   used       its Consumption rows
  *   in use     opened coded units (IN_USE) whose latest draw was this batch's -- what's still in them.
- *              Latest draw, so a half-used bottle the next batch picks up moves to that batch.
+ *              Latest draw, so a half-used bottle the next batch picks up moves to that batch. A unit
+ *              opened but never drawn from ("Start" logs nothing until "Finish") belongs to the batch
+ *              in its house: the last one to move in there.
  *   allocated  stock moved INTO a house while this batch was in it (its stay window)
  *   cost       (used + in use) at average landed cost, like the P&L. Equipment costs nothing here
  *              (it reaches a batch through depreciation); an item never bought has no known cost.
@@ -103,14 +105,45 @@ export const BatchStockService = {
             if (!stays.some((s) => s.house_id === c.house_id))
                 stays.push({ house_id: c.house_id, from: batch.starting_date, to: batchEnd });
 
-        // in use: only units this batch drew last
-        const mine = openUnits.filter((u) => u.purchase_item && u.consumptions[0]?.batch_id === batchId);
+        // in use: units this batch drew last, plus opened-never-drawn units sitting in its houses
+        const mine = openUnits
+            .filter((u) => u.purchase_item && u.consumptions[0]?.batch_id === batchId)
+            .map((u) => ({ id: u.id, lot: u.purchase_item!, house_id: u.consumptions[0]!.house_id }));
+        const stayIn = new Map(stays.map((s) => [s.house_id, s]));
+        const [undrawn, laterArrivals] = await Promise.all([
+            prisma.stockUnit.findMany({
+                where: { status: "IN_USE", consumptions: { none: {} }, purchase_item_id: { not: null } },
+                select: {
+                    id: true,
+                    purchase_item: {
+                        select: { id: true, item_id: true, base_quantity: true, unit_count: true, item: { select: { category: true } } },
+                    },
+                    houseAllocations: {
+                        orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }],
+                        take: 1,
+                        select: { house_id: true },
+                    },
+                },
+            }),
+            prisma.batchHouseAllocation.findMany({
+                where: { batch_id: { not: batchId }, to_house_id: { in: [...stayIn.keys()] } },
+                select: { to_house_id: true, occurred_at: true },
+            }),
+        ]);
+        for (const u of undrawn) {
+            const house_id = u.houseAllocations[0]?.house_id;
+            const stay = house_id ? stayIn.get(house_id) : undefined;
+            if (!stay) continue;
+            // a batch that moved into that house after this one took it over
+            if (laterArrivals.some((a) => a.to_house_id === house_id && a.occurred_at > stay.from)) continue;
+            mine.push({ id: u.id, lot: u.purchase_item!, house_id: house_id! });
+        }
         const inUse = await prisma.$transaction((tx) =>
             Promise.all(
                 mine.map(async (u) => ({
-                    item_id: u.purchase_item!.item_id,
-                    house_id: u.consumptions[0]!.house_id,
-                    amount: await unitAmount(tx, u.id, u.purchase_item!),
+                    item_id: u.lot.item_id,
+                    house_id: u.house_id,
+                    amount: await unitAmount(tx, u.id, u.lot),
                 })),
             ),
         );
