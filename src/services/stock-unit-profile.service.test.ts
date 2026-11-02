@@ -78,7 +78,7 @@ describe("stockUnitProfile", () => {
     test("a blank code says so: no item, lot or location", async () => {
         const [blank] = await provisionPrinted(1);
         unitIds.push(blank!.id);
-        const p = await stockUnitProfile(blank!.id);
+        const p = await stockUnitProfile(blank!.id, { showCost: true });
         expect(p).toMatchObject({
             status: "PRINTED",
             item: null,
@@ -101,11 +101,11 @@ describe("stockUnitProfile", () => {
             profileId,
         );
 
-        const p = await stockUnitProfile(code!.id);
+        const p = await stockUnitProfile(code!.id, { showCost: true });
         expect(p.item?.category).toBe("VACCINE");
         expect(p.location).toMatchObject({ type: "HOUSE", name: "Profile House" });
         expect(p.lot).toMatchObject({ unit_count: 5, unit_price: "20", cost_per_unit: "20" });
-        expect(p.lot?.codes.BOUND).toBe(1);
+        expect(p.lot?.codes["BOUND"]).toBe(1);
         expect(p.purchase).toMatchObject({
             invoice_no: "INV-PROFILE-1",
             supplier: null,
@@ -120,9 +120,21 @@ describe("stockUnitProfile", () => {
             }),
         ]);
         expect(p.uses).toEqual([]);
+
+        // A worker sees the same unit without what it cost.
+        const worker = await stockUnitProfile(code!.id, { showCost: false });
+        expect(worker.lot).toMatchObject({
+            unit_price: null,
+            total_price: null,
+            cost_per_unit: null,
+            unit_count: 5,
+        });
+        expect(worker.purchase?.invoice_no).toBe("INV-PROFILE-1");
     });
 
     test("an unknown code is a 404", async () => {
-        await expect(stockUnitProfile(crypto.randomUUID())).rejects.toMatchObject({ status: 404 });
+        await expect(
+            stockUnitProfile(crypto.randomUUID(), { showCost: true }),
+        ).rejects.toMatchObject({ status: 404 });
     });
 });

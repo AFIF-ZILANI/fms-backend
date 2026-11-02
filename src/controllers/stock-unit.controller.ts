@@ -5,6 +5,8 @@ import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { StockUnitService } from "@services/stock-unit.service";
 import { stockUnitProfile } from "@services/stock-unit-profile.service";
+import { getAuth } from "@middlewares/authenticate";
+import type { AuthContext } from "../types/app";
 import type {
     ProvisionStockUnitsInput,
     MarkPrintedStockUnitsInput,
@@ -14,6 +16,9 @@ import type {
     SetStockUnitStatusInput,
     ListStockUnitsQuery,
 } from "@validators/stock-unit.validator";
+
+/** Purchase prices on a unit's profile: admins and managers, not workers. */
+const canSeeCost = (a: AuthContext) => a.role === "ADMIN" || a.employee_role === "MANAGER";
 
 export const StockUnitController = {
     async getAll(c: Context) {
@@ -35,7 +40,9 @@ export const StockUnitController = {
         return withHandler(c, async () =>
             sendSuccess(
                 c,
-                await stockUnitProfile(c.req.param("id") ?? ""),
+                await stockUnitProfile(c.req.param("id") ?? "", {
+                    showCost: canSeeCost(getAuth(c)),
+                }),
                 "Stock unit fetched successfully",
             ),
         );

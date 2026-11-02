@@ -9,9 +9,10 @@ const by = { select: { name: true } } as const;
  * it came from (price, supplier, dates), where it is now and how much is left, every move and every use.
  * A blank code (not yet bound to a lot) comes back with `item`/`lot` null and the app says so.
  *
- * Read-only and one request, so a single scan fills the screen.
+ * Read-only and one request, so a single scan fills the screen. Prices are for managers: a worker gets
+ * them as null (`showCost`), the rest is the same.
  */
-export async function stockUnitProfile(id: string) {
+export async function stockUnitProfile(id: string, { showCost }: { showCost: boolean }) {
     const unit = await prisma.stockUnit.findUnique({
         where: { id },
         include: {
@@ -97,12 +98,14 @@ export async function stockUnitProfile(id: string) {
             unit: lot.unit,
             base_quantity: lot.base_quantity.toString(),
             unit_count: lot.unit_count,
-            unit_price: lot.unit_price.toString(),
-            total_price: lot.total_price.toString(),
+            unit_price: showCost ? lot.unit_price.toString() : null,
+            total_price: showCost ? lot.total_price.toString() : null,
             // What one coded unit cost, when the lot says how many units it holds.
-            cost_per_unit: lot.unit_count
-                ? lot.total_price.dividedBy(lot.unit_count).toDecimalPlaces(2).toString()
-                : null,
+            cost_per_unit: !showCost
+                ? null
+                : lot.unit_count
+                  ? lot.total_price.dividedBy(lot.unit_count).toDecimalPlaces(2).toString()
+                  : null,
             mfg_date: lot.mfg_date,
             expiration_date: lot.expiration_date,
             codes: Object.fromEntries(siblings.map((s) => [s.status, s._count._all])) as Record<
