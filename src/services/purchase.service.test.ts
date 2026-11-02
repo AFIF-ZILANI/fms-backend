@@ -154,6 +154,20 @@ describe("PurchaseService", () => {
         ).rejects.toMatchObject({ status: 400 });
     });
 
+    test("paying the cents-rounded total in full is accepted", async () => {
+        // 1.005 x 1 = 1.005 exact; the column (and the client) hold 1.01.
+        const purchase = await PurchaseService.create({
+            warehouse_id: warehouseId,
+            purchase_date: new Date(),
+            paid_amount: 1.01,
+            paid_from_instrument_id: await sharedInstrumentId(),
+            recorded_by_id: profileId,
+            items: [{ item_id: itemId, quantity: 1.005, unit: "BOTTLE", unit_price: 1 }],
+        });
+        createdPurchaseIds.push(purchase!.id);
+        expect(purchase!.total_amount.toString()).toBe("1.01");
+    });
+
     test("create with a nonexistent item_id throws bad-request, not a raw 500", async () => {
         await expect(
             PurchaseService.create({

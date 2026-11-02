@@ -107,7 +107,8 @@ export const PurchaseService = {
             data.discount_value,
             "Purchase",
         );
-        const total_amount = subtotal.minus(globalDiscount);
+        // Rounded to the cents the column stores, so a "paid in full" amount (also cents) never reads as over the total.
+        const total_amount = subtotal.minus(globalDiscount).toDecimalPlaces(2);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         if (total_amount.minus(paid_amount).isNegative()) {
             throw AppError.badRequest("paid_amount cannot exceed the purchase total");
