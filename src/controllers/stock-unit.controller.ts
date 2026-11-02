@@ -4,6 +4,7 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { StockUnitService } from "@services/stock-unit.service";
+import { stockUnitProfile } from "@services/stock-unit-profile.service";
 import type {
     ProvisionStockUnitsInput,
     MarkPrintedStockUnitsInput,
@@ -28,6 +29,16 @@ export const StockUnitController = {
             const unit = await StockUnitService.getById(c.req.param("id") ?? "");
             return sendSuccess(c, unit, "Stock unit fetched successfully");
         });
+    },
+
+    async profile(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(
+                c,
+                await stockUnitProfile(c.req.param("id") ?? ""),
+                "Stock unit fetched successfully",
+            ),
+        );
     },
 
     async counts(c: Context) {
