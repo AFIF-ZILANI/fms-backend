@@ -3,6 +3,8 @@ import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
 import { HouseService } from "@services/house.service";
+import { houseActivity } from "@services/house-activity.service";
+import type { PaginationQuery } from "@lib/pagination";
 import type {
     CreateHouseInput,
     UpdateHouseInput,
@@ -32,6 +34,16 @@ export const HouseController = {
                 c.req.query("include_in_use") === "true",
             );
             return sendSuccess(c, stock, "House coded stock fetched successfully");
+        });
+    },
+
+    async getActivity(c: Context) {
+        return withHandler(c, async () => {
+            const { activity, meta } = await houseActivity(
+                c.req.param("id") ?? "",
+                getValid<PaginationQuery>(c, "query"),
+            );
+            return sendList(c, activity, meta, "House activity fetched successfully");
         });
     },
 
