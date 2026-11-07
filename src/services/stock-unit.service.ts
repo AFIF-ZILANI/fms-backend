@@ -51,6 +51,7 @@ export const StockUnitService = {
         const where = {
             ...(query.status !== undefined && { status: query.status }),
             ...(inHouse !== undefined && { AND: [{ id: { in: inHouse } }] }),
+            ...(query.purchase_item_id !== undefined && { purchase_item_id: query.purchase_item_id }),
             ...(query.category !== undefined && {
                 purchase_item: { item: { category: query.category } },
             }),

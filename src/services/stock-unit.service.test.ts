@@ -665,6 +665,19 @@ describe("StockUnitService", () => {
         expect(equipmentOnly.some((u) => u.id === medicineUnit!.id)).toBe(false);
     });
 
+    test("getAll purchase_item_id lists only the units bound to that lot", async () => {
+        const unit = await boundUnit();
+        const { stockUnits } = await StockUnitService.getAll({ page: 1, limit: 100, purchase_item_id: purchaseItemId });
+        expect(stockUnits.some((u) => u.id === unit.id)).toBe(true);
+        expect(stockUnits.every((u) => u.purchase_item_id === purchaseItemId)).toBe(true);
+        const other = await StockUnitService.getAll({
+            page: 1,
+            limit: 100,
+            purchase_item_id: "00000000-0000-0000-0000-000000000000",
+        });
+        expect(other.stockUnits).toHaveLength(0);
+    });
+
     test("setStatus: CONSUMED writes off the remainder and can then only be disposed; DISPOSED is final", async () => {
         const unit = await boundUnit();
         const before = await prisma.stockLedger.count({

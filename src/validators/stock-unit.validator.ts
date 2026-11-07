@@ -58,6 +58,8 @@ export const listStockUnitsQuerySchema = paginationQuerySchema.extend({
     status: stockUnitStatus.optional(),
     house_id: z.string().uuid().optional(),
     category: resourceCategorySchema.optional(),
+    // The purchase line (lot) the units are bound to -- the purchase page's per-line code list.
+    purchase_item_id: z.string().uuid().optional(),
     // Free-text search over the unit id (which IS the QR payload) -- accepts a full
     // scanned id or a fragment. Substring match, so it's not a uuid.
     q: z.string().trim().min(1).optional(),
