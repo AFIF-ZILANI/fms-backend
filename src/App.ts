@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { timeout } from "hono/timeout";
 import { rateLimiter } from "hono-rate-limiter";
+import { isScanRequest } from "@lib/scan-route";
 import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { getConnInfo } from "hono/bun";
@@ -83,6 +84,16 @@ app.use(
         windowMs: env.RATE_LIMIT_WINDOW_MS,
         limit: env.RATE_LIMIT_MAX,
         keyGenerator: clientKey,
+        skip: (c) => isScanRequest(c.req.method, c.req.path),
+    }),
+);
+app.use(
+    "*",
+    rateLimiter({
+        windowMs: env.RATE_LIMIT_WINDOW_MS,
+        limit: env.SCAN_RATE_LIMIT_MAX,
+        keyGenerator: (c) => `scan:${clientKey(c)}`,
+        skip: (c) => !isScanRequest(c.req.method, c.req.path),
     }),
 );
 

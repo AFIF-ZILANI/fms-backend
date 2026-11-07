@@ -23,6 +23,9 @@ const envSchema = z.object({
     // ── Rate Limiting ───────────────────────────────────────────────────────
     RATE_LIMIT_MAX: z.coerce.number().default(120),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+    // QR scanning (unit lookup + link/move/use) gets its own, larger bucket: a lot of 80 bottles is ~160
+    // requests in under a minute, and it must not starve the rest of the app on the same farm IP.
+    SCAN_RATE_LIMIT_MAX: z.coerce.number().default(600),
 
     // ── Security ────────────────────────────────────────────────────────────
     TIMEOUT_MS: z.coerce.number().default(30_000),
