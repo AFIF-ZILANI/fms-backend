@@ -19,6 +19,7 @@ houseRoutes.get(
     HouseController.getActivity,
 );
 houseRoutes.get("/:id/coded-stock", HouseController.getCodedStock);
+houseRoutes.get("/:id/batch-on", HouseController.getBatchOn);
 houseRoutes.post("/", zValidatorRfc7807("json", createHouseSchema), HouseController.create);
 houseRoutes.patch("/:id", zValidatorRfc7807("json", updateHouseSchema), HouseController.update);
 houseRoutes.post("/:id/deactivate", HouseController.deactivate);

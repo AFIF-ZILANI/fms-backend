@@ -727,6 +727,7 @@ model Batches {
   consumptions       Consumption[]
   expenses           Expense[]
   birdSales          BirdSale[]
+  sales              Sale[]
   feedingPrograms    BatchFeedingProgram[]
   assetDepreciations AssetDepreciation[]
   vaccineSchedules   BatchVaccineSchedule[]
@@ -1350,6 +1351,10 @@ model Sale {
   id             String     @id @default(uuid())
   customer_id    String?
   customer       Customers? @relation(fields: [customer_id], references: [id])
+  // Optional: a sale that belongs to a batch's books (litter after the flock is sold) -- counted
+  // as "other sales" income in that batch's P&L.
+  batch_id       String?
+  batch          Batches?   @relation(fields: [batch_id], references: [id])
   sale_date      DateTime
   total          Decimal    @db.Decimal(10, 2)
   paid_amount    Decimal    @db.Decimal(10, 2)
@@ -1359,6 +1364,8 @@ model Sale {
   created_at     DateTime   @default(now())
 
   items SaleItem[]
+
+  @@index([batch_id])
 }
 
 model SaleItem {
@@ -1829,9 +1836,11 @@ model IngestedSale {
 
 /// Farm-wide settings: a single row, id 1.
 model FarmSettings {
-  id             Int      @id @default(1)
+  id              Int      @id @default(1)
   /// Farm-local hour (0-6) the farm day starts at: with 4, 01:30 still belongs to the previous day.
   /// Capped at 6 so a stored date (midnight UTC = 06:00 Dhaka) never shifts to the day before.
-  day_start_hour Int      @default(0)
-  updated_at     DateTime @updatedAt
+  day_start_hour  Int      @default(0)
+  /// Days a SOLD batch stays open for late costs/income before it is finalised (CLOSED). 0-60.
+  settlement_days Int      @default(7)
+  updated_at      DateTime @updatedAt
 }

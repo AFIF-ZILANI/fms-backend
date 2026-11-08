@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertBatchOpen } from "@lib/batch-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -148,6 +149,7 @@ export function checkExpensePaid(
 
 /** The Expense row and its paid-at-create Payment, inside the caller's transaction. */
 export async function writeExpense(tx: Prisma.TransactionClient, data: ExpenseWrite) {
+    if (data.batch_id !== undefined) await assertBatchOpen(tx, data.batch_id);
     const expense = await tx.expense.create({
         data: {
             category: data.category,

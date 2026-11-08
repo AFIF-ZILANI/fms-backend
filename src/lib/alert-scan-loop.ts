@@ -1,5 +1,6 @@
 import env from "@config/env";
 import { AlertService } from "@services/alert.service";
+import { BatchService } from "@services/batch.service";
 
 /**
  * Runs the alert reconciliation on a timer.
@@ -31,6 +32,13 @@ export function startAlertScanLoop() {
             // Never let a failed scan take the server down -- it is a background
             // reminder, not part of serving a request.
             console.error("[alerts] scan failed", err);
+        }
+        // Same timer: sold batches whose settlement window has passed become final.
+        try {
+            const n = await BatchService.finalizeDue();
+            if (n > 0) console.log(`[batches] finalised ${n} batch(es) past their settlement window`);
+        } catch (err) {
+            console.error("[batches] finalize scan failed", err);
         } finally {
             running = false;
         }

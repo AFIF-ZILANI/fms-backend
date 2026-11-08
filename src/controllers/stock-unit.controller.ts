@@ -8,6 +8,7 @@ import { stockUnitProfile } from "@services/stock-unit-profile.service";
 import { getAuth } from "@middlewares/authenticate";
 import type { AuthContext } from "../types/app";
 import type {
+    AtLocationQuery,
     ProvisionStockUnitsInput,
     MarkPrintedStockUnitsInput,
     UseStockUnitInput,
@@ -52,6 +53,13 @@ export const StockUnitController = {
         return withHandler(c, async () => {
             const counts = await StockUnitService.counts();
             return sendSuccess(c, counts, "Stock unit counts fetched");
+        });
+    },
+
+    async atLocation(c: Context) {
+        return withHandler(c, async () => {
+            const units = await StockUnitService.atLocation(getValid<AtLocationQuery>(c, "query"));
+            return sendSuccess(c, { units }, "Stock units at location fetched");
         });
     },
 

@@ -56,4 +56,11 @@ export const BatchController = {
             return sendSuccess(c, batch, "Batch closed");
         });
     },
+
+    async finalize(c: Context) {
+        return withHandler(c, async () => {
+            const batch = await BatchService.finalize(c.req.param("id") ?? "", await getActorId(c));
+            return sendSuccess(c, batch, "Batch finalised");
+        });
+    },
 };

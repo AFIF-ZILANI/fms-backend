@@ -11,6 +11,8 @@ import type {
     ListBatchesQuery,
 } from "@validators/batch.validator";
 import { markEmptiedHousesCleaning } from "@lib/house-turnaround";
+import { farmDay } from "@lib/farm-day";
+import { getSettlementDays } from "@services/farm-settings.service";
 
 const include = { houseBalances: { include: { house: true } } } as const;
 
@@ -143,13 +145,8 @@ export const BatchService = {
      * requires all birds accounted for (balances sum to zero) unless
      * force:true.
      *
-     * Also fires the AssetDepreciation trigger deferred since Phase 5/6:
-     * an Asset has no direct link to a Batch, but Consumption does (batch_id
-     * + stock_unit_id together), so "which assets did this batch use" is
-     * "which Assets' StockUnits appear in this batch's Consumption rows."
-     * For each ACTIVE one, amount = purchase_cost / useful_life_batches
-     * (the formula named in inventory-tracking-design.md), written via
-     * upsert so closing is safe to retry without double-computing. */
+     * SOLD opens the settlement window (late costs/income still land); CLOSED is final straight away
+     * and charges equipment depreciation (chargeDepreciation). A SOLD batch is charged at finalize(). */
     async close(id: string, data: CloseBatchInput) {
         return prisma.$transaction(async (tx) => {
             // Claim the batch first: of two concurrent closes only one flips it from RUNNING,
@@ -205,32 +202,81 @@ export const BatchService = {
                 after: { status: data.status, birds_written_off: remaining },
             });
 
-            const usedStockUnits = await tx.consumption.findMany({
-                where: { batch_id: id, stock_unit_id: { not: null } },
-                select: { stock_unit_id: true },
-                distinct: ["stock_unit_id"],
-            });
-            const stockUnitIds = usedStockUnits
-                .map((c) => c.stock_unit_id)
-                .filter((v): v is string => v !== null);
-
-            if (stockUnitIds.length > 0) {
-                const assets = await tx.asset.findMany({
-                    where: { stock_unit_id: { in: stockUnitIds }, status: "ACTIVE" },
-                });
-                for (const asset of assets) {
-                    const amount = new Prisma.Decimal(asset.purchase_cost).dividedBy(
-                        asset.useful_life_batches,
-                    );
-                    await tx.assetDepreciation.upsert({
-                        where: { asset_id_batch_id: { asset_id: asset.id, batch_id: id } },
-                        create: { asset_id: asset.id, batch_id: id, amount },
-                        update: {},
-                    });
-                }
-            }
+            // SOLD keeps the books open for the settlement window; depreciation is charged once they close.
+            if (data.status === "CLOSED") await chargeDepreciation(tx, id);
 
             return closed;
         });
     },
+
+    /** SOLD -> CLOSED: the settlement window ends and the batch's books are final (see assertBatchOpen). */
+    async finalize(id: string, actor_id: string | null) {
+        return prisma.$transaction(async (tx) => {
+            const claimed = await tx.batches.updateMany({
+                where: { id, status: "SOLD" },
+                data: { status: "CLOSED" },
+            });
+            if (claimed.count === 0) {
+                const exists = await tx.batches.findUnique({ where: { id }, select: { status: true } });
+                if (!exists) throw AppError.notFound("Batch");
+                throw AppError.conflict(
+                    exists.status === "CLOSED" ? "Batch is already finalised" : "Only a sold batch can be finalised",
+                );
+            }
+            await chargeDepreciation(tx, id);
+            // The scan loop has no person to name; its finalise is the window ending, not a decision.
+            if (actor_id)
+                await audit(tx, {
+                    table: "Batches",
+                    record_id: id,
+                    action: "UPDATE",
+                    actor_id,
+                    note: "Batch finalised",
+                    before: { status: "SOLD" },
+                    after: { status: "CLOSED" },
+                });
+            return tx.batches.findUniqueOrThrow({ where: { id }, include });
+        });
+    },
+
+    /** Finalise every SOLD batch whose settlement window has passed. Run by the background scan loop. */
+    async finalizeDue(now = new Date(), days = getSettlementDays()) {
+        const cutoff = new Date(farmDay(now).getTime() - days * 86_400_000);
+        const due = await prisma.batches.findMany({
+            where: { status: "SOLD", actual_end_date: { lt: cutoff } },
+            select: { id: true },
+        });
+        for (const b of due) await this.finalize(b.id, null);
+        return due.length;
+    },
 };
+
+/**
+ * Charge equipment depreciation to a batch whose books are closing. An Asset has no direct link to a
+ * Batch, but Consumption does (batch_id + stock_unit_id together), so "which assets did this batch use"
+ * is "which Assets' StockUnits appear in this batch's Consumption rows." For each ACTIVE one, amount =
+ * purchase_cost / useful_life_batches (inventory-tracking-design.md), upserted so a retry never
+ * double-charges.
+ */
+async function chargeDepreciation(tx: Prisma.TransactionClient, id: string) {
+    const usedStockUnits = await tx.consumption.findMany({
+        where: { batch_id: id, stock_unit_id: { not: null } },
+        select: { stock_unit_id: true },
+        distinct: ["stock_unit_id"],
+    });
+    const stockUnitIds = usedStockUnits
+        .map((c) => c.stock_unit_id)
+        .filter((v): v is string => v !== null);
+    if (stockUnitIds.length === 0) return;
+    const assets = await tx.asset.findMany({
+        where: { stock_unit_id: { in: stockUnitIds }, status: "ACTIVE" },
+    });
+    for (const asset of assets) {
+        const amount = new Prisma.Decimal(asset.purchase_cost).dividedBy(asset.useful_life_batches);
+        await tx.assetDepreciation.upsert({
+            where: { asset_id_batch_id: { asset_id: asset.id, batch_id: id } },
+            create: { asset_id: asset.id, batch_id: id, amount },
+            update: {},
+        });
+    }
+}

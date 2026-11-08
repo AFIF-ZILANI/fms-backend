@@ -10,6 +10,8 @@ const saleItemInput = z.object({
 });
 
 export const createSaleSchema = z.object({
+    // Optional: the batch whose books this sale belongs to (litter after the flock is sold).
+    batch_id: z.string().uuid().optional(),
     customer_id: z.string().uuid().optional(),
     sale_date: z.coerce.date(),
     // Stock leaves this warehouse; the sale is refused if it holds less than is being sold.

@@ -1,5 +1,6 @@
 import prisma from "@lib/db";
 import type { Prisma } from "../../prisma/generated/prisma/client";
+import { batchForUsage } from "@lib/batch-guards";
 import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -84,6 +85,7 @@ export const ConsumptionService = {
  *  Runs inside the caller's transaction -- the vaccine confirm draws several bottles in one. */
 export async function drawConsumption(tx: Prisma.TransactionClient, data: CreateConsumptionInput) {
     await assertHouseActive(tx, data.house_id);
+    const batch_id = await batchForUsage(tx, data.house_id, data.date, data.batch_id);
     const base_quantity = await toBaseQuantity(
         tx,
         data.item_id,
@@ -166,7 +168,7 @@ export async function drawConsumption(tx: Prisma.TransactionClient, data: Create
             date: data.date,
             recorded_by_id: data.recorded_by_id,
             idempotency_key: data.idempotency_key ?? crypto.randomUUID(),
-            ...(data.batch_id !== undefined && { batch_id: data.batch_id }),
+            ...(batch_id !== undefined && { batch_id }),
             ...(data.stock_unit_id !== undefined && {
                 stock_unit_id: data.stock_unit_id,
             }),

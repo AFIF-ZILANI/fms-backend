@@ -89,6 +89,8 @@ const RULES: Rule[] = [
     // "Use an item" (start using / used up) is the coded counterpart of logging a consumption.
     { methods: POST, path: /^\/stock-units\/[^/]+\/use$/, level: "worker" },
     { methods: POST, path: /^\/stock-units\/[^/]+\/bind$/, level: "manager" },
+    // Stock count: a manager writes off a unit that went missing.
+    { methods: POST, path: /^\/stock-units\/[^/]+\/dispose$/, level: "manager" },
     // The lot picker on Link items. Manager-only like the bind it feeds: lines carry purchase data.
     { methods: GET, path: /^\/purchase-items$/, level: "manager" },
     { methods: POST, path: /^\/purchase-items\/[^/]+\/complete$/, level: "manager" },

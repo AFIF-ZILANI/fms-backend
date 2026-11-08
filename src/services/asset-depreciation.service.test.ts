@@ -149,6 +149,37 @@ describe("AssetDepreciation trigger (Batches.close)", () => {
         expect(depreciations[0]!.asset_id).toBe(assetId);
     });
 
+    test("a SOLD batch is charged when it is finalised, not when it is sold", async () => {
+        const batch = await BatchService.create({
+            batch_code: `DEP-SOLD-${crypto.randomUUID()}`,
+            breed: "CLASSIC",
+            expected_selling_date: new Date(Date.now() + 30 * 86400_000),
+            initial_chick_count: 100,
+            init_chicks_avg_wt: 40,
+            house_id: houseId,
+            recorded_by_id: profileId,
+        });
+        createdBatchIds.push(batch!.id);
+        await ConsumptionService.create({
+            batch_id: batch!.id,
+            house_id: houseId,
+            item_id: itemId,
+            stock_unit_id: stockUnitId,
+            quantity: 1,
+            unit: "UNIT",
+            date: new Date(),
+            recorded_by_id: profileId,
+        });
+        const charged = async () =>
+            (await AssetDepreciationService.getAll({ page: 1, limit: 10, batch_id: batch!.id }))
+                .depreciations.length;
+
+        await BatchService.close(batch!.id, { status: "SOLD", force: true, recorded_by_id: profileId });
+        expect(await charged()).toBe(0);
+        await BatchService.finalize(batch!.id, profileId);
+        expect(await charged()).toBe(1);
+    });
+
     test("closing a batch that never touched the asset writes no depreciation row", async () => {
         const batch = await BatchService.create({
             batch_code: `DEP-UNTOUCHED-${crypto.randomUUID()}`,

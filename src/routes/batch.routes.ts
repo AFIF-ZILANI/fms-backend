@@ -15,3 +15,4 @@ batchRoutes.get("/:id", BatchController.getById);
 batchRoutes.post("/", zValidatorRfc7807("json", createBatchSchema), BatchController.create);
 batchRoutes.patch("/:id", zValidatorRfc7807("json", updateBatchSchema), BatchController.update);
 batchRoutes.post("/:id/close", zValidatorRfc7807("json", closeBatchSchema), BatchController.close);
+batchRoutes.post("/:id/finalize", BatchController.finalize);

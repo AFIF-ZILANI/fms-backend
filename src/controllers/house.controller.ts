@@ -1,4 +1,7 @@
 import type { Context } from "hono";
+import prisma from "@lib/db";
+import { AppError } from "@lib/app-error";
+import { batchInHouseOn } from "@lib/batch-guards";
 import { withHandler } from "@lib/helper";
 import { sendSuccess, sendList } from "@lib/response";
 import { getValid } from "@lib/valid";
@@ -34,6 +37,17 @@ export const HouseController = {
                 c.req.query("include_in_use") === "true",
             );
             return sendSuccess(c, stock, "House coded stock fetched successfully");
+        });
+    },
+
+    /** The batch in this house on ?date= (YYYY-MM-DD, default today) -- the stock count's "this cost goes to". */
+    async getBatchOn(c: Context) {
+        return withHandler(c, async () => {
+            const raw = c.req.query("date");
+            const date = raw ? new Date(raw) : new Date();
+            if (Number.isNaN(date.getTime())) throw AppError.badRequest("date must be YYYY-MM-DD");
+            const batch = await batchInHouseOn(prisma, c.req.param("id") ?? "", date);
+            return sendSuccess(c, { batch }, "Batch fetched successfully");
         });
     },
 

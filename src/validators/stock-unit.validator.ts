@@ -48,6 +48,15 @@ export const useStockUnitSchema = z.object({
     batch_id: z.string().uuid().optional(),
     date: z.coerce.date(),
     idempotency_key: z.string().min(1).optional(),
+    // Stock count: move the unit into house_id first when it is recorded somewhere else.
+    move_here: z.boolean().optional(),
+});
+
+/** Stock count: every unit that should be at one place right now. */
+export const atLocationQuerySchema = z.object({
+    location_type: z.enum(["WAREHOUSE", "HOUSE"]),
+    location_id: z.string().uuid(),
+    item_id: z.string().uuid().optional(),
 });
 
 export const setStockUnitStatusSchema = z.object({
@@ -71,4 +80,5 @@ export type BindStockUnitInput = z.infer<typeof bindStockUnitSchema> & { bound_b
 export type RelocateStockUnitInput = z.infer<typeof relocateStockUnitSchema>;
 export type UseStockUnitInput = z.infer<typeof useStockUnitSchema> & { recorded_by_id: string };
 export type SetStockUnitStatusInput = z.infer<typeof setStockUnitStatusSchema>;
+export type AtLocationQuery = z.infer<typeof atLocationQuerySchema>;
 export type ListStockUnitsQuery = z.infer<typeof listStockUnitsQuerySchema>;

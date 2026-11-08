@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertBatchOpen } from "@lib/batch-guards";
 import { audit } from "@lib/audit";
 import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { Prisma } from "../../prisma/generated/prisma/client";
@@ -134,6 +135,7 @@ export const SaleService = {
 
         try {
             return await prisma.$transaction(async (tx) => {
+                if (data.batch_id !== undefined) await assertBatchOpen(tx, data.batch_id);
                 const sale = await tx.sale.create({
                     data: {
                         sale_date: data.sale_date,
@@ -144,6 +146,7 @@ export const SaleService = {
                         due_amount: total,
                         recorded_by_id: data.recorded_by_id,
                         ...(data.customer_id !== undefined && { customer_id: data.customer_id }),
+                        ...(data.batch_id !== undefined && { batch_id: data.batch_id }),
                     },
                 });
 

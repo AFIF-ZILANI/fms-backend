@@ -9,6 +9,7 @@ import {
     relocateStockUnitSchema,
     setStockUnitStatusSchema,
     listStockUnitsQuerySchema,
+    atLocationQuerySchema,
 } from "@validators/stock-unit.validator";
 
 export const stockUnitRoutes = new Hono();
@@ -19,6 +20,11 @@ stockUnitRoutes.get(
     StockUnitController.getAll,
 );
 stockUnitRoutes.get("/counts", StockUnitController.counts);
+stockUnitRoutes.get(
+    "/at-location",
+    zValidatorRfc7807("query", atLocationQuerySchema),
+    StockUnitController.atLocation,
+);
 stockUnitRoutes.get("/:id", StockUnitController.getById);
 stockUnitRoutes.get("/:id/profile", StockUnitController.profile);
 stockUnitRoutes.post(

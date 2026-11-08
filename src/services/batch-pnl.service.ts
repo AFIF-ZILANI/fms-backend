@@ -52,6 +52,7 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
         latestWeight,
         categories,
         expenseLabels,
+        otherSales,
     ] = await Promise.all([
         prisma.birdSale.findMany({
             where: { batch_id: batchId },
@@ -99,6 +100,8 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
         }),
         prisma.itemCategory.findMany({ select: { code: true, label: true } }),
         prisma.expenseCategoryLookup.findMany({ select: { code: true, label: true } }),
+        // Litter and other non-bird sales booked to this batch (often after the flock has gone).
+        prisma.sale.aggregate({ where: { batch_id: batchId }, _sum: { total: true } }),
     ]);
     const catLabel = new Map(categories.map((c) => [c.code, c.label]));
     const expLabel = new Map(expenseLabels.map((c) => [c.code, c.label]));
@@ -159,7 +162,9 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
     // ── result ──
     const gross = sales.reduce((s, x) => s.plus(x.total_amount), D(0));
     const discounts = sales.reduce((s, x) => s.plus(x.discount_amount), D(0));
-    const revenue = gross.minus(discounts);
+    const birdRevenue = gross.minus(discounts);
+    const other = D(otherSales._sum.total);
+    const revenue = birdRevenue.plus(other);
     const contribution = revenue.minus(costs);
     const net = contribution.minus(sharedTotal);
     const due = sales.reduce((s, x) => s.plus(x.due_amount), D(0)).minus(D(paid._sum.amount));
@@ -187,7 +192,12 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
             actual_end_date: batch.actual_end_date,
             age_days: cycleDay(batch.starting_date, end),
         },
-        revenue: { gross: n(gross), discounts: n(discounts), net: n(revenue) },
+        revenue: {
+            gross: n(gross),
+            discounts: n(discounts),
+            other_sales: n(other),
+            net: n(revenue),
+        },
         cost_lines: costLines,
         costs: n(costs),
         contribution: n(contribution),
@@ -209,7 +219,7 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
             cost_per_bird: placed > 0 ? n(totalCost.dividedBy(placed)) : null,
             cost_per_kg: kgProduced > 0 ? n(totalCost.dividedBy(kgProduced)) : null,
             profit_per_bird: sold > 0 ? n(net.dividedBy(sold)) : null,
-            avg_price_per_kg: kgSold > 0 ? n(revenue.dividedBy(kgSold)) : null,
+            avg_price_per_kg: kgSold > 0 ? n(birdRevenue.dividedBy(kgSold)) : null,
             fcr:
                 feedKgKnown && gainKg > 0 && feedKg > 0
                     ? Number((feedKg / gainKg).toFixed(3))

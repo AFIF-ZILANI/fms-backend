@@ -4,6 +4,7 @@ import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import { assertHouseActive } from "@lib/active-guards";
+import { batchForUsage } from "@lib/batch-guards";
 import {
     assertUnitInHouse,
     isNonDepleting,
@@ -13,6 +14,7 @@ import {
 } from "@lib/coded-stock";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
+    AtLocationQuery,
     BindStockUnitInput,
     ListStockUnitsQuery,
     SetStockUnitStatusInput,
@@ -51,7 +53,9 @@ export const StockUnitService = {
         const where = {
             ...(query.status !== undefined && { status: query.status }),
             ...(inHouse !== undefined && { AND: [{ id: { in: inHouse } }] }),
-            ...(query.purchase_item_id !== undefined && { purchase_item_id: query.purchase_item_id }),
+            ...(query.purchase_item_id !== undefined && {
+                purchase_item_id: query.purchase_item_id,
+            }),
             ...(query.category !== undefined && {
                 purchase_item: { item: { category: query.category } },
             }),
@@ -70,6 +74,45 @@ export const StockUnitService = {
             prisma.stockUnit.count({ where }),
         ]);
         return { stockUnits, meta: buildMeta(total, query) };
+    },
+
+    /** Stock count: every unit that should be physically at one place now -- BOUND or IN_USE, where its
+     *  latest allocation puts it. A house holds what was last moved into it; a warehouse holds what
+     *  never left (or was returned) from lots bought into it. Unpaginated: a count needs all of them. */
+    async atLocation(query: AtLocationQuery) {
+        const at =
+            query.location_type === "HOUSE"
+                ? Prisma.sql`cur.house_id = ${query.location_id}`
+                : Prisma.sql`cur.house_id IS NULL AND p.warehouse_id = ${query.location_id}`;
+        const item =
+            query.item_id === undefined ? Prisma.empty : Prisma.sql`AND i.id = ${query.item_id}`;
+        const rows = await prisma.$queryRaw<
+            {
+                id: string;
+                status: string;
+                item_id: string;
+                name: string;
+                category: string;
+                unit: string;
+            }[]
+        >`
+            SELECT su.id, su.status, i.id AS item_id, i.name, i.category, i.unit
+            FROM "StockUnit" su
+            JOIN "PurchaseItem" pi ON pi.id = su.purchase_item_id
+            JOIN "Purchase" p ON p.id = pi.purchase_id
+            JOIN "Item" i ON i.id = pi.item_id
+            LEFT JOIN LATERAL (
+                SELECT a.house_id FROM "StockHouseAllocation" a
+                WHERE a.stock_unit_id = su.id
+                ORDER BY a.occurred_at DESC, a.created_at DESC
+                LIMIT 1
+            ) cur ON TRUE
+            WHERE su.status IN ('BOUND', 'IN_USE') AND ${at} ${item}
+            ORDER BY i.name, su.id`;
+        return rows.map(({ item_id, name, category, unit, ...u }) => ({
+            ...u,
+            item: { id: item_id, name, category, unit },
+        }));
     },
 
     /** Per-status totals for the KPI cards -- one aggregate query so counts stay accurate no
@@ -189,131 +232,12 @@ export const StockUnitService = {
         /** Who moved it -- recorded on the transfer this posts. Falls back to whoever recorded the lot. */
         recorded_by_id?: string,
     ) {
-        const unit = await prisma.stockUnit.findUnique({
-            where: { id },
-            include: {
-                purchase_item: {
-                    include: {
-                        item: { select: { unit: true, category: true } },
-                        purchase: { select: { recorded_by_id: true, warehouse_id: true } },
-                    },
-                },
-            },
-        });
-        if (!unit) throw AppError.notFound("StockUnit");
-        // A blank code is just a sticker until it's bound to a lot; a used-up or disposed unit isn't
-        // anywhere any more. Moving either would give it a location it can't have.
-        if (unit.status === "UNASSIGNED" || unit.status === "PRINTED" || !unit.purchase_item) {
-            throw AppError.badRequest(
-                "This code isn't linked to a purchase lot yet -- bind it first",
-            );
-        }
-        if (unit.status === "DISPOSED" || unit.status === "CONSUMED") {
-            throw AppError.conflict(`StockUnit is ${unit.status.toLowerCase()}, it can't be moved`);
-        }
-
-        if (stock_transfer_id !== undefined) {
-            const transfer = await prisma.stockTransfer.findUnique({
-                where: { id: stock_transfer_id },
-            });
-            if (!transfer) throw AppError.notFound("StockTransfer");
-            if (!unit.purchase_item || transfer.item_id !== unit.purchase_item.item_id) {
-                throw AppError.badRequest(
-                    "stock_transfer_id is for a different item than this unit",
-                );
-            }
-        }
-
         try {
-            return await prisma.$transaction(async (tx) => {
-                // The unit's current house is "its latest allocation", so two relocations racing
-                // would both read the same latest row. One lock per unit makes the second wait.
-                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
-                // A unit can leave a deactivated house (that's how it's emptied) but not go into one.
-                if (house_id !== null) await assertHouseActive(tx, house_id);
-                const latest = await tx.stockHouseAllocation.findFirst({
-                    where: { stock_unit_id: id },
-                    orderBy: { occurred_at: "desc" },
-                });
-                const currentHouseId = latest?.house_id ?? null;
-
-                if (house_id === currentHouseId) {
-                    throw AppError.conflict(
-                        house_id === null
-                            ? "Unit is already at the warehouse"
-                            : "Unit is already at that house",
-                    );
-                }
-                const type: "ALLOCATION" | "REALLOCATION" | "RETURN" =
-                    house_id === null
-                        ? "RETURN"
-                        : currentHouseId === null
-                          ? "ALLOCATION"
-                          : "REALLOCATION";
-
-                // The ledger follows the unit: move what's in it from where it is to where it's going,
-                // so warehouse and house stock both see the move. Skipped when the caller already
-                // recorded the movement as a transfer of its own (the web's "link to ledger").
-                let transferId = stock_transfer_id;
-                const lot = unit.purchase_item!;
-                if (transferId === undefined) {
-                    await lockLot(tx, lot.id);
-                    const amount = await unitAmount(tx, id, lot);
-                    if (amount.greaterThan(0)) {
-                        const from = await unitLocation(tx, id, lot);
-                        // A return goes back to the warehouse its lot was bought into.
-                        const to =
-                            house_id === null
-                                ? {
-                                      location_type: "WAREHOUSE" as const,
-                                      location_id: lot.purchase.warehouse_id,
-                                  }
-                                : { location_type: "HOUSE" as const, location_id: house_id };
-                        const transfer = await tx.stockTransfer.create({
-                            data: {
-                                item_id: lot.item_id,
-                                from_location_type: from.location_type,
-                                from_location_id: from.location_id,
-                                to_location_type: to.location_type,
-                                to_location_id: to.location_id,
-                                quantity: amount,
-                                unit: lot.item.unit,
-                                base_quantity: amount,
-                                note: "Coded unit moved",
-                                recorded_by_id: recorded_by_id ?? lot.purchase.recorded_by_id,
-                                idempotency_key: `${idempotency_key}:transfer`,
-                            },
-                        });
-                        for (const [direction, at] of [
-                            ["OUT", from],
-                            ["IN", to],
-                        ] as const) {
-                            await StockLedgerService.record(tx, {
-                                item_id: lot.item_id,
-                                quantity: amount,
-                                direction,
-                                reason: "TRANSFER",
-                                ref_type: "TRANSFER",
-                                ref_id: transfer.id,
-                                location_type: at.location_type,
-                                location_id: at.location_id,
-                            });
-                        }
-                        transferId = transfer.id;
-                    }
-                }
-
-                return tx.stockHouseAllocation.create({
-                    data: {
-                        stock_unit_id: id,
-                        house_id,
-                        type,
-                        idempotency_key,
-                        ...(transferId !== undefined && { stock_transfer_id: transferId }),
-                    },
-                });
-            });
+            return await prisma.$transaction((tx) =>
+                relocateTx(tx, id, house_id, idempotency_key, stock_transfer_id, recorded_by_id),
+            );
         } catch (err) {
+            if (err instanceof AppError) throw err;
             return handlePrismaWriteError(err);
         }
     },
@@ -350,6 +274,25 @@ export const StockUnitService = {
                             : `StockUnit is ${unit.status.toLowerCase().replace("_", " ")}`,
                     );
                 }
+                // Stock count: a unit found missing elsewhere was really used here -- move it in first,
+                // in the same transaction, so the move and the use land together or not at all.
+                if (input.move_here) {
+                    const latest = await tx.stockHouseAllocation.findFirst({
+                        where: { stock_unit_id: id },
+                        orderBy: [{ occurred_at: "desc" }, { created_at: "desc" }],
+                        select: { house_id: true },
+                    });
+                    if ((latest?.house_id ?? null) !== input.house_id) {
+                        await relocateTx(
+                            tx,
+                            id,
+                            input.house_id,
+                            `${input.idempotency_key ?? crypto.randomUUID()}:move`,
+                            undefined,
+                            input.recorded_by_id,
+                        );
+                    }
+                }
                 await assertUnitInHouse(tx, id, input.house_id);
 
                 if (input.action === "START") {
@@ -361,6 +304,7 @@ export const StockUnitService = {
                     );
                 }
 
+                const batch_id = await batchForUsage(tx, input.house_id, input.date, input.batch_id);
                 await lockLot(tx, lot.id);
                 const amount = await unitAmount(tx, id, lot);
                 if (amount.greaterThan(0)) {
@@ -380,7 +324,7 @@ export const StockUnitService = {
                             date: input.date,
                             recorded_by_id: input.recorded_by_id,
                             idempotency_key: input.idempotency_key ?? crypto.randomUUID(),
-                            ...(input.batch_id !== undefined && { batch_id: input.batch_id }),
+                            ...(batch_id !== undefined && { batch_id }),
                         },
                     });
                     await StockLedgerService.record(tx, {
@@ -482,4 +426,136 @@ async function writeOffRemainder(
         ref_id: unit.id,
         ...(await unitLocation(tx, unit.id, lot)),
     });
+}
+
+/** relocate() inside the caller's transaction -- use() with move_here moves and draws in one. */
+async function relocateTx(
+    tx: Prisma.TransactionClient,
+    id: string,
+    house_id: string | null,
+    idempotency_key: string,
+    stock_transfer_id?: string,
+    recorded_by_id?: string,
+) {
+    // The unit's current house is "its latest allocation", so two relocations racing
+    // would both read the same latest row. One lock per unit makes the second wait.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+    const unit = await tx.stockUnit.findUnique({
+        where: { id },
+        include: {
+            purchase_item: {
+                include: {
+                    item: { select: { unit: true, category: true } },
+                    purchase: { select: { recorded_by_id: true, warehouse_id: true } },
+                },
+            },
+        },
+    });
+    if (!unit) throw AppError.notFound("StockUnit");
+    // A blank code is just a sticker until it's bound to a lot; a used-up or disposed unit isn't
+    // anywhere any more. Moving either would give it a location it can't have.
+    if (unit.status === "UNASSIGNED" || unit.status === "PRINTED" || !unit.purchase_item) {
+        throw AppError.badRequest("This code isn't linked to a purchase lot yet -- bind it first");
+    }
+    if (unit.status === "DISPOSED" || unit.status === "CONSUMED") {
+        throw AppError.conflict(`StockUnit is ${unit.status.toLowerCase()}, it can't be moved`);
+    }
+
+    if (stock_transfer_id !== undefined) {
+        const transfer = await tx.stockTransfer.findUnique({
+            where: { id: stock_transfer_id },
+        });
+        if (!transfer) throw AppError.notFound("StockTransfer");
+        if (!unit.purchase_item || transfer.item_id !== unit.purchase_item.item_id) {
+            throw AppError.badRequest("stock_transfer_id is for a different item than this unit");
+        }
+    }
+
+    {
+        {
+            // A unit can leave a deactivated house (that's how it's emptied) but not go into one.
+            if (house_id !== null) await assertHouseActive(tx, house_id);
+            const latest = await tx.stockHouseAllocation.findFirst({
+                where: { stock_unit_id: id },
+                orderBy: { occurred_at: "desc" },
+            });
+            const currentHouseId = latest?.house_id ?? null;
+
+            if (house_id === currentHouseId) {
+                throw AppError.conflict(
+                    house_id === null
+                        ? "Unit is already at the warehouse"
+                        : "Unit is already at that house",
+                );
+            }
+            const type: "ALLOCATION" | "REALLOCATION" | "RETURN" =
+                house_id === null
+                    ? "RETURN"
+                    : currentHouseId === null
+                      ? "ALLOCATION"
+                      : "REALLOCATION";
+
+            // The ledger follows the unit: move what's in it from where it is to where it's going,
+            // so warehouse and house stock both see the move. Skipped when the caller already
+            // recorded the movement as a transfer of its own (the web's "link to ledger").
+            let transferId = stock_transfer_id;
+            const lot = unit.purchase_item!;
+            if (transferId === undefined) {
+                await lockLot(tx, lot.id);
+                const amount = await unitAmount(tx, id, lot);
+                if (amount.greaterThan(0)) {
+                    const from = await unitLocation(tx, id, lot);
+                    // A return goes back to the warehouse its lot was bought into.
+                    const to =
+                        house_id === null
+                            ? {
+                                  location_type: "WAREHOUSE" as const,
+                                  location_id: lot.purchase.warehouse_id,
+                              }
+                            : { location_type: "HOUSE" as const, location_id: house_id };
+                    const transfer = await tx.stockTransfer.create({
+                        data: {
+                            item_id: lot.item_id,
+                            from_location_type: from.location_type,
+                            from_location_id: from.location_id,
+                            to_location_type: to.location_type,
+                            to_location_id: to.location_id,
+                            quantity: amount,
+                            unit: lot.item.unit,
+                            base_quantity: amount,
+                            note: "Coded unit moved",
+                            recorded_by_id: recorded_by_id ?? lot.purchase.recorded_by_id,
+                            idempotency_key: `${idempotency_key}:transfer`,
+                        },
+                    });
+                    for (const [direction, at] of [
+                        ["OUT", from],
+                        ["IN", to],
+                    ] as const) {
+                        await StockLedgerService.record(tx, {
+                            item_id: lot.item_id,
+                            quantity: amount,
+                            direction,
+                            reason: "TRANSFER",
+                            ref_type: "TRANSFER",
+                            ref_id: transfer.id,
+                            location_type: at.location_type,
+                            location_id: at.location_id,
+                        });
+                    }
+                    transferId = transfer.id;
+                }
+            }
+
+            return tx.stockHouseAllocation.create({
+                data: {
+                    stock_unit_id: id,
+                    house_id,
+                    type,
+                    idempotency_key,
+                    ...(transferId !== undefined && { stock_transfer_id: transferId }),
+                },
+            });
+        }
+    }
 }
