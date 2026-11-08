@@ -1,4 +1,5 @@
 import prisma from "@lib/db";
+import { assertBatchOpen } from "@lib/batch-guards";
 import { audit } from "@lib/audit";
 import { recordPaidAtCreate, requirePaidInstrument } from "@lib/paid-at-create";
 import { Prisma } from "../../prisma/generated/prisma/client";
@@ -144,6 +145,8 @@ export const PurchaseService = {
                 });
 
                 for (const item of itemsWithTotals) {
+                    // Chicks bought onto a batch are its cost; a finalised batch takes no more.
+                    if (item.batch_id !== undefined) await assertBatchOpen(tx, item.batch_id);
                     const base_quantity = await toBaseQuantity(
                         tx,
                         item.item_id,
