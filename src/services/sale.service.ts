@@ -15,6 +15,8 @@ import type {
     SalesSummaryQuery,
 } from "@validators/sale.validator";
 
+const WASTE_CATEGORY = "WASTE";
+
 const include = { items: { include: { item: true } }, customer: true } as const;
 
 function buildWhere(query: SalesSummaryQuery) {
@@ -93,15 +95,27 @@ export const SaleService = {
 
     /** Posts a StockLedger OUT per line from the chosen warehouse, in the sale's own transaction. Lines of the
      * same item are checked together so two half-lines can't each pass and overdraw. Coded (unit-tracked) items
-     * leave the ledger here too; their StockUnit status is still a manual step (ponytail: no unit picker on sales). */
+     * leave the ledger here too; their StockUnit status is still a manual step (ponytail: no unit picker on sales).
+     * WASTE items (litter) are farm by-products that were never stocked -- they are sold without touching the ledger,
+     * and a sale of only waste needs no warehouse. */
     async deductStock(tx: Prisma.TransactionClient, sale_id: string, data: CreateSaleInput) {
+        const waste = new Set(
+            (await tx.item.findMany({
+                where: { id: { in: data.items.map((line) => line.item_id) }, category: WASTE_CATEGORY },
+                select: { id: true },
+            })).map((item) => item.id),
+        );
         const needed = new Map<string, Prisma.Decimal>();
         for (const line of data.items) {
+            if (waste.has(line.item_id)) continue;
             const base = await toBaseQuantity(tx, line.item_id, line.unit, line.quantity, "USABLE");
             needed.set(line.item_id, (needed.get(line.item_id) ?? new Prisma.Decimal(0)).plus(base));
         }
+        if (needed.size === 0) return;
+        const warehouse_id = data.warehouse_id;
+        if (warehouse_id === undefined) throw AppError.badRequest("Choose the warehouse the stock comes from");
         for (const [item_id, quantity] of needed) {
-            const available = await getItemLocationBalance(tx, item_id, "WAREHOUSE", data.warehouse_id);
+            const available = await getItemLocationBalance(tx, item_id, "WAREHOUSE", warehouse_id);
             if (available.lessThan(quantity)) {
                 throw AppError.conflict(`Only ${available.toString()} of this item is in stock at that warehouse`);
             }
@@ -113,7 +127,7 @@ export const SaleService = {
                 ref_type: "SALE",
                 ref_id: sale_id,
                 location_type: "WAREHOUSE",
-                location_id: data.warehouse_id,
+                location_id: warehouse_id,
             });
         }
     },

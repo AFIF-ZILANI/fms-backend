@@ -14,8 +14,9 @@ export const createSaleSchema = z.object({
     batch_id: z.string().uuid().optional(),
     customer_id: z.string().uuid().optional(),
     sale_date: z.coerce.date(),
-    // Stock leaves this warehouse; the sale is refused if it holds less than is being sold.
-    warehouse_id: z.string().uuid(),
+    // Stock leaves this warehouse; the sale is refused if it holds less than is being sold. Not needed when
+    // every line is a WASTE item (litter), which is sold without stock.
+    warehouse_id: z.string().uuid().optional(),
     paid_amount: z.coerce.number().nonnegative().default(0),
     // Required when paid_amount > 0: which of the farm's accounts the money went into.
     paid_to_instrument_id: z.string().uuid().optional(),

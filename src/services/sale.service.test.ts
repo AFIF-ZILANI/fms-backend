@@ -248,4 +248,35 @@ describe("SaleService stock", () => {
         ).rejects.toMatchObject({ status: 409 });
         expect(await onHand()).toBe(6);
     });
+
+    test("litter (a WASTE item) sells with no warehouse and no stock; mixed with stock it still needs one", async () => {
+        const litter = (
+            await prisma.item.create({
+                data: {
+                    name: `Litter ${crypto.randomUUID()}`,
+                    normalized_key: `litter ${crypto.randomUUID()}`,
+                    category: "WASTE",
+                    unit: "KG",
+                },
+            })
+        ).id;
+        try {
+            const litterLine = { item_id: litter, quantity: 500, unit: "KG", unit_price: 2 };
+            const s = await sell(0, { warehouse_id: undefined, items: [litterLine] });
+            saleIds.push(s!.id);
+            expect(s!.total.toNumber()).toBe(1000);
+            expect(await prisma.stockLedger.count({ where: { ref_id: s!.id } })).toBe(0);
+
+            await expect(
+                sell(0, {
+                    warehouse_id: undefined,
+                    items: [litterLine, { item_id: item, quantity: 1, unit: "BAG", unit_price: 10 }],
+                }),
+            ).rejects.toMatchObject({ status: 400 });
+            expect(await onHand()).toBe(6);
+        } finally {
+            await prisma.saleItem.deleteMany({ where: { item_id: litter } });
+            await prisma.item.delete({ where: { id: litter } });
+        }
+    });
 });
