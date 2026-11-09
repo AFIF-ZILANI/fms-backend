@@ -46,6 +46,8 @@ const READ_ANY = [
     "environment-records",
     "consumptions",
     "batch-feeding-programs",
+    "disease-cases",
+    "diseases",
     // The treatment form's "which vet prescribed it" picker.
     "doctors",
 ];

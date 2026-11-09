@@ -7,6 +7,7 @@ export const createMedicationSchema = z.object({
     medicine_name: z.string().min(1, "Medicine name is required"),
     dosage: z.string().min(1, "Dosage is required"),
     cause: z.string().optional(),
+    disease_case_id: z.string().uuid().optional(),
     period: z.string().optional(),
     doctor_id: z.string().uuid().optional(),
     remarks: z.string().optional(),
