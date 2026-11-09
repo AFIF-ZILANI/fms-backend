@@ -1,5 +1,6 @@
 import prisma from "@lib/db";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
+import { assertCaseOfBatch } from "@services/disease-case.service";
 import { toSkipTake, buildMeta } from "@lib/pagination";
 import type { CreateMedicationInput, ListMedicationsQuery } from "@validators/medication.validator";
 
@@ -19,6 +20,8 @@ export const MedicationService = {
 
     async create(data: CreateMedicationInput) {
         try {
+            if (data.disease_case_id !== undefined)
+                await assertCaseOfBatch(prisma, data.disease_case_id, data.batch_id);
             return await prisma.medications.create({
                 data: {
                     batch_id: data.batch_id,
@@ -30,6 +33,7 @@ export const MedicationService = {
                         consumption_id: data.consumption_id,
                     }),
                     ...(data.cause !== undefined && { cause: data.cause }),
+                    ...(data.disease_case_id !== undefined && { disease_case_id: data.disease_case_id }),
                     ...(data.period !== undefined && { period: data.period }),
                     ...(data.doctor_id !== undefined && { doctor_id: data.doctor_id }),
                     ...(data.remarks !== undefined && { remarks: data.remarks }),

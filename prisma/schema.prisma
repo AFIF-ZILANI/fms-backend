@@ -534,6 +534,7 @@ model Profiles {
   vaccinationsGiven       Vaccinations[]
   vaccinesConfirmed       BatchVaccineSchedule[]
   vaccineHouseConfirms    BatchVaccineHouseConfirm[]
+  diseaseCasesRecorded    DiseaseCase[]
   auditLogs               AuditLog[]
   tasksAssigned           EmployeeTaskAssignment[]
   stockUnitsBound         StockUnit[]
@@ -658,6 +659,7 @@ model Doctors {
 
   medications  Medications[]
   vaccinations Vaccinations[]
+  diseaseCases DiseaseCase[]
 }
 
 model Avatars {
@@ -696,6 +698,7 @@ model Houses {
   birdSaleHouses        BirdSaleHouse[]
   taskAssignments       EmployeeTaskAssignment[]
   vaccineConfirms       BatchVaccineHouseConfirm[]
+  diseaseCases          DiseaseCase[]
 
   // Numbers repeat across types on this farm (Brooder 1 and Grower 1 are different sheds) but never
   // within one. Also serves lookups by type, so no separate index on it.
@@ -731,6 +734,7 @@ model Batches {
   feedingPrograms    BatchFeedingProgram[]
   assetDepreciations AssetDepreciation[]
   vaccineSchedules   BatchVaccineSchedule[]
+  diseaseCases       DiseaseCase[]
 
   @@index([status])
 }
@@ -778,18 +782,20 @@ model BatchHouseBalance {
 }
 
 model MortalityLog {
-  id              String   @id @default(uuid())
+  id              String       @id @default(uuid())
   batch_id        String
-  batch           Batches  @relation(fields: [batch_id], references: [id])
+  batch           Batches      @relation(fields: [batch_id], references: [id])
   house_id        String
-  house           Houses   @relation(fields: [house_id], references: [id])
+  house           Houses       @relation(fields: [house_id], references: [id])
   count_died      Int
   cause_note      String?
+  disease_case_id String? // the outbreak these birds died of, if known
+  disease_case    DiseaseCase? @relation(fields: [disease_case_id], references: [id], onDelete: SetNull)
   date            DateTime
   recorded_by_id  String
-  recorded_by     Profiles @relation(fields: [recorded_by_id], references: [id])
-  created_at      DateTime @default(now())
-  idempotency_key String   @unique // client-generated; prevents double-insert on offline sync retry
+  recorded_by     Profiles     @relation(fields: [recorded_by_id], references: [id])
+  created_at      DateTime     @default(now())
+  idempotency_key String       @unique // client-generated; prevents double-insert on offline sync retry
 
   @@index([batch_id])
   @@index([house_id, date])
@@ -1038,6 +1044,8 @@ model Medications {
   medicine_name      String // kept for quick display / manual entries even without a linked consumption
   dosage             String
   cause              String?
+  disease_case_id    String? // the outbreak this treated
+  disease_case       DiseaseCase? @relation(fields: [disease_case_id], references: [id], onDelete: SetNull)
   period             String?
   administered_by_id String // any Profile, not just Admins — workers/managers administer treatment day to day
   administered_by    Profiles     @relation(fields: [administered_by_id], references: [id])
@@ -1111,6 +1119,74 @@ model VaccinePurpose {
 
   templateEntries VaccineTemplateEntry[]
   schedules       BatchVaccineSchedule[]
+}
+
+// What a batch fell sick with (Newcastle, Gumboro, CRD...) -- a lookup managed in Settings, so cases
+// across batches can be compared by disease.
+model Disease {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  label      String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  cases DiseaseCase[]
+}
+
+enum DiseaseCaseStatus {
+  ACTIVE
+  RESOLVED
+}
+
+enum DiseaseSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DiagnosisMethod {
+  FIELD
+  POST_MORTEM
+  LAB
+}
+
+enum DiseaseOutcome {
+  RECOVERED
+  CULLED
+  SOLD_EARLY
+}
+
+// One outbreak of one disease in one batch (docs/superpowers/specs/2026-11-09-batch-disease-cases-design.md).
+// Treatments and deaths point here through Medications/MortalityLog.disease_case_id.
+model DiseaseCase {
+  id               String            @id @default(uuid())
+  batch_id         String
+  batch            Batches           @relation(fields: [batch_id], references: [id])
+  disease_id       String
+  disease          Disease           @relation(fields: [disease_id], references: [id], onDelete: Restrict)
+  houses           Houses[]
+  status           DiseaseCaseStatus @default(ACTIVE)
+  severity         DiseaseSeverity
+  symptoms         String[]          @default([])
+  affected_count   Int?
+  diagnosis_method DiagnosisMethod
+  doctor_id        String?
+  doctor           Doctors?          @relation(fields: [doctor_id], references: [id])
+  noticed_on       DateTime
+  resolved_on      DateTime?
+  outcome          DiseaseOutcome?
+  notes            String?
+  recorded_by_id   String
+  recorded_by      Profiles          @relation(fields: [recorded_by_id], references: [id])
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @updatedAt
+
+  medications   Medications[]
+  mortalityLogs MortalityLog[]
+
+  @@index([batch_id])
+  @@index([status])
 }
 
 model VaccineTemplate {

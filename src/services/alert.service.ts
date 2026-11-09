@@ -412,6 +412,32 @@ async function checkSellingDates(): Promise<Raised> {
     return raised;
 }
 
+/** One alert per open disease case on a running batch, so everyone in the sheds knows to take care.
+ *  HIGH severity is critical. Clears when the case is resolved or the batch ends. Field + admin. */
+async function checkActiveDiseases(): Promise<Raised> {
+    const raised: Raised = new Set();
+    const cases = await prisma.diseaseCase.findMany({
+        where: { status: "ACTIVE", batch: { status: "RUNNING" } },
+        include: {
+            disease: true,
+            batch: true,
+            houses: { select: { name: true }, orderBy: { name: "asc" } },
+        },
+    });
+    for (const c of cases) {
+        await raise(raised, {
+            type: "BATCH",
+            level: c.severity === "HIGH" ? "CRITICAL" : "WARNING",
+            title: `${c.batch.batch_code}: ${c.disease.label} (${c.severity.toLowerCase()})`,
+            description: `In ${c.houses.map((h) => h.name).join(", ")} since ${c.noticed_on.toISOString().slice(0, 10)}`,
+            related_id: c.batch_id,
+            audience: AUDIENCE.FIELD,
+            key: `DISEASE:${c.id}`,
+        });
+    }
+    return raised;
+}
+
 /** Every alert family the scan owns: its key prefix and the check that raises it. A family whose
  *  check threw is left alone -- better a stale alert than resolving what we couldn't verify. */
 const FAMILIES: [prefix: string, check: () => Promise<Raised>][] = [
@@ -426,6 +452,7 @@ const FAMILIES: [prefix: string, check: () => Promise<Raised>][] = [
     ["LOG_MISSING:", checkDailyLogs],
     ["TASK_OVERDUE:", checkOverdueTasks],
     ["SELLING_DATE:", checkSellingDates],
+    ["DISEASE:", checkActiveDiseases],
 ];
 
 /** Resolves ACTIVE alerts in a family that this scan no longer raised: the stock came in, the reading
