@@ -37,7 +37,8 @@ export const ConsumptionService = {
                 include: {
                     batch: true,
                     house: true,
-                    item: true,
+                    // With its unit conversions, so clients can read feed in bags ("3 Bag 20 kg").
+                    item: { include: { itemUnits: true } },
                     stock_unit: true,
                     recorded_by: { select: { id: true, name: true } },
                 },
