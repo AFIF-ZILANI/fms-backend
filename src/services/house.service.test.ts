@@ -330,4 +330,24 @@ describe("HouseService", () => {
         await prisma.stockLedger.deleteMany({ where: { item_id: item.id } });
         await prisma.item.delete({ where: { id: item.id } });
     });
+
+    test("water line: joining moves a house off its old line, and a line of one dissolves", async () => {
+        const [a, b, c] = await Promise.all(
+            ["Line A", "Line B", "Line C"].map((name) =>
+                HouseService.create({ name, type: "GROWER", number: houseNumber() }),
+            ),
+        );
+        createdIds.push(a!.id, b!.id, c!.id);
+        const lineOf = async (id: string) =>
+            (await prisma.houses.findUniqueOrThrow({ where: { id } })).water_line;
+
+        await HouseService.update(a!.id, { shares_water_with: [b!.id] });
+        expect(await lineOf(a!.id)).not.toBeNull();
+        expect(await lineOf(a!.id)).toBe(await lineOf(b!.id));
+
+        // C joins A: A leaves B's line, B is alone, so B is off any line.
+        await HouseService.update(c!.id, { shares_water_with: [a!.id] });
+        expect(await lineOf(c!.id)).toBe(await lineOf(a!.id));
+        expect(await lineOf(b!.id)).toBeNull();
+    });
 });

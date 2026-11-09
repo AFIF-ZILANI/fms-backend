@@ -9,6 +9,7 @@ import {
 import { BatchVaccineScheduleService as S } from "./batch-vaccine-schedule.service";
 import { VaccineTemplateService } from "./vaccine-template.service";
 import { StockUnitService } from "./stock-unit.service";
+import { HouseService } from "./house.service";
 
 let houseId: string;
 let houseYId: string;
@@ -364,5 +365,36 @@ describe("BatchVaccineScheduleService", () => {
         await confirm(first.id, houseId, [b]);
         const second = await row(5);
         await expect(confirm(second.id, houseId, [b])).rejects.toThrow("already consumed");
+    });
+
+    test("houses on one water line are confirmed together from one bottle", async () => {
+        await prisma.batchHouseBalance.updateMany({
+            where: { batch_id: batchId, house_id: houseYId },
+            data: { quantity: 400 },
+        });
+        await HouseService.update(houseId, { shares_water_with: [houseYId] });
+        try {
+            const r = await row(5);
+            const done = await confirm(r.id, houseId, [await bottle(houseId)]);
+            expect(done.status).toBe("DONE");
+            const y = await prisma.batchVaccineHouseConfirm.findUniqueOrThrow({
+                where: { schedule_id_house_id: { schedule_id: r.id, house_id: houseYId } },
+            });
+            expect(y.via_house_id).toBe(houseId);
+            // Only X's bottle was drawn; Y drank from the same line.
+            expect(
+                await prisma.consumption.count({
+                    where: { house_id: houseYId, date: { gte: y.confirmed_at } },
+                }),
+            ).toBe(0);
+        } finally {
+            // Taking X off the line leaves Y alone on it, which dissolves the line.
+            await HouseService.update(houseId, { shares_water_with: [] });
+        }
+        const lines = await prisma.houses.findMany({
+            where: { id: { in: [houseId, houseYId] } },
+            select: { water_line: true },
+        });
+        expect(lines.every((h) => h.water_line === null)).toBe(true);
     });
 });

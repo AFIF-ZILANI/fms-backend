@@ -12,7 +12,11 @@ export const createHouseSchema = z.object({
 });
 
 // phase is update-only -- a new house always starts READY.
-export const updateHouseSchema = createHouseSchema.partial().extend({ phase: housePhase.optional() });
+export const updateHouseSchema = createHouseSchema.partial().extend({
+    phase: housePhase.optional(),
+    // The other houses on this house's drinking-water line; [] takes it off its line.
+    shares_water_with: z.array(z.string().uuid()).max(20).optional(),
+});
 
 export const listHousesQuerySchema = paginationQuerySchema.extend({
     type: houseType.optional(),

@@ -40,6 +40,7 @@ const include = {
             house_id: true,
             confirmed_at: true,
             confirmed_by: { select: { id: true, name: true } },
+            via_house: { select: { id: true, name: true } },
         },
     },
 } satisfies Prisma.BatchVaccineScheduleInclude;
@@ -52,7 +53,7 @@ const occupiedHouses = async (db: Db, batch_id: string) =>
     (
         await db.batchHouseBalance.findMany({
             where: { batch_id, quantity: { gt: 0 } },
-            select: { house: { select: { id: true, name: true } } },
+            select: { house: { select: { id: true, name: true, water_line: true } } },
             orderBy: { house: { name: "asc" } },
         })
     ).map((b) => b.house);
@@ -308,7 +309,9 @@ export const BatchVaccineScheduleService = {
 
     /** The worker's one action, for the house they're in: every scanned bottle (all in that house) is used
      *  up there -- drawn in full and marked CONSUMED -- one Vaccinations row per bottle, and the house is marked confirmed. The row goes DONE once
-     *  every house the batch occupies has confirmed. All or nothing. */
+     *  every house the batch occupies has confirmed. All or nothing.
+     *  Houses on the same drinking-water line as this one drank the same water, so they are confirmed with it
+     *  (via_house_id = this house); their bottle count is already in this house's draw. */
     async confirm(id: string, data: ConfirmVaccineInput, actor_id: string) {
         return run(async (tx) => {
             const row = await lockRow(tx, id);
@@ -425,7 +428,31 @@ export const BatchVaccineScheduleService = {
                     confirm_key: data.idempotency_key,
                 },
             });
-            const done = new Set([...confirmed.map((c) => c.house_id), house.id]);
+            const sharing = house.water_line
+                ? occupied.filter(
+                      (h) =>
+                          h.id !== house.id &&
+                          h.water_line === house.water_line &&
+                          !confirmed.some((c) => c.house_id === h.id),
+                  )
+                : [];
+            for (const h of sharing) {
+                await tx.batchVaccineHouseConfirm.create({
+                    data: {
+                        schedule_id: id,
+                        house_id: h.id,
+                        via_house_id: house.id,
+                        confirmed_by_id: actor_id,
+                        confirmed_at: now,
+                        confirm_key: `${data.idempotency_key}:via:${h.id}`,
+                    },
+                });
+            }
+            const done = new Set([
+                ...confirmed.map((c) => c.house_id),
+                house.id,
+                ...sharing.map((h) => h.id),
+            ]);
             if (occupied.every((h) => done.has(h.id)))
                 await tx.batchVaccineSchedule.update({
                     where: { id },

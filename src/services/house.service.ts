@@ -9,6 +9,40 @@ import type {
     ListHousesQuery,
 } from "@validators/house.validator";
 
+/**
+ * Puts `id` on one drinking-water line with `others` (or takes it off its line when `others` is empty).
+ * Each house is on at most one line, so joining moves a house off its old one, and a line left with a single
+ * house is dissolved -- one house alone shares water with nobody.
+ */
+async function setWaterLine(id: string, others: string[]) {
+    const members = [...new Set([id, ...others])];
+    await prisma.$transaction(async (tx) => {
+        const found = await tx.houses.findMany({
+            where: { id: { in: members } },
+            select: { id: true, water_line: true },
+        });
+        if (found.length !== members.length) throw AppError.notFound("House");
+        const oldLines = [...new Set(found.map((h) => h.water_line).filter((l) => l !== null))];
+
+        if (others.filter((o) => o !== id).length === 0) {
+            await tx.houses.update({ where: { id }, data: { water_line: null } });
+        } else {
+            await tx.houses.updateMany({
+                where: { id: { in: members } },
+                data: { water_line: crypto.randomUUID() },
+            });
+        }
+        for (const line of oldLines) {
+            const left = await tx.houses.findMany({
+                where: { water_line: line },
+                select: { id: true },
+            });
+            if (left.length === 1)
+                await tx.houses.update({ where: { id: left[0]!.id }, data: { water_line: null } });
+        }
+    });
+}
+
 export const HouseService = {
     /**
      * Each house carries its current occupants so the houses table can show the
@@ -218,12 +252,20 @@ export const HouseService = {
         const house = await prisma.houses.findUnique({ where: { id } });
         if (!house) throw AppError.notFound("House");
 
-        const { name, type, number, capacity, phase } = data;
-        if (!name && !type && number === undefined && capacity === undefined && !phase) {
+        const { name, type, number, capacity, phase, shares_water_with } = data;
+        if (
+            !name &&
+            !type &&
+            number === undefined &&
+            capacity === undefined &&
+            !phase &&
+            !shares_water_with
+        ) {
             throw AppError.badRequest("No update fields provided");
         }
 
         try {
+            if (shares_water_with) await setWaterLine(id, shares_water_with);
             return await prisma.houses.update({
                 where: { id },
                 data: {

@@ -683,6 +683,9 @@ model Houses {
   capacity   Int? // max birds this house can hold; null = no limit tracked
   phase      HousePhase @default(READY) // operator-set turnaround stage; only meaningful while the house is empty
   is_active  Boolean    @default(true) // never hard-delete -- mortality/allocation/environment history attaches once a batch runs through it
+  // Houses with the same value share one drinking-water line (auto drinkers fed from one tank): medicine or a
+  // vaccine put in the water reaches all of them. A standing property of the sheds, set on the Houses page.
+  water_line String?
   created_at DateTime   @default(now())
   updated_at DateTime   @updatedAt
 
@@ -697,7 +700,8 @@ model Houses {
   inventoryAdjustments  InventoryAdjustment[]
   birdSaleHouses        BirdSaleHouse[]
   taskAssignments       EmployeeTaskAssignment[]
-  vaccineConfirms       BatchVaccineHouseConfirm[]
+  vaccineConfirms       BatchVaccineHouseConfirm[] @relation("ConfirmHouse")
+  vaccineConfirmsVia    BatchVaccineHouseConfirm[] @relation("ConfirmVia")
   diseaseCases          DiseaseCase[]
 
   // Numbers repeat across types on this farm (Brooder 1 and Grower 1 are different sheds) but never
@@ -1250,7 +1254,10 @@ model BatchVaccineHouseConfirm {
   schedule_id     String
   schedule        BatchVaccineSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
   house_id        String
-  house           Houses               @relation(fields: [house_id], references: [id])
+  house           Houses               @relation("ConfirmHouse", fields: [house_id], references: [id])
+  // Set when this house was vaccinated through another house's water line: the bottle was given there.
+  via_house_id    String?
+  via_house       Houses?              @relation("ConfirmVia", fields: [via_house_id], references: [id])
   confirmed_by_id String
   confirmed_by    Profiles             @relation(fields: [confirmed_by_id], references: [id])
   confirmed_at    DateTime             @default(now())
