@@ -1484,7 +1484,8 @@ model SaleItem {
   // CODED lines: quantity = number of bottles and unit = null (each scanned bottle carries its own size).
   quantity    Decimal @db.Decimal(10, 3)
   unit        String?
-  unitRef     Unit?   @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  // Restrict, like every other reference to Unit: lookup-factory's remove() relies on it to refuse deleting a unit in use.
+  unitRef     Unit?   @relation(fields: [unit], references: [code], onDelete: Restrict, onUpdate: Cascade)
   unit_price  Decimal @db.Decimal(10, 2)
   total_price Decimal @db.Decimal(10, 2)
 

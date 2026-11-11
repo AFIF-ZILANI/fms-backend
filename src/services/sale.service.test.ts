@@ -2,10 +2,17 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { SaleService } from "./sale.service";
 import { AppError } from "@lib/app-error";
-import { sharedInstrumentId, sharedWarehouseId, seedStock, purgeAuditLog } from "@lib/test-fixtures";
+import {
+    sharedInstrumentId,
+    sharedWarehouseId,
+    seedStock,
+    purgeAuditLog,
+} from "@lib/test-fixtures";
 import { PaymentService } from "./payment.service";
 import { getItemLocationBalance } from "@lib/stock-balance";
 import { SaleScanService } from "./sale-scan.service";
+import { createLookupService } from "@lib/lookup-factory";
+import { createSaleSchema } from "@validators/sale.validator";
 
 let itemId: string;
 let warehouseId: string;
@@ -85,7 +92,7 @@ describe("SaleService", () => {
     test("paid_amount exceeding total throws bad-request", async () => {
         await expect(
             SaleService.create({
-            kind: "STOCK",
+                kind: "STOCK",
                 sale_date: new Date(),
                 warehouse_id: warehouseId,
                 paid_amount: 9999,
@@ -270,7 +277,11 @@ describe("SaleService stock", () => {
         ).id;
         try {
             const litterLine = { item_id: litter, quantity: 500, unit: "KG", unit_price: 2 };
-            const s = await sell(0, { kind: "FARM_MADE", warehouse_id: undefined, items: [litterLine] });
+            const s = await sell(0, {
+                kind: "FARM_MADE",
+                warehouse_id: undefined,
+                items: [litterLine],
+            });
             saleIds.push(s!.id);
             expect(s!.kind).toBe("FARM_MADE");
             expect(s!.total.toNumber()).toBe(1000);
@@ -281,7 +292,10 @@ describe("SaleService stock", () => {
                 sell(0, {
                     kind: "FARM_MADE",
                     warehouse_id: undefined,
-                    items: [litterLine, { item_id: item, quantity: 1, unit: "BAG", unit_price: 10 }],
+                    items: [
+                        litterLine,
+                        { item_id: item, quantity: 1, unit: "BAG", unit_price: 10 },
+                    ],
                 }),
             ).rejects.toMatchObject({ status: 400 });
             expect(await onHand()).toBe(6);
@@ -323,7 +337,11 @@ describe("SaleService kinds", () => {
                 },
             })
             .then((i) => i.id);
-    const sell = (kind: string, lines: Record<string, unknown>[], over: Record<string, unknown> = {}) =>
+    const sell = (
+        kind: string,
+        lines: Record<string, unknown>[],
+        over: Record<string, unknown> = {},
+    ) =>
         SaleService.create({
             kind,
             sale_date: new Date(),
@@ -351,7 +369,11 @@ describe("SaleService kinds", () => {
         items.coded = await newItem({ category: "MEDICINE", unit: "LITER", is_unit_tracked: true });
         items.plain = await newItem({ category: "FEED", unit: "KG" });
         items.farm = await newItem({ category: "WASTE", unit: "KG", is_farm_made: true });
-        items.equipment = await newItem({ category: "EQUIPMENT", unit: "UNIT", is_unit_tracked: true });
+        items.equipment = await newItem({
+            category: "EQUIPMENT",
+            unit: "UNIT",
+            is_unit_tracked: true,
+        });
         await seedStock(items.plain, wh, 100);
         purchaseId = (
             await prisma.purchase.create({
@@ -383,7 +405,10 @@ describe("SaleService kinds", () => {
                 },
             });
             await prisma.stockUnit.createMany({
-                data: Array.from({ length: count }, () => ({ purchase_item_id: lot.id, status: "BOUND" as const })),
+                data: Array.from({ length: count }, () => ({
+                    purchase_item_id: lot.id,
+                    status: "BOUND" as const,
+                })),
             });
         }
     });
@@ -392,7 +417,9 @@ describe("SaleService kinds", () => {
         const all = Object.values(items);
         await prisma.saleItem.deleteMany({ where: { sale_id: { in: saleIds } } });
         await prisma.sale.deleteMany({ where: { id: { in: saleIds } } });
-        await prisma.stockUnit.deleteMany({ where: { purchase_item: { purchase_id: purchaseId } } });
+        await prisma.stockUnit.deleteMany({
+            where: { purchase_item: { purchase_id: purchaseId } },
+        });
         await prisma.purchaseItem.deleteMany({ where: { purchase_id: purchaseId } });
         await prisma.purchase.delete({ where: { id: purchaseId } });
         await prisma.stockLedger.deleteMany({ where: { item_id: { in: all } } });
@@ -424,10 +451,14 @@ describe("SaleService kinds", () => {
         expect(s.warehouse_id).toBeNull();
         expect(s.items[0]!.unit).toBeNull();
         expect(s.total.toNumber()).toBe(100);
-        expect(await prisma.stockLedger.count({ where: { ref_type: "SALE", ref_id: s.id } })).toBe(0);
-        expect(await prisma.stockUnit.count({ where: { purchase_item: { item_id: items.coded }, status: "BOUND" } })).toBe(
-            3,
+        expect(await prisma.stockLedger.count({ where: { ref_type: "SALE", ref_id: s.id } })).toBe(
+            0,
         );
+        expect(
+            await prisma.stockUnit.count({
+                where: { purchase_item: { item_id: items.coded }, status: "BOUND" },
+            }),
+        ).toBe(3);
     });
 
     test("QR sale can't ask for more sealed bottles than exist", async () => {
@@ -443,7 +474,9 @@ describe("SaleService kinds", () => {
     });
 
     test("farm-made sale needs no warehouse and moves no stock", async () => {
-        const s = await sell("FARM_MADE", [{ item_id: items.farm, quantity: 200, unit: "KG", unit_price: 3 }]);
+        const s = await sell("FARM_MADE", [
+            { item_id: items.farm, quantity: 200, unit: "KG", unit_price: 3 },
+        ]);
         expect(s.warehouse_id).toBeNull();
         expect(await prisma.stockLedger.count({ where: { ref_id: s.id } })).toBe(0);
     });
@@ -454,9 +487,13 @@ describe("SaleService kinds", () => {
             where: { status: "BOUND", purchase_item: { item_id: items.coded } },
         });
         await SaleScanService.scan(coded.id, sealed.id, actor);
-        const stock = await sell("STOCK", [{ item_id: items.plain, quantity: 1, unit: "KG", unit_price: 9 }], {
-            warehouse_id: wh,
-        });
+        const stock = await sell(
+            "STOCK",
+            [{ item_id: items.plain, quantity: 1, unit: "KG", unit_price: 9 }],
+            {
+                warehouse_id: wh,
+            },
+        );
 
         const { sales } = await SaleService.getAll({ page: 1, limit: 100 } as never);
         const row = (id: string) => sales.find((x) => x.id === id)!;
@@ -489,9 +526,59 @@ describe("SaleService kinds", () => {
         expect(coded.find((r) => r.item_id === items.equipment)).toBeUndefined(); // equipment can't be sold yet
 
         const stock = await SaleService.sellable({ kind: "STOCK", warehouse_id: wh });
-        const onHand = await prisma.$transaction((tx) => getItemLocationBalance(tx, items.plain, "WAREHOUSE", wh));
+        const onHand = await prisma.$transaction((tx) =>
+            getItemLocationBalance(tx, items.plain, "WAREHOUSE", wh),
+        );
         expect(stock.find((r) => r.item_id === items.plain)?.available).toBe(onHand.toString());
         expect(stock.find((r) => r.item_id === items.coded)).toBeUndefined();
     });
-});
 
+    test("a payload without kind is a bought-stock sale (clients from before kinds keep working)", async () => {
+        const parsed = createSaleSchema.parse({
+            sale_date: new Date().toISOString(),
+            warehouse_id: wh,
+            items: [{ item_id: items.plain, quantity: 1, unit: "KG", unit_price: 9 }],
+        });
+        expect(parsed.kind).toBe("STOCK");
+    });
+
+    test("a unit used on a sale line can't be deleted", async () => {
+        const code = `SALE_TEST_${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+        const unit = await prisma.unit.create({ data: { code, label: code } });
+        const s = await prisma.sale.create({
+            data: {
+                kind: "FARM_MADE",
+                sale_date: new Date(),
+                total: 1,
+                paid_amount: 0,
+                due_amount: 1,
+                recorded_by_id: actor,
+                items: {
+                    create: [
+                        {
+                            item_id: items.farm,
+                            quantity: 1,
+                            unit: code,
+                            unit_price: 1,
+                            total_price: 1,
+                        },
+                    ],
+                },
+            },
+        });
+        saleIds.push(s.id);
+        try {
+            await expect(
+                createLookupService(prisma.unit, "Unit").remove(unit.id),
+            ).rejects.toMatchObject({
+                status: 409,
+            });
+            expect(
+                (await prisma.saleItem.findFirstOrThrow({ where: { sale_id: s.id } })).unit,
+            ).toBe(code);
+        } finally {
+            await prisma.saleItem.deleteMany({ where: { sale_id: s.id } });
+            await prisma.unit.deleteMany({ where: { id: unit.id } });
+        }
+    });
+});

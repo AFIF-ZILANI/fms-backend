@@ -14,7 +14,9 @@ export const saleKindSchema = z.enum(["CODED", "STOCK", "FARM_MADE"]);
 
 export const createSaleSchema = z.object({
     // One kind per sale: QR bottles (scanned out later on mobile), bought stock, or farm-made.
-    kind: saleKindSchema,
+    // Defaults to STOCK so a client from before kinds (an old web bundle) still records stock sales; anything
+    // else it sends is then refused by the kind check rather than mis-recorded.
+    kind: saleKindSchema.default("STOCK"),
     // Optional: the batch whose books this sale belongs to (litter after the flock is sold).
     batch_id: z.string().uuid().optional(),
     customer_id: z.string().uuid().optional(),

@@ -204,6 +204,7 @@ describe("SaleScanService", () => {
         expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
         const loser = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
         expect(loser.reason).toMatchObject({ status: 409 });
+        expect((loser.reason as Error).message).toBe(`All 1 ${x.name} bottles are already scanned`);
         expect(
             await prisma.stockUnit.count({ where: { id: { in: raceUnits }, status: "SOLD" } }),
         ).toBe(1);
@@ -228,5 +229,13 @@ describe("SaleScanService", () => {
         const json = JSON.stringify([detail, await SaleScanService.waiting()]);
         for (const money of ["total", "unit_price", "paid_amount", "due_amount"])
             expect(json).not.toContain(money);
+    });
+
+    test("equipment is refused at scan too", async () => {
+        const heater = await newItem("Heater", { category: "EQUIPMENT", unit: "UNIT" });
+        const [unit] = (await lotOf(heater.id, 1)) as [string];
+        const attempt = SaleScanService.scan(sale.b, unit, actor);
+        await expect(attempt).rejects.toMatchObject({ status: 409 });
+        await expect(attempt).rejects.toThrow("Equipment can't be sold yet");
     });
 });
