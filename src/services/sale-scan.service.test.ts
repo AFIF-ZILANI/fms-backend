@@ -180,7 +180,7 @@ describe("SaleScanService", () => {
             await expect(attempt).rejects.toThrow(text);
         };
         await refused(sale.a, crypto.randomUUID(), 404, "This code isn't in the system");
-        await refused(sale.a, openedX, 409, "This bottle has been opened");
+        await refused(sale.a, openedX, 409, "This pack has been opened");
         await refused(sale.a, yUnit, 409, `${y.name} isn't on this sale`);
         await refused(sale.stock, lot1[1]!, 409, "This sale isn't for QR items");
         await refused(sale.b, lot1[0]!, 409, "Already sold");
@@ -191,7 +191,7 @@ describe("SaleScanService", () => {
         expect(second).toMatchObject({ scanned: 2, quantity: 2, sale_done: true });
         const attempt = SaleScanService.scan(sale.a, lot1[2]!, actor);
         await expect(attempt).rejects.toMatchObject({ status: 409 });
-        await expect(attempt).rejects.toThrow(`All 2 ${x.name} bottles are already scanned`);
+        await expect(attempt).rejects.toThrow(`All 2 ${x.name} packs are already scanned`);
         expect((await prisma.stockUnit.findUniqueOrThrow({ where: { id: lot1[2]! } })).status).toBe(
             "BOUND",
         );
@@ -204,7 +204,7 @@ describe("SaleScanService", () => {
         expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
         const loser = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
         expect(loser.reason).toMatchObject({ status: 409 });
-        expect((loser.reason as Error).message).toBe(`All 1 ${x.name} bottles are already scanned`);
+        expect((loser.reason as Error).message).toBe(`All 1 ${x.name} packs are already scanned`);
         expect(
             await prisma.stockUnit.count({ where: { id: { in: raceUnits }, status: "SOLD" } }),
         ).toBe(1);

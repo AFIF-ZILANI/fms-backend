@@ -118,9 +118,9 @@ export const SaleScanService = {
             if (own) return progress(own);
 
             if (unit.status === "SOLD") throw AppError.conflict("Already sold");
-            if (unit.status === "IN_USE") throw AppError.conflict("This bottle has been opened");
+            if (unit.status === "IN_USE") throw AppError.conflict("This pack has been opened");
             if (unit.status !== "BOUND" || !unit.purchase_item)
-                throw AppError.conflict(`This bottle is ${statusWords(unit.status)}`);
+                throw AppError.conflict(`This pack is ${statusWords(unit.status)}`);
             const lot = unit.purchase_item;
             if (isNonDepleting(lot.item.category))
                 throw AppError.conflict("Equipment can't be sold yet");
@@ -148,7 +148,7 @@ export const SaleScanService = {
             }
             if (!line) {
                 const wanted = lines.reduce((sum, l) => sum + l.quantity.toNumber(), 0);
-                throw AppError.conflict(`All ${wanted} ${itemName} bottles are already scanned`);
+                throw AppError.conflict(`All ${wanted} ${itemName} packs are already scanned`);
             }
 
             await lockLot(tx, lot.id);

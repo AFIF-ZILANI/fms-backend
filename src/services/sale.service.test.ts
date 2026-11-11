@@ -581,4 +581,84 @@ describe("SaleService kinds", () => {
             await prisma.unit.deleteMany({ where: { id: unit.id } });
         }
     });
+
+    test("discounts work like purchases: each line's own, then one on the whole sale", async () => {
+        const s = await sell(
+            "STOCK",
+            [
+                {
+                    item_id: items.plain,
+                    quantity: 2,
+                    unit: "KG",
+                    unit_price: 100,
+                    discount_type: "FLAT",
+                    discount_value: 20,
+                },
+                {
+                    item_id: items.plain,
+                    quantity: 1,
+                    unit: "KG",
+                    unit_price: 50,
+                    discount_type: "PERCENT",
+                    discount_value: 10,
+                },
+            ],
+            { warehouse_id: wh, discount_type: "PERCENT", discount_value: 10 },
+        );
+        expect(s.items.map((l) => l.total_price.toNumber()).sort()).toEqual([180, 45].sort());
+        expect(s.total.toNumber()).toBe(202.5);
+        expect(s.discount_type).toBe("PERCENT");
+        expect(s.discount_value?.toNumber()).toBe(10);
+        expect(s.items.find((l) => l.discount_type === "FLAT")?.discount_value?.toNumber()).toBe(
+            20,
+        );
+    });
+
+    test("a discount bigger than what it discounts is refused", async () => {
+        const line = { item_id: items.plain, quantity: 1, unit: "KG", unit_price: 100 };
+        await expect(
+            sell("STOCK", [{ ...line, discount_type: "FLAT", discount_value: 101 }], {
+                warehouse_id: wh,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+        await expect(
+            sell("STOCK", [line], {
+                warehouse_id: wh,
+                discount_type: "PERCENT",
+                discount_value: 120,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+    });
+
+    test("the payment taken at the sale keeps its date, reference and note", async () => {
+        const s = await sell(
+            "FARM_MADE",
+            [{ item_id: items.farm, quantity: 10, unit: "KG", unit_price: 10 }],
+            {
+                paid_amount: 60,
+                paid_to_instrument_id: await sharedInstrumentId(),
+                payment_date: new Date("2026-11-05"),
+                payment_transaction_ref: "BKASH-77",
+                payment_note: "Paid at the gate",
+            },
+        );
+        const pay = await prisma.payment.findFirstOrThrow({
+            where: { ref_type: "SALE", ref_id: s.id },
+        });
+        expect(pay.amount.toNumber()).toBe(60);
+        expect(pay.payment_date.toISOString().slice(0, 10)).toBe("2026-11-05");
+        expect(pay.transaction_ref).toBe("BKASH-77");
+        expect(pay.note).toBe("Paid at the gate");
+        await prisma.payment.deleteMany({ where: { ref_id: s.id } });
+    });
+
+    test("a QR line keeps the pack unit it was sold in, and only one of the item's units", async () => {
+        const s = await sell("CODED", [
+            { item_id: items.coded, quantity: 1, unit: "LITER", unit_price: 50 },
+        ]);
+        expect(s.items[0]!.unit).toBe("LITER");
+        await expect(
+            sell("CODED", [{ item_id: items.coded, quantity: 1, unit: "KG", unit_price: 50 }]),
+        ).rejects.toMatchObject({ status: 400 });
+    });
 });

@@ -10,6 +10,7 @@ import { toBaseQuantity } from "@lib/unit-conversion";
 import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import { isNonDepleting } from "@lib/coded-stock";
+import { computeDiscount } from "@lib/discount";
 import { soldBottles } from "@services/sale-scan.service";
 import type {
     CreateSaleInput,
@@ -25,7 +26,15 @@ const include = { items: { include: { item: true } }, customer: true } as const;
 async function checkKind(tx: Prisma.TransactionClient, data: CreateSaleInput) {
     const found = await tx.item.findMany({
         where: { id: { in: data.items.map((line) => line.item_id) } },
-        select: { id: true, name: true, category: true, is_unit_tracked: true, is_farm_made: true },
+        select: {
+            id: true,
+            name: true,
+            category: true,
+            unit: true,
+            is_unit_tracked: true,
+            is_farm_made: true,
+            itemUnits: { select: { unit: true } },
+        },
     });
     const byId = new Map(found.map((item) => [item.id, item]));
     const bottles = new Map<string, number>();
@@ -38,11 +47,24 @@ async function checkKind(tx: Prisma.TransactionClient, data: CreateSaleInput) {
                 : data.kind === "FARM_MADE"
                   ? item.is_farm_made
                   : !item.is_unit_tracked && !item.is_farm_made;
-        if (!fits) throw AppError.badRequest(`${item.name} can't be sold on a ${KIND_WORDS[data.kind]} sale`);
+        if (!fits)
+            throw AppError.badRequest(
+                `${item.name} can't be sold on a ${KIND_WORDS[data.kind]} sale`,
+            );
         if (data.kind === "CODED") {
-            if (isNonDepleting(item.category)) throw AppError.badRequest("Equipment can't be sold yet");
+            if (isNonDepleting(item.category))
+                throw AppError.badRequest("Equipment can't be sold yet");
             if (!Number.isInteger(line.quantity))
-                throw AppError.badRequest(`${item.name}: sell whole bottles`);
+                throw AppError.badRequest(`${item.name}: sell whole packs`);
+            // The unit only names the pack, but it must be one the item comes in.
+            if (
+                line.unit !== undefined &&
+                line.unit !== item.unit &&
+                !item.itemUnits.some((u) => u.unit === line.unit)
+            )
+                throw AppError.badRequest(
+                    `${item.name} doesn't come in ${line.unit.toLowerCase()}`,
+                );
             bottles.set(item.id, (bottles.get(item.id) ?? 0) + line.quantity);
         } else if (line.unit === undefined) {
             throw AppError.badRequest(`${item.name}: choose a unit`);
@@ -53,9 +75,13 @@ async function checkKind(tx: Prisma.TransactionClient, data: CreateSaleInput) {
     // ponytail: a soft check -- two QR sales can both pass and then compete for the same bottles; whoever scans
     // first wins. Fine at this farm's volume; reserve bottles per sale if it ever bites.
     for (const [item_id, wanted] of bottles) {
-        const sealed = await tx.stockUnit.count({ where: { status: "BOUND", purchase_item: { item_id } } });
+        const sealed = await tx.stockUnit.count({
+            where: { status: "BOUND", purchase_item: { item_id } },
+        });
         if (sealed < wanted)
-            throw AppError.conflict(`Only ${sealed} sealed ${byId.get(item_id)!.name} bottles are in stock`);
+            throw AppError.conflict(
+                `Only ${sealed} sealed ${byId.get(item_id)!.name} packs are in stock`,
+            );
     }
 }
 
@@ -109,7 +135,10 @@ export const SaleService = {
                     s.kind === "CODED"
                         ? {
                               needed: s.items.reduce((sum, l) => sum + l.quantity.toNumber(), 0),
-                              scanned: s.items.reduce((sum, l) => sum + (scanned.get(l.id) ?? 0), 0),
+                              scanned: s.items.reduce(
+                                  (sum, l) => sum + (scanned.get(l.id) ?? 0),
+                                  0,
+                              ),
                           }
                         : null,
             })),
@@ -171,11 +200,17 @@ export const SaleService = {
 
     /** For the Record sale form: sealed bottles per sellable QR item (equipment excluded), or each bought-stock
      *  item's balance in one warehouse, in its base unit. Items with nothing to sell are left out. */
-    async sellable(query: SellableQuery): Promise<{ item_id: string; available: number | string }[]> {
+    async sellable(
+        query: SellableQuery,
+    ): Promise<{ item_id: string; available: number | string }[]> {
         if (query.kind === "CODED") {
             const units = await prisma.stockUnit.findMany({
                 where: { status: "BOUND", purchase_item: { item: { is_unit_tracked: true } } },
-                select: { purchase_item: { select: { item_id: true, item: { select: { category: true } } } } },
+                select: {
+                    purchase_item: {
+                        select: { item_id: true, item: { select: { category: true } } },
+                    },
+                },
             });
             const counts = new Map<string, number>();
             for (const u of units) {
@@ -209,14 +244,25 @@ export const SaleService = {
     async deductStock(tx: Prisma.TransactionClient, sale_id: string, data: CreateSaleInput) {
         const needed = new Map<string, Prisma.Decimal>();
         for (const line of data.items) {
-            const base = await toBaseQuantity(tx, line.item_id, line.unit!, line.quantity, "USABLE");
-            needed.set(line.item_id, (needed.get(line.item_id) ?? new Prisma.Decimal(0)).plus(base));
+            const base = await toBaseQuantity(
+                tx,
+                line.item_id,
+                line.unit!,
+                line.quantity,
+                "USABLE",
+            );
+            needed.set(
+                line.item_id,
+                (needed.get(line.item_id) ?? new Prisma.Decimal(0)).plus(base),
+            );
         }
         const warehouse_id = data.warehouse_id!;
         for (const [item_id, quantity] of needed) {
             const available = await getItemLocationBalance(tx, item_id, "WAREHOUSE", warehouse_id);
             if (available.lessThan(quantity)) {
-                throw AppError.conflict(`Only ${available.toString()} of this item is in stock at that warehouse`);
+                throw AppError.conflict(
+                    `Only ${available.toString()} of this item is in stock at that warehouse`,
+                );
             }
             await StockLedgerService.record(tx, {
                 item_id,
@@ -232,19 +278,35 @@ export const SaleService = {
     },
 
     async create(data: CreateSaleInput) {
-        const itemsWithTotals = data.items.map((item) => ({
-            ...item,
-            total_price: new Prisma.Decimal(item.quantity).times(item.unit_price),
-        }));
-        const total = itemsWithTotals.reduce(
+        // Same order as purchases: each line net of its own discount, then the whole-sale discount on their sum.
+        const itemsWithTotals = data.items.map((item, i) => {
+            const gross = new Prisma.Decimal(item.quantity).times(item.unit_price);
+            const off = computeDiscount(
+                gross,
+                item.discount_type,
+                item.discount_value,
+                `Line ${i + 1}`,
+            );
+            return { ...item, total_price: gross.minus(off).toDecimalPlaces(2) };
+        });
+        const subtotal = itemsWithTotals.reduce(
             (sum, item) => sum.plus(item.total_price),
             new Prisma.Decimal(0),
         );
+        // Rounded to the cents the column stores, so a "paid in full" amount never reads as over the total.
+        const total = subtotal
+            .minus(computeDiscount(subtotal, data.discount_type, data.discount_value, "Sale"))
+            .toDecimalPlaces(2);
         const paid_amount = new Prisma.Decimal(data.paid_amount);
         if (total.minus(paid_amount).isNegative()) {
             throw AppError.badRequest("paid_amount cannot exceed the sale total");
         }
-        requirePaidInstrument(paid_amount, data.paid_to_instrument_id, "paid_to_instrument_id", "SALE");
+        requirePaidInstrument(
+            paid_amount,
+            data.paid_to_instrument_id,
+            "paid_to_instrument_id",
+            "SALE",
+        );
 
         try {
             return await prisma.$transaction(async (tx) => {
@@ -261,6 +323,10 @@ export const SaleService = {
                         recorded_by_id: data.recorded_by_id,
                         kind: data.kind,
                         ...(data.kind === "STOCK" && { warehouse_id: data.warehouse_id! }),
+                        ...(data.discount_type !== undefined && {
+                            discount_type: data.discount_type,
+                            discount_value: data.discount_value!,
+                        }),
                         ...(data.customer_id !== undefined && { customer_id: data.customer_id }),
                         ...(data.batch_id !== undefined && { batch_id: data.batch_id }),
                     },
@@ -271,8 +337,12 @@ export const SaleService = {
                         sale_id: sale.id,
                         item_id: item.item_id,
                         quantity: item.quantity,
-                        unit: data.kind === "CODED" ? null : item.unit!,
+                        unit: item.unit ?? null,
                         unit_price: item.unit_price,
+                        ...(item.discount_type !== undefined && {
+                            discount_type: item.discount_type,
+                            discount_value: item.discount_value!,
+                        }),
                         total_price: item.total_price,
                     })),
                 });
@@ -284,8 +354,10 @@ export const SaleService = {
                     ref_id: sale.id,
                     amount: paid_amount,
                     instrument_id: data.paid_to_instrument_id,
-                    date: data.sale_date,
+                    date: data.payment_date ?? data.sale_date,
                     actor_id: data.recorded_by_id,
+                    transaction_ref: data.payment_transaction_ref,
+                    note: data.payment_note,
                 });
 
                 await audit(tx, {

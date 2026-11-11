@@ -1,27 +1,10 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "@lib/pagination";
 import { unitSchema, resourceCategorySchema } from "@lib/enums";
+import { discountFields, discountRefine, discountRefineMessage } from "@lib/discount";
 
-export const discountTypeSchema = z.enum(["FLAT", "PERCENT"]);
-
-// discount_type and discount_value travel together -- a lone type with no value (or vice versa)
-// is ambiguous, so both-or-neither is enforced here rather than left to the service layer.
-const discountFields = {
-    discount_type: discountTypeSchema.optional(),
-    discount_value: z.coerce.number().nonnegative().optional(),
-};
-const discountRefine = <
-    T extends {
-        discount_type?: "FLAT" | "PERCENT" | undefined;
-        discount_value?: number | undefined;
-    },
->(
-    data: T,
-) => (data.discount_type === undefined) === (data.discount_value === undefined);
-const discountRefineMessage = {
-    message: "discount_type and discount_value must be given together",
-    path: ["discount_value"],
-};
+// Shared with sales.
+export { discountTypeSchema } from "@lib/discount";
 
 const purchaseItemInput = z
     .object({
