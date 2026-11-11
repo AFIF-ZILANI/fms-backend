@@ -49,6 +49,7 @@ describe("SaleService", () => {
 
     test("create computes line totals and sale total with exact decimal math", async () => {
         const sale = await SaleService.create({
+            kind: "STOCK",
             sale_date: new Date(),
             warehouse_id: warehouseId,
             paid_amount: 50,
@@ -83,6 +84,7 @@ describe("SaleService", () => {
     test("paid_amount exceeding total throws bad-request", async () => {
         await expect(
             SaleService.create({
+            kind: "STOCK",
                 sale_date: new Date(),
                 warehouse_id: warehouseId,
                 paid_amount: 9999,
@@ -111,6 +113,7 @@ describe("SaleService", () => {
         await seedStock(medicineItem.id, warehouseId, 10);
 
         const recentSale = await SaleService.create({
+            kind: "STOCK",
             sale_date: new Date(),
             warehouse_id: warehouseId,
             paid_amount: 0,
@@ -120,6 +123,7 @@ describe("SaleService", () => {
         createdSaleIds.push(recentSale!.id);
 
         const oldSale = await SaleService.create({
+            kind: "STOCK",
             warehouse_id: warehouseId,
             sale_date: new Date(Date.now() - 10 * 86_400_000),
             paid_amount: 0,
@@ -148,6 +152,7 @@ describe("SaleService", () => {
         const before = await SaleService.summary({});
 
         const sale = await SaleService.create({
+            kind: "STOCK",
             sale_date: new Date(),
             warehouse_id: warehouseId,
             paid_amount: 20,
@@ -174,6 +179,7 @@ describe("SaleService stock", () => {
     const saleIds: string[] = [];
     const sell = (quantity: number, over: Record<string, unknown> = {}) =>
         SaleService.create({
+            kind: "STOCK",
             sale_date: new Date(),
             warehouse_id: wh,
             paid_amount: 0,
@@ -249,7 +255,7 @@ describe("SaleService stock", () => {
         expect(await onHand()).toBe(6);
     });
 
-    test("litter (a WASTE item) sells with no warehouse and no stock; mixed with stock it still needs one", async () => {
+    test("farm-made items are their own kind of sale: no warehouse, no stock", async () => {
         const litter = (
             await prisma.item.create({
                 data: {
@@ -257,18 +263,22 @@ describe("SaleService stock", () => {
                     normalized_key: `litter ${crypto.randomUUID()}`,
                     category: "WASTE",
                     unit: "KG",
+                    is_farm_made: true,
                 },
             })
         ).id;
         try {
             const litterLine = { item_id: litter, quantity: 500, unit: "KG", unit_price: 2 };
-            const s = await sell(0, { warehouse_id: undefined, items: [litterLine] });
+            const s = await sell(0, { kind: "FARM_MADE", warehouse_id: undefined, items: [litterLine] });
             saleIds.push(s!.id);
+            expect(s!.kind).toBe("FARM_MADE");
             expect(s!.total.toNumber()).toBe(1000);
             expect(await prisma.stockLedger.count({ where: { ref_id: s!.id } })).toBe(0);
 
+            // Mixed with bought stock it's refused: one kind per sale.
             await expect(
                 sell(0, {
+                    kind: "FARM_MADE",
                     warehouse_id: undefined,
                     items: [litterLine, { item_id: item, quantity: 1, unit: "BAG", unit_price: 10 }],
                 }),
@@ -278,5 +288,162 @@ describe("SaleService stock", () => {
             await prisma.saleItem.deleteMany({ where: { item_id: litter } });
             await prisma.item.delete({ where: { id: litter } });
         }
+    });
+
+    test("bought-stock sale needs a warehouse and stores it", async () => {
+        await expect(sell(1, { warehouse_id: undefined })).rejects.toMatchObject({ status: 400 });
+        const s = await sell(1);
+        saleIds.push(s!.id);
+        expect(s!.kind).toBe("STOCK");
+        expect(s!.warehouse_id).toBe(wh);
+    });
+});
+
+describe("SaleService kinds", () => {
+    let wh: string;
+    let actor: string;
+    let purchaseId: string;
+    const items: Record<"coded" | "plain" | "farm" | "equipment", string> = {
+        coded: "",
+        plain: "",
+        farm: "",
+        equipment: "",
+    };
+    const saleIds: string[] = [];
+    const newItem = (over: Record<string, unknown>) =>
+        prisma.item
+            .create({
+                data: {
+                    name: `Kind Item ${crypto.randomUUID()}`,
+                    normalized_key: `kind item ${crypto.randomUUID()}`,
+                    category: "OTHER",
+                    unit: "UNIT",
+                    ...over,
+                },
+            })
+            .then((i) => i.id);
+    const sell = (kind: string, lines: Record<string, unknown>[], over: Record<string, unknown> = {}) =>
+        SaleService.create({
+            kind,
+            sale_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: actor,
+            items: lines,
+            ...over,
+        } as never).then((s) => {
+            saleIds.push(s!.id);
+            return s!;
+        });
+    const bottles = (n: number) => ({ item_id: items.coded, quantity: n, unit_price: 50 });
+
+    beforeAll(async () => {
+        wh = await sharedWarehouseId();
+        actor = (
+            await prisma.profiles.create({
+                data: {
+                    name: "Kind Sale Actor",
+                    mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                    role: "ADMIN",
+                },
+            })
+        ).id;
+        items.coded = await newItem({ category: "MEDICINE", unit: "LITER", is_unit_tracked: true });
+        items.plain = await newItem({ category: "FEED", unit: "KG" });
+        items.farm = await newItem({ category: "WASTE", unit: "KG", is_farm_made: true });
+        items.equipment = await newItem({ category: "EQUIPMENT", unit: "UNIT", is_unit_tracked: true });
+        await seedStock(items.plain, wh, 100);
+        purchaseId = (
+            await prisma.purchase.create({
+                data: {
+                    warehouse_id: wh,
+                    purchase_date: new Date(),
+                    total_amount: 300,
+                    paid_amount: 0,
+                    due_amount: 300,
+                    recorded_by_id: actor,
+                },
+            })
+        ).id;
+        // Three sealed bottles of the coded item, and one of the equipment item.
+        for (const [item_id, count] of [
+            [items.coded, 3],
+            [items.equipment, 1],
+        ] as const) {
+            const lot = await prisma.purchaseItem.create({
+                data: {
+                    purchase_id: purchaseId,
+                    item_id,
+                    quantity: count,
+                    unit: "UNIT",
+                    base_quantity: count,
+                    unit_count: count,
+                    unit_price: 100,
+                    total_price: 100 * count,
+                },
+            });
+            await prisma.stockUnit.createMany({
+                data: Array.from({ length: count }, () => ({ purchase_item_id: lot.id, status: "BOUND" as const })),
+            });
+        }
+    });
+
+    afterAll(async () => {
+        const all = Object.values(items);
+        await prisma.saleItem.deleteMany({ where: { sale_id: { in: saleIds } } });
+        await prisma.sale.deleteMany({ where: { id: { in: saleIds } } });
+        await prisma.stockUnit.deleteMany({ where: { purchase_item: { purchase_id: purchaseId } } });
+        await prisma.purchaseItem.deleteMany({ where: { purchase_id: purchaseId } });
+        await prisma.purchase.delete({ where: { id: purchaseId } });
+        await prisma.stockLedger.deleteMany({ where: { item_id: { in: all } } });
+        await prisma.item.deleteMany({ where: { id: { in: all } } });
+        await purgeAuditLog({ where: { changed_by_id: actor } });
+        await prisma.profiles.delete({ where: { id: actor } });
+    });
+
+    test("each kind only takes its own items", async () => {
+        const line = (item_id: string) => ({ item_id, quantity: 1, unit: "KG", unit_price: 10 });
+        const cases: [string, string, Record<string, unknown>][] = [
+            ["CODED", items.plain, {}],
+            ["STOCK", items.coded, { warehouse_id: wh }],
+            ["STOCK", items.farm, { warehouse_id: wh }],
+            ["FARM_MADE", items.plain, {}],
+        ];
+        for (const [kind, item_id, over] of cases) {
+            const name = (await prisma.item.findUniqueOrThrow({ where: { id: item_id } })).name;
+            const attempt = sell(kind, [line(item_id)], over);
+            await expect(attempt).rejects.toMatchObject({ status: 400 });
+            await expect(attempt).rejects.toThrow(name);
+        }
+    });
+
+    test("QR sale: whole bottles only, no stock leaves at save", async () => {
+        await expect(sell("CODED", [bottles(1.5)])).rejects.toMatchObject({ status: 400 });
+        const s = await sell("CODED", [bottles(2)]);
+        expect(s.kind).toBe("CODED");
+        expect(s.warehouse_id).toBeNull();
+        expect(s.items[0]!.unit).toBeNull();
+        expect(s.total.toNumber()).toBe(100);
+        expect(await prisma.stockLedger.count({ where: { ref_type: "SALE", ref_id: s.id } })).toBe(0);
+        expect(await prisma.stockUnit.count({ where: { purchase_item: { item_id: items.coded }, status: "BOUND" } })).toBe(
+            3,
+        );
+    });
+
+    test("QR sale can't ask for more sealed bottles than exist", async () => {
+        const attempt = sell("CODED", [bottles(4)]);
+        await expect(attempt).rejects.toMatchObject({ status: 409 });
+        await expect(attempt).rejects.toThrow(/3/);
+    });
+
+    test("QR sale refuses equipment", async () => {
+        const attempt = sell("CODED", [{ item_id: items.equipment, quantity: 1, unit_price: 500 }]);
+        await expect(attempt).rejects.toMatchObject({ status: 400 });
+        await expect(attempt).rejects.toThrow("Equipment can't be sold yet");
+    });
+
+    test("farm-made sale needs no warehouse and moves no stock", async () => {
+        const s = await sell("FARM_MADE", [{ item_id: items.farm, quantity: 200, unit: "KG", unit_price: 3 }]);
+        expect(s.warehouse_id).toBeNull();
+        expect(await prisma.stockLedger.count({ where: { ref_id: s.id } })).toBe(0);
     });
 });

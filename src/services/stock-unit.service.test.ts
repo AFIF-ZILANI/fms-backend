@@ -822,7 +822,7 @@ describe("StockUnitService", () => {
             item_id: itemId,
         });
         expect(here.map((u) => u.id)).not.toContain(unit.id);
-        expect((await StockUnitService.counts()).SOLD).toBeGreaterThan(0);
+        expect((await StockUnitService.counts())["SOLD"]).toBeGreaterThan(0);
     });
 
     test("a sold bottle leaves its lot's remainder", async () => {
