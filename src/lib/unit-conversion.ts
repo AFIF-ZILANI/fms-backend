@@ -14,7 +14,8 @@ export async function toBaseQuantity(
     item_id: string,
     unit: string,
     quantity: Prisma.Decimal | number,
-    purpose: "PURCHASE" | "USABLE",
+    // SALE: stock goes back out the way it came in or is used -- any purchasable or usable unit (a bag of feed).
+    purpose: "PURCHASE" | "USABLE" | "SALE",
 ): Promise<Prisma.Decimal> {
     const item = await tx.item.findUnique({
         where: { id: item_id },
@@ -22,8 +23,8 @@ export async function toBaseQuantity(
     });
     if (!item) throw AppError.badRequest("item_id does not reference an existing record");
     // A deactivated item can still be *purchased* (to settle or restock before reactivating) but takes no
-    // new use: consumption, transfers and sales all call this with USABLE.
-    if (purpose === "USABLE" && !item.is_active) {
+    // new use: consumption and transfers call this with USABLE, sales with SALE.
+    if (purpose !== "PURCHASE" && !item.is_active) {
         throw AppError.badRequest(`${item.name} is deactivated -- reactivate it before using it`);
     }
 
@@ -33,9 +34,15 @@ export async function toBaseQuantity(
     const conversion = await tx.itemUnit.findUnique({
         where: { item_id_unit: { item_id, unit } },
     });
-    const purposeField = purpose === "PURCHASE" ? "is_purchasable" : "is_usable";
-    if (!conversion || !conversion[purposeField]) {
-        const verb = purpose === "PURCHASE" ? "purchasing" : "using";
+    const allowed =
+        purpose === "PURCHASE"
+            ? conversion?.is_purchasable
+            : purpose === "SALE"
+              ? conversion?.is_purchasable || conversion?.is_usable
+              : conversion?.is_usable;
+    if (!conversion || !allowed) {
+        const verb =
+            purpose === "PURCHASE" ? "purchasing" : purpose === "SALE" ? "selling" : "using";
         throw AppError.badRequest(
             `"${unit}" is not a valid unit for ${verb} this item -- add or update the conversion via POST /item-units first`,
         );

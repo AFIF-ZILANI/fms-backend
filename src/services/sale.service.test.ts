@@ -661,4 +661,31 @@ describe("SaleService kinds", () => {
             sell("CODED", [{ item_id: items.coded, quantity: 1, unit: "KG", unit_price: 50 }]),
         ).rejects.toMatchObject({ status: 400 });
     });
+
+    test("bought stock can be sold in a unit it is bought in (a bag of feed)", async () => {
+        const bag = await prisma.itemUnit.create({
+            data: {
+                item_id: items.plain,
+                unit: "BAG",
+                factor_to_base: 25,
+                is_purchasable: true,
+                is_usable: false,
+            },
+        });
+        try {
+            const s = await sell(
+                "STOCK",
+                [{ item_id: items.plain, quantity: 2, unit: "BAG", unit_price: 1500 }],
+                {
+                    warehouse_id: wh,
+                },
+            );
+            const out = await prisma.stockLedger.findFirstOrThrow({
+                where: { ref_type: "SALE", ref_id: s.id },
+            });
+            expect(out.quantity.toNumber()).toBe(50);
+        } finally {
+            await prisma.itemUnit.delete({ where: { id: bag.id } });
+        }
+    });
 });

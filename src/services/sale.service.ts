@@ -249,7 +249,7 @@ export const SaleService = {
                 line.item_id,
                 line.unit!,
                 line.quantity,
-                "USABLE",
+                "SALE",
             );
             needed.set(
                 line.item_id,
