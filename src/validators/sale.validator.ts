@@ -32,7 +32,16 @@ export const salesSummaryQuerySchema = z.object({
     date_from: z.coerce.date().optional(),
     date_to: z.coerce.date().optional(),
     item_category: resourceCategorySchema.optional(),
+    kind: saleKindSchema.optional(),
 });
+
+/** What the Record sale form can offer: sealed bottles per QR item, or one warehouse's balance per stock item. */
+export const sellableQuerySchema = z
+    .object({ kind: z.enum(["CODED", "STOCK"]), warehouse_id: z.string().uuid().optional() })
+    .refine((q) => q.kind !== "STOCK" || q.warehouse_id !== undefined, {
+        message: "warehouse_id is required for bought stock",
+        path: ["warehouse_id"],
+    });
 
 // Extended from the summary shape so the two filter sets can never drift.
 export const listSalesQuerySchema = paginationQuerySchema.extend(salesSummaryQuerySchema.shape);
@@ -40,3 +49,4 @@ export const listSalesQuerySchema = paginationQuerySchema.extend(salesSummaryQue
 export type CreateSaleInput = z.infer<typeof createSaleSchema> & { recorded_by_id: string };
 export type ListSalesQuery = z.infer<typeof listSalesQuerySchema>;
 export type SalesSummaryQuery = z.infer<typeof salesSummaryQuerySchema>;
+export type SellableQuery = z.infer<typeof sellableQuerySchema>;

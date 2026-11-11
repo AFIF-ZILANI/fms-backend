@@ -10,10 +10,12 @@ import { toBaseQuantity } from "@lib/unit-conversion";
 import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
 import { isNonDepleting } from "@lib/coded-stock";
+import { soldBottles } from "@services/sale-scan.service";
 import type {
     CreateSaleInput,
     ListSalesQuery,
     SalesSummaryQuery,
+    SellableQuery,
 } from "@validators/sale.validator";
 
 const include = { items: { include: { item: true } }, customer: true } as const;
@@ -71,7 +73,18 @@ function buildWhere(query: SalesSummaryQuery) {
         ...(query.item_category !== undefined && {
             items: { some: { item: { category: query.item_category } } },
         }),
+        ...(query.kind !== undefined && { kind: query.kind }),
     };
+}
+
+/** Bottles scanned out per sale line, one query for a whole page of sales. */
+async function scannedByLine(lineIds: string[]) {
+    const counts = await prisma.stockUnit.groupBy({
+        by: ["sale_item_id"],
+        where: { sale_item_id: { in: lineIds } },
+        _count: { _all: true },
+    });
+    return new Map(counts.map((c) => [c.sale_item_id, c._count._all]));
 }
 
 // Sale/SaleItem are append-only, same as Purchase/PurchaseItem -- no update.
@@ -87,7 +100,21 @@ export const SaleService = {
             }),
             prisma.sale.count({ where }),
         ]);
-        return { sales, meta: buildMeta(total, query) };
+        const scanned = await scannedByLine(sales.flatMap((s) => s.items.map((l) => l.id)));
+        return {
+            sales: sales.map((s) => ({
+                ...s,
+                // QR sales only: how many bottles the sale needs and how many have been scanned out so far.
+                scan:
+                    s.kind === "CODED"
+                        ? {
+                              needed: s.items.reduce((sum, l) => sum + l.quantity.toNumber(), 0),
+                              scanned: s.items.reduce((sum, l) => sum + (scanned.get(l.id) ?? 0), 0),
+                          }
+                        : null,
+            })),
+            meta: buildMeta(total, query),
+        };
     },
 
     /** Whole-set totals for the Sales KPI row. The list endpoint's `limit` is
@@ -128,9 +155,53 @@ export const SaleService = {
     },
 
     async getById(id: string) {
-        const sale = await prisma.sale.findUnique({ where: { id }, include });
+        const sale = await prisma.sale.findUnique({
+            where: { id },
+            include: { ...include, warehouse: { select: { id: true, name: true } } },
+        });
         if (!sale) throw AppError.notFound("Sale");
-        return sale;
+        const lineIds = sale.items.map((l) => l.id);
+        const scanned = await scannedByLine(lineIds);
+        return {
+            ...sale,
+            items: sale.items.map((l) => ({ ...l, scanned: scanned.get(l.id) ?? 0 })),
+            bottles: sale.kind === "CODED" ? await soldBottles(lineIds) : [],
+        };
+    },
+
+    /** For the Record sale form: sealed bottles per sellable QR item (equipment excluded), or each bought-stock
+     *  item's balance in one warehouse, in its base unit. Items with nothing to sell are left out. */
+    async sellable(query: SellableQuery): Promise<{ item_id: string; available: number | string }[]> {
+        if (query.kind === "CODED") {
+            const units = await prisma.stockUnit.findMany({
+                where: { status: "BOUND", purchase_item: { item: { is_unit_tracked: true } } },
+                select: { purchase_item: { select: { item_id: true, item: { select: { category: true } } } } },
+            });
+            const counts = new Map<string, number>();
+            for (const u of units) {
+                if (!u.purchase_item || isNonDepleting(u.purchase_item.item.category)) continue;
+                counts.set(u.purchase_item.item_id, (counts.get(u.purchase_item.item_id) ?? 0) + 1);
+            }
+            return [...counts].map(([item_id, available]) => ({ item_id, available }));
+        }
+        const rows = await prisma.stockLedger.groupBy({
+            by: ["item_id", "direction"],
+            where: {
+                location_type: "WAREHOUSE",
+                location_id: query.warehouse_id!,
+                item: { is_unit_tracked: false, is_farm_made: false },
+            },
+            _sum: { quantity: true },
+        });
+        const balance = new Map<string, Prisma.Decimal>();
+        for (const r of rows) {
+            const q = r._sum.quantity ?? new Prisma.Decimal(0);
+            const prev = balance.get(r.item_id) ?? new Prisma.Decimal(0);
+            balance.set(r.item_id, r.direction === "IN" ? prev.plus(q) : prev.minus(q));
+        }
+        return [...balance]
+            .filter(([, b]) => b.greaterThan(0))
+            .map(([item_id, b]) => ({ item_id, available: b.toString() }));
     },
 
     /** Posts a StockLedger OUT per line from the chosen warehouse, in the sale's own transaction (STOCK sales

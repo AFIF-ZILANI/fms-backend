@@ -5,6 +5,7 @@ import { AppError } from "@lib/app-error";
 import { sharedInstrumentId, sharedWarehouseId, seedStock, purgeAuditLog } from "@lib/test-fixtures";
 import { PaymentService } from "./payment.service";
 import { getItemLocationBalance } from "@lib/stock-balance";
+import { SaleScanService } from "./sale-scan.service";
 
 let itemId: string;
 let warehouseId: string;
@@ -446,4 +447,51 @@ describe("SaleService kinds", () => {
         expect(s.warehouse_id).toBeNull();
         expect(await prisma.stockLedger.count({ where: { ref_id: s.id } })).toBe(0);
     });
+
+    test("list shows kind and scan progress", async () => {
+        const coded = await sell("CODED", [bottles(2)]);
+        const sealed = await prisma.stockUnit.findFirstOrThrow({
+            where: { status: "BOUND", purchase_item: { item_id: items.coded } },
+        });
+        await SaleScanService.scan(coded.id, sealed.id, actor);
+        const stock = await sell("STOCK", [{ item_id: items.plain, quantity: 1, unit: "KG", unit_price: 9 }], {
+            warehouse_id: wh,
+        });
+
+        const { sales } = await SaleService.getAll({ page: 1, limit: 100 } as never);
+        const row = (id: string) => sales.find((x) => x.id === id)!;
+        expect(row(coded.id)).toMatchObject({ kind: "CODED", scan: { needed: 2, scanned: 1 } });
+        expect(row(stock.id)).toMatchObject({ kind: "STOCK", warehouse_id: wh, scan: null });
+
+        const onlyCoded = await SaleService.getAll({ page: 1, limit: 100, kind: "CODED" } as never);
+        expect(onlyCoded.sales.every((x) => x.kind === "CODED")).toBe(true);
+        expect(onlyCoded.sales.map((x) => x.id)).not.toContain(stock.id);
+    });
+
+    test("detail lists scanned bottles", async () => {
+        const coded = await sell("CODED", [bottles(1)]);
+        const sealed = await prisma.stockUnit.findFirstOrThrow({
+            where: { status: "BOUND", purchase_item: { item_id: items.coded } },
+        });
+        await SaleScanService.scan(coded.id, sealed.id, actor);
+        const detail = await SaleService.getById(coded.id);
+        expect(detail.items[0]!.scanned).toBe(1);
+        expect(detail.bottles.map((b) => b.id)).toEqual([sealed.id]);
+        expect(detail.warehouse).toBeNull();
+    });
+
+    test("sellable counts sealed bottles and warehouse balances", async () => {
+        const sealed = await prisma.stockUnit.count({
+            where: { status: "BOUND", purchase_item: { item_id: items.coded } },
+        });
+        const coded = await SaleService.sellable({ kind: "CODED" });
+        expect(coded.find((r) => r.item_id === items.coded)?.available).toBe(sealed);
+        expect(coded.find((r) => r.item_id === items.equipment)).toBeUndefined(); // equipment can't be sold yet
+
+        const stock = await SaleService.sellable({ kind: "STOCK", warehouse_id: wh });
+        const onHand = await prisma.$transaction((tx) => getItemLocationBalance(tx, items.plain, "WAREHOUSE", wh));
+        expect(stock.find((r) => r.item_id === items.plain)?.available).toBe(onHand.toString());
+        expect(stock.find((r) => r.item_id === items.coded)).toBeUndefined();
+    });
 });
+
