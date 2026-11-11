@@ -25,6 +25,7 @@ const balance = async () =>
     (await PaymentInstrumentService.getBalance(walletId)).balance.toNumber();
 const sale = (over: Record<string, unknown> = {}) =>
     SaleService.create({
+        kind: "STOCK",
         sale_date: new Date(),
         warehouse_id: warehouseId,
         paid_amount: 0,

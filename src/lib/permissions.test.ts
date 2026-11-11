@@ -51,6 +51,21 @@ describe("canAccess", () => {
         expect(canAccess(manager, "POST", "/alerts/scan", none)).toBe(false);
     });
 
+    test("managers scan QR bottles out of a sale, but never see sales money", () => {
+        expect(canAccess(manager, "GET", "/sale-scans", none)).toBe(true);
+        expect(canAccess(manager, "GET", "/sale-scans/abc", none)).toBe(true);
+        expect(canAccess(manager, "POST", "/sale-scans/abc/scan", none)).toBe(true);
+        expect(canAccess(manager, "GET", "/sales", none)).toBe(false);
+        expect(canAccess(manager, "GET", "/sales/abc", none)).toBe(false);
+        for (const [m, p] of [
+            ["GET", "/sale-scans"],
+            ["GET", "/sale-scans/abc"],
+            ["POST", "/sale-scans/abc/scan"],
+        ] as const) {
+            expect(canAccess(worker, m, p, none)).toBe(false);
+        }
+    });
+
     test("admins reach everything", () => {
         for (const [m, p] of [
             ["GET", "/admins"],

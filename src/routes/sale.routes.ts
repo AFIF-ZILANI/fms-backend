@@ -5,6 +5,7 @@ import {
     createSaleSchema,
     listSalesQuerySchema,
     salesSummaryQuerySchema,
+    sellableQuerySchema,
 } from "@validators/sale.validator";
 
 export const saleRoutes = new Hono();
@@ -15,6 +16,11 @@ saleRoutes.get(
     "/summary",
     zValidatorRfc7807("query", salesSummaryQuerySchema),
     SaleController.summary,
+);
+saleRoutes.get(
+    "/sellable",
+    zValidatorRfc7807("query", sellableQuerySchema),
+    SaleController.sellable,
 );
 saleRoutes.get("/:id", SaleController.getById);
 saleRoutes.post("/", zValidatorRfc7807("json", createSaleSchema), SaleController.create);

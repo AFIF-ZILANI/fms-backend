@@ -583,4 +583,28 @@ describe("PurchaseService", () => {
             await expect(PurchaseService.remove(crypto.randomUUID(), profileId)).rejects.toBeInstanceOf(AppError);
         });
     });
+
+    test("a farm-made item can't be bought", async () => {
+        const litter = await prisma.item.create({
+            data: {
+                name: `Litter ${crypto.randomUUID()}`,
+                normalized_key: `litter ${crypto.randomUUID()}`,
+                category: "OTHER",
+                unit: "KG",
+                is_farm_made: true,
+            },
+        });
+        createdItemIds.push(litter.id);
+
+        const attempt = PurchaseService.create({
+            warehouse_id: warehouseId,
+            purchase_date: new Date(),
+            paid_amount: 0,
+            recorded_by_id: profileId,
+            items: [{ item_id: litter.id, quantity: 5, unit: "KG", unit_price: 10 }],
+        });
+        await expect(attempt).rejects.toMatchObject({ status: 400 });
+        await expect(attempt).rejects.toThrow(/made on the farm/);
+        await expect(attempt).rejects.toThrow(litter.name);
+    });
 });

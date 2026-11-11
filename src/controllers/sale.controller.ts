@@ -8,6 +8,7 @@ import type {
     CreateSaleInput,
     ListSalesQuery,
     SalesSummaryQuery,
+    SellableQuery,
 } from "@validators/sale.validator";
 
 export const SaleController = {
@@ -24,6 +25,13 @@ export const SaleController = {
             const query = getValid<SalesSummaryQuery>(c, "query");
             const summary = await SaleService.summary(query);
             return sendSuccess(c, summary, "Sales summary computed");
+        });
+    },
+
+    async sellable(c: Context) {
+        return withHandler(c, async () => {
+            const rows = await SaleService.sellable(getValid<SellableQuery>(c, "query"));
+            return sendSuccess(c, rows, "Sellable stock fetched");
         });
     },
 

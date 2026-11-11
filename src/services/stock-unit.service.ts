@@ -248,6 +248,7 @@ export const StockUnitService = {
             const unit = await lockedUnit(tx, id);
             if (unit.status === "DISPOSED")
                 throw AppError.conflict("StockUnit is already disposed");
+            if (unit.status === "SOLD") throw AppError.conflict("StockUnit is sold, it can't be disposed");
             // A CONSUMED unit's remainder was already written off when it was marked used up.
             if (unit.status !== "CONSUMED") await writeOffRemainder(tx, unit);
             return tx.stockUnit.update({ where: { id }, data: { status: "DISPOSED" } });
@@ -355,6 +356,7 @@ export const StockUnitService = {
             const unit = await lockedUnit(tx, id);
             if (unit.status === "DISPOSED")
                 throw AppError.conflict("A disposed unit can't change status");
+            if (unit.status === "SOLD") throw AppError.conflict("A sold unit can't change status");
             if (
                 status === "UNASSIGNED" ||
                 status === "PRINTED" ||
@@ -395,7 +397,7 @@ export const StockUnitService = {
     },
 };
 
-async function lockedUnit(tx: Prisma.TransactionClient, id: string) {
+export async function lockedUnit(tx: Prisma.TransactionClient, id: string) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
     const unit = await tx.stockUnit.findUnique({
         where: { id },
@@ -457,7 +459,7 @@ async function relocateTx(
     if (unit.status === "UNASSIGNED" || unit.status === "PRINTED" || !unit.purchase_item) {
         throw AppError.badRequest("This code isn't linked to a purchase lot yet -- bind it first");
     }
-    if (unit.status === "DISPOSED" || unit.status === "CONSUMED") {
+    if (unit.status === "DISPOSED" || unit.status === "CONSUMED" || unit.status === "SOLD") {
         throw AppError.conflict(`StockUnit is ${unit.status.toLowerCase()}, it can't be moved`);
     }
 

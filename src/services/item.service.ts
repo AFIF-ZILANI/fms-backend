@@ -15,11 +15,17 @@ import { GENERIC_ITEM_UNITS } from "@lib/enums";
 
 const include = { suppliers: true, itemUnits: true } as const;
 
+/** A farm-made item is never bought, so it has no lots to put QR codes on (DB CHECK Item_farm_made_not_tracked). */
+const farmMadeTracked = () => AppError.badRequest("An item made on the farm can't be tracked by QR code");
+
 export const ItemService = {
     async getAll(query: ListItemsQuery) {
         const where = {
             ...(query.category !== undefined && { category: query.category }),
             ...(query.is_active !== undefined && { is_active: query.is_active === "true" }),
+            ...(query.is_farm_made !== undefined && {
+                is_farm_made: query.is_farm_made === "true",
+            }),
             ...(query.is_unit_tracked !== undefined && {
                 is_unit_tracked: query.is_unit_tracked === "true",
             }),
@@ -47,6 +53,7 @@ export const ItemService = {
     },
 
     async create(data: CreateItemInput) {
+        if (data.is_farm_made && data.is_unit_tracked) throw farmMadeTracked();
         try {
             return await prisma.item.create({
                 data: {
@@ -68,6 +75,7 @@ export const ItemService = {
                     ...(data.is_unit_tracked !== undefined && {
                         is_unit_tracked: data.is_unit_tracked,
                     }),
+                    ...(data.is_farm_made !== undefined && { is_farm_made: data.is_farm_made }),
                 },
                 include,
             });
@@ -89,6 +97,7 @@ export const ItemService = {
             supplier_ids,
             meta_data,
             is_unit_tracked,
+            is_farm_made,
         } = data;
         if (
             !name &&
@@ -98,24 +107,34 @@ export const ItemService = {
             lead_time_days === undefined &&
             !supplier_ids &&
             meta_data === undefined &&
-            is_unit_tracked === undefined
+            is_unit_tracked === undefined &&
+            is_farm_made === undefined
         ) {
             throw AppError.badRequest("No update fields provided");
         }
 
         // Flipping the tracking mode under existing purchases would leave coded units and
         // aggregate ledger rows for the same item describing stock two different ways.
-        if (is_unit_tracked !== undefined) {
+        // Farm-made is fixed the same way once bought or sold: past sales were recorded as one kind.
+        if (is_unit_tracked !== undefined || is_farm_made !== undefined) {
             const current = await prisma.item.findUnique({
                 where: { id },
-                select: { is_unit_tracked: true },
+                select: { is_unit_tracked: true, is_farm_made: true },
             });
-            if (
-                current &&
-                current.is_unit_tracked !== is_unit_tracked &&
-                (await prisma.purchaseItem.count({ where: { item_id: id } })) > 0
-            ) {
-                throw AppError.conflict("Tracking mode can't change once the item has been purchased");
+            if (current) {
+                if ((is_farm_made ?? current.is_farm_made) && (is_unit_tracked ?? current.is_unit_tracked))
+                    throw farmMadeTracked();
+                const purchases = await prisma.purchaseItem.count({ where: { item_id: id } });
+                if (is_unit_tracked !== undefined && current.is_unit_tracked !== is_unit_tracked && purchases > 0) {
+                    throw AppError.conflict("Tracking mode can't change once the item has been purchased");
+                }
+                if (
+                    is_farm_made !== undefined &&
+                    current.is_farm_made !== is_farm_made &&
+                    purchases + (await prisma.saleItem.count({ where: { item_id: id } })) > 0
+                ) {
+                    throw AppError.conflict("Farm-made can't change once the item has been bought or sold");
+                }
             }
         }
 
@@ -133,6 +152,7 @@ export const ItemService = {
                     }),
                     ...(meta_data !== undefined && { meta_data }),
                     ...(is_unit_tracked !== undefined && { is_unit_tracked }),
+                    ...(is_farm_made !== undefined && { is_farm_made }),
                 },
                 include,
             });

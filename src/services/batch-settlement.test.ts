@@ -172,12 +172,12 @@ describe("Batch settlement window + stock count", () => {
         test("sale booked to a CLOSED batch is refused", async () => {
             await expect(
                 SaleService.create({
+                    kind: "CODED",
                     batch_id: closed,
                     sale_date: new Date(),
-                    warehouse_id: warehouseId,
                     paid_amount: 0,
                     recorded_by_id: profileId,
-                    items: [{ item_id: itemId, quantity: 1, unit: "ML", unit_price: 1 }],
+                    items: [{ item_id: itemId, quantity: 1, unit_price: 1 }],
                 }),
             ).rejects.toThrow(/finalised/);
         });

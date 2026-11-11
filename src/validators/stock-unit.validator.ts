@@ -11,6 +11,9 @@ const stockUnitStatus = z.enum([
     "DISPOSED",
 ]);
 
+// SOLD is only ever set by scanning the unit out on a QR sale (/sale-scans), never by hand.
+const listableStockUnitStatus = z.enum([...stockUnitStatus.options, "SOLD"]);
+
 export const provisionStockUnitsSchema = z.object({
     count: z.coerce
         .number()
@@ -64,7 +67,7 @@ export const setStockUnitStatusSchema = z.object({
 });
 
 export const listStockUnitsQuerySchema = paginationQuerySchema.extend({
-    status: stockUnitStatus.optional(),
+    status: listableStockUnitStatus.optional(),
     house_id: z.string().uuid().optional(),
     category: resourceCategorySchema.optional(),
     // The purchase line (lot) the units are bound to -- the purchase page's per-line code list.

@@ -5,9 +5,14 @@ import { AppError } from "@lib/app-error";
 
 const name = () => `Test Item ${crypto.randomUUID()}`;
 const createdIds: string[] = [];
+const createdSaleIds: string[] = [];
+let profileId: string | undefined;
 
 describe("ItemService", () => {
     afterAll(async () => {
+        await prisma.saleItem.deleteMany({ where: { item_id: { in: createdIds } } });
+        await prisma.sale.deleteMany({ where: { id: { in: createdSaleIds } } });
+        if (profileId) await prisma.profiles.delete({ where: { id: profileId } });
         await prisma.stockLedger.deleteMany({ where: { item_id: { in: createdIds } } });
         await prisma.item.deleteMany({ where: { id: { in: createdIds } } });
     });
@@ -179,5 +184,59 @@ describe("ItemService", () => {
 
         const found = await ItemService.getById(item!.id);
         expect(found.category).toBe("WASTE");
+    });
+
+    test("an item can't be both farm-made and QR-tracked", async () => {
+        await expect(
+            ItemService.create({
+                name: name(),
+                category: "OTHER",
+                unit: "KG",
+                is_farm_made: true,
+                is_unit_tracked: true,
+            }),
+        ).rejects.toMatchObject({ status: 400 });
+
+        const tracked = await ItemService.create({
+            name: name(),
+            category: "MEDICINE",
+            unit: "LITER",
+            is_unit_tracked: true,
+        });
+        createdIds.push(tracked!.id);
+        await expect(ItemService.update(tracked!.id, { is_farm_made: true })).rejects.toMatchObject({
+            status: 400,
+        });
+    });
+
+    test("farm-made can't change once the item has been sold or purchased", async () => {
+        const item = await ItemService.create({ name: name(), category: "OTHER", unit: "KG" });
+        createdIds.push(item!.id);
+        profileId = (
+            await prisma.profiles.create({
+                data: {
+                    name: "Item Test Seller",
+                    mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`,
+                    role: "ADMIN",
+                },
+            })
+        ).id;
+        const sale = await prisma.sale.create({
+            data: {
+                sale_date: new Date(),
+                total: 10,
+                paid_amount: 0,
+                due_amount: 10,
+                recorded_by_id: profileId,
+                items: {
+                    create: [{ item_id: item!.id, quantity: 1, unit: "KG", unit_price: 10, total_price: 10 }],
+                },
+            },
+        });
+        createdSaleIds.push(sale.id);
+
+        await expect(ItemService.update(item!.id, { is_farm_made: true })).rejects.toMatchObject({
+            status: 409,
+        });
     });
 });

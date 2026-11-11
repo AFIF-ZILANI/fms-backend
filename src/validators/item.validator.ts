@@ -14,6 +14,8 @@ export const createItemSchema = z.object({
     // true = individually QR-coded (StockUnit), false = aggregate quantity only (StockLedger).
     // Gates bind() and TransferService.create() so the two mechanisms can't mix for one item.
     is_unit_tracked: z.coerce.boolean().optional(),
+    // Made on the farm, never bought (litter): sold without stock, refused on purchases. Never QR-tracked.
+    is_farm_made: z.coerce.boolean().optional(),
 });
 
 // unit is intentionally excluded -- ItemUnit conversion factors and every
@@ -29,6 +31,7 @@ export const listItemsQuerySchema = paginationQuerySchema.extend({
     // -side rather than client-side because a paginated list filtered after the
     // fact silently drops matches past page one.
     is_unit_tracked: z.enum(["true", "false"]).optional(),
+    is_farm_made: z.enum(["true", "false"]).optional(),
 });
 
 export const createItemUnitSchema = z
