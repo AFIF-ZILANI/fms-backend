@@ -121,6 +121,11 @@ export const PurchaseService = {
             "PURCHASE",
         );
         for (const charge of data.charges ?? []) checkExpensePaid(charge);
+        const farmMade = await prisma.item.findFirst({
+            where: { id: { in: data.items.map((line) => line.item_id) }, is_farm_made: true },
+            select: { name: true },
+        });
+        if (farmMade) throw AppError.badRequest(`${farmMade.name} is made on the farm and can't be bought`);
 
         try {
             return await prisma.$transaction(async (tx) => {
