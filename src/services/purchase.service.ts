@@ -9,6 +9,7 @@ import { toSkipTake, buildMeta } from "@lib/pagination";
 import { toBaseQuantity } from "@lib/unit-conversion";
 import { getItemLocationBalance } from "@lib/stock-balance";
 import { StockLedgerService } from "@services/stock-ledger.service";
+import { computeDiscount } from "@lib/discount";
 import { checkExpensePaid, writeExpense } from "@services/expense.service";
 import type {
     AddPurchaseChargeInput,
@@ -18,31 +19,6 @@ import type {
 } from "@validators/purchase.validator";
 
 const include = { items: { include: { item: true } }, supplier: true } as const;
-
-type DiscountType = "FLAT" | "PERCENT";
-
-/** Discount amount taken off `gross` -- FLAT is a currency amount, PERCENT is 0-100 of `gross`.
- * Rejects a discount that would take the net below zero (a flat discount bigger than the amount
- * it discounts, or a percent over 100) rather than silently clamping to zero. */
-function computeDiscount(
-    gross: Prisma.Decimal,
-    discount_type: DiscountType | undefined,
-    discount_value: number | undefined,
-    label: string,
-): Prisma.Decimal {
-    if (discount_type === undefined) return new Prisma.Decimal(0);
-    if (discount_type === "PERCENT") {
-        if (discount_value! > 100) {
-            throw AppError.badRequest(`${label} discount percent cannot exceed 100`);
-        }
-        return gross.times(discount_value!).dividedBy(100);
-    }
-    const flat = new Prisma.Decimal(discount_value!);
-    if (flat.greaterThan(gross)) {
-        throw AppError.badRequest(`${label} discount cannot exceed the amount it discounts`);
-    }
-    return flat;
-}
 
 // Purchase/PurchaseItem are append-only (system-design-arc.md §6) -- no
 // update here, ever. A correction is a new Purchase, not an edit.
@@ -125,7 +101,8 @@ export const PurchaseService = {
             where: { id: { in: data.items.map((line) => line.item_id) }, is_farm_made: true },
             select: { name: true },
         });
-        if (farmMade) throw AppError.badRequest(`${farmMade.name} is made on the farm and can't be bought`);
+        if (farmMade)
+            throw AppError.badRequest(`${farmMade.name} is made on the farm and can't be bought`);
 
         try {
             return await prisma.$transaction(async (tx) => {
@@ -301,12 +278,21 @@ export const PurchaseService = {
             });
             const posted = new Map<string, Prisma.Decimal>();
             for (const e of ledger) {
-                posted.set(e.item_id, (posted.get(e.item_id) ?? new Prisma.Decimal(0)).plus(e.quantity));
+                posted.set(
+                    e.item_id,
+                    (posted.get(e.item_id) ?? new Prisma.Decimal(0)).plus(e.quantity),
+                );
             }
             for (const [item_id, quantity] of posted) {
-                const balance = await getItemLocationBalance(tx, item_id, "WAREHOUSE", purchase.warehouse_id);
+                const balance = await getItemLocationBalance(
+                    tx,
+                    item_id,
+                    "WAREHOUSE",
+                    purchase.warehouse_id,
+                );
                 if (balance.lessThan(quantity)) {
-                    const name = purchase.items.find((l) => l.item_id === item_id)?.item.name ?? "an item";
+                    const name =
+                        purchase.items.find((l) => l.item_id === item_id)?.item.name ?? "an item";
                     throw AppError.conflict(
                         `Some of the ${name} from this purchase has already been used or moved -- it can't be removed`,
                     );

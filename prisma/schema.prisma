@@ -1451,24 +1451,27 @@ model ItemOrganization {
 // ════════════════════════════════════════════════════════════════════
 
 model Sale {
-  id             String      @id @default(uuid())
+  id             String        @id @default(uuid())
   customer_id    String?
-  customer       Customers?  @relation(fields: [customer_id], references: [id])
+  customer       Customers?    @relation(fields: [customer_id], references: [id])
   // Optional: a sale that belongs to a batch's books (litter after the flock is sold) -- counted
   // as "other sales" income in that batch's P&L.
   batch_id       String?
-  batch          Batches?    @relation(fields: [batch_id], references: [id])
-  kind           SaleKind    @default(STOCK)
+  batch          Batches?      @relation(fields: [batch_id], references: [id])
+  kind           SaleKind      @default(STOCK)
   // STOCK sales only: the warehouse the stock left from.
   warehouse_id   String?
-  warehouse      Warehouses? @relation(fields: [warehouse_id], references: [id])
+  warehouse      Warehouses?   @relation(fields: [warehouse_id], references: [id])
   sale_date      DateTime
-  total          Decimal     @db.Decimal(10, 2)
-  paid_amount    Decimal     @db.Decimal(10, 2)
-  due_amount     Decimal     @db.Decimal(10, 2)
+  // Optional discount on the whole sale, after each line's own -- same rules as Purchase. total is net of both.
+  discount_type  DiscountType?
+  discount_value Decimal?      @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  paid_amount    Decimal       @db.Decimal(10, 2)
+  due_amount     Decimal       @db.Decimal(10, 2)
   recorded_by_id String
-  recorded_by    Profiles    @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime    @default(now())
+  recorded_by    Profiles      @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime      @default(now())
 
   items SaleItem[]
 
@@ -1476,18 +1479,21 @@ model Sale {
 }
 
 model SaleItem {
-  id          String  @id @default(uuid())
-  sale_id     String
-  sale        Sale    @relation(fields: [sale_id], references: [id])
-  item_id     String
-  item        Item    @relation(fields: [item_id], references: [id])
-  // CODED lines: quantity = number of bottles and unit = null (each scanned bottle carries its own size).
-  quantity    Decimal @db.Decimal(10, 3)
-  unit        String?
+  id             String        @id @default(uuid())
+  sale_id        String
+  sale           Sale          @relation(fields: [sale_id], references: [id])
+  item_id        String
+  item           Item          @relation(fields: [item_id], references: [id])
+  // CODED lines: quantity = number of QR packs (one scan each); unit names the pack (Bottle, Pouch) or is null.
+  quantity       Decimal       @db.Decimal(10, 3)
+  unit           String?
   // Restrict, like every other reference to Unit: lookup-factory's remove() relies on it to refuse deleting a unit in use.
-  unitRef     Unit?   @relation(fields: [unit], references: [code], onDelete: Restrict, onUpdate: Cascade)
-  unit_price  Decimal @db.Decimal(10, 2)
-  total_price Decimal @db.Decimal(10, 2)
+  unitRef        Unit?         @relation(fields: [unit], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  unit_price     Decimal       @db.Decimal(10, 2)
+  // Per-line discount, as on PurchaseItem. total_price is net of it.
+  discount_type  DiscountType?
+  discount_value Decimal?      @db.Decimal(10, 2)
+  total_price    Decimal       @db.Decimal(10, 2)
 
   stockUnits StockUnit[]
 
