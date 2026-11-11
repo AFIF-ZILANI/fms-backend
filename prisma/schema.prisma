@@ -133,6 +133,14 @@ enum StockUnitStatus {
   IN_USE // opened/depleting (medicine, vaccine) or currently assigned to a batch (equipment)
   CONSUMED // fully depleted — medicine/vaccine only
   DISPOSED // written off — expired, damaged, discarded
+  SOLD // scanned out on a QR sale (StockUnit.sale_item_id) — gone, like DISPOSED
+}
+
+/// What a regular sale sells -- one kind per sale. Bird sales are their own model (BirdSale).
+enum SaleKind {
+  CODED // QR-tracked bottles: recorded as a count, they leave stock one scan at a time on mobile
+  STOCK // bought, non-coded stock (feed, husk): an amount out of a warehouse at save
+  FARM_MADE // made on the farm (litter): never stocked, nothing leaves stock
 }
 
 enum AllocationType {
@@ -538,6 +546,7 @@ model Profiles {
   auditLogs               AuditLog[]
   tasksAssigned           EmployeeTaskAssignment[]
   stockUnitsBound         StockUnit[]
+  stockUnitsSold          StockUnit[]                @relation("StockUnitSoldBy")
   devices                 Device[]
   pairingCodes            PairingCode[]
   ingestedSales           IngestedSale[]
@@ -828,6 +837,9 @@ model Item {
   // coded items (relocate() links its StockTransfer so the ledger stays in step). The mode is
   // fixed once the item has been purchased (ItemService.update).
   is_unit_tracked       Boolean      @default(false)
+  // Made on the farm, never bought (litter, other by-products): sold as a FARM_MADE sale with no stock,
+  // refused on purchases. Never together with is_unit_tracked; fixed once the item is bought or sold.
+  is_farm_made          Boolean      @default(false)
   created_at            DateTime     @default(now())
   updated_at            DateTime     @updatedAt
 
@@ -941,6 +953,12 @@ model StockUnit {
   // is a field action -- FEATURES.md §3.3/§4 both name this accountability field.
   bound_by_id      String?
   bound_by         Profiles?       @relation(fields: [bound_by_id], references: [id])
+  // Set when the unit is scanned out on a QR sale (status SOLD): which sale line, when, by whom.
+  sale_item_id     String?
+  sale_item        SaleItem?       @relation(fields: [sale_item_id], references: [id])
+  sold_at          DateTime?
+  sold_by_id       String?
+  sold_by          Profiles?       @relation("StockUnitSoldBy", fields: [sold_by_id], references: [id])
   created_at       DateTime        @default(now())
 
   consumptions     Consumption[]
@@ -949,6 +967,7 @@ model StockUnit {
 
   @@index([purchase_item_id])
   @@index([status])
+  @@index([sale_item_id])
 }
 
 model StockHouseAllocation {
@@ -1404,6 +1423,7 @@ model Warehouses {
 
   inventoryAdjustments InventoryAdjustment[]
   purchases            Purchase[]
+  sales                Sale[]
 }
 
 model Organization {
@@ -1431,20 +1451,24 @@ model ItemOrganization {
 // ════════════════════════════════════════════════════════════════════
 
 model Sale {
-  id             String     @id @default(uuid())
+  id             String      @id @default(uuid())
   customer_id    String?
-  customer       Customers? @relation(fields: [customer_id], references: [id])
+  customer       Customers?  @relation(fields: [customer_id], references: [id])
   // Optional: a sale that belongs to a batch's books (litter after the flock is sold) -- counted
   // as "other sales" income in that batch's P&L.
   batch_id       String?
-  batch          Batches?   @relation(fields: [batch_id], references: [id])
+  batch          Batches?    @relation(fields: [batch_id], references: [id])
+  kind           SaleKind    @default(STOCK)
+  // STOCK sales only: the warehouse the stock left from.
+  warehouse_id   String?
+  warehouse      Warehouses? @relation(fields: [warehouse_id], references: [id])
   sale_date      DateTime
-  total          Decimal    @db.Decimal(10, 2)
-  paid_amount    Decimal    @db.Decimal(10, 2)
-  due_amount     Decimal    @db.Decimal(10, 2)
+  total          Decimal     @db.Decimal(10, 2)
+  paid_amount    Decimal     @db.Decimal(10, 2)
+  due_amount     Decimal     @db.Decimal(10, 2)
   recorded_by_id String
-  recorded_by    Profiles   @relation(fields: [recorded_by_id], references: [id])
-  created_at     DateTime   @default(now())
+  recorded_by    Profiles    @relation(fields: [recorded_by_id], references: [id])
+  created_at     DateTime    @default(now())
 
   items SaleItem[]
 
@@ -1457,11 +1481,14 @@ model SaleItem {
   sale        Sale    @relation(fields: [sale_id], references: [id])
   item_id     String
   item        Item    @relation(fields: [item_id], references: [id])
+  // CODED lines: quantity = number of bottles and unit = null (each scanned bottle carries its own size).
   quantity    Decimal @db.Decimal(10, 3)
-  unit        String
-  unitRef     Unit    @relation(fields: [unit], references: [code], onUpdate: Cascade)
+  unit        String?
+  unitRef     Unit?   @relation(fields: [unit], references: [code], onUpdate: Cascade)
   unit_price  Decimal @db.Decimal(10, 2)
   total_price Decimal @db.Decimal(10, 2)
+
+  stockUnits StockUnit[]
 
   @@index([sale_id])
   @@index([item_id])
