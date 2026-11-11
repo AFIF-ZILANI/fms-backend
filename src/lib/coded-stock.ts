@@ -25,12 +25,15 @@ export async function codedRemaining(
             where: { stock_unit_id: unit_id },
             _sum: { base_quantity: true },
         }),
-        // Disposals write off a unit's remainder (ref_id = the unit), which also leaves the lot. Matched
-        // by reason + ref, not location: the write-off is posted where the unit was.
+        // Disposals write off a unit's remainder and a QR sale's scan takes the whole bottle out (both
+        // ref_id = the unit), which also leaves the lot. Matched by reason + ref, not location: the row is
+        // posted where the unit was.
         tx.stockLedger.aggregate({
             where: {
-                reason: "WASTAGE",
-                ref_type: "ADJUSTMENT",
+                OR: [
+                    { reason: "WASTAGE", ref_type: "ADJUSTMENT" },
+                    { reason: "SALE", ref_type: "SALE" },
+                ],
                 ref_id: { in: await lotUnitIds(tx, lot.id) },
             },
             _sum: { quantity: true },

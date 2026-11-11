@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { StockUnitService } from "./stock-unit.service";
+import { unitAmount } from "@lib/coded-stock";
 import { PurchaseItemService } from "./purchase.service";
 import { AppError } from "@lib/app-error";
 import { houseNumber, sharedWarehouseId, provisionPrinted } from "@lib/test-fixtures";
@@ -762,5 +763,86 @@ describe("StockUnitService", () => {
         await expect(StockUnitService.remove(unit!.id)).rejects.toMatchObject({ status: 409 });
 
         await prisma.consumption.delete({ where: { id: consumption.id } });
+    });
+
+    /** A bound unit put in the state a QR sale's scan leaves it in: SOLD, with its full amount out of stock. */
+    async function soldUnit(lot = purchaseItemId, amount = 1) {
+        const unit = await boundUnitOf(lot);
+        await prisma.stockUnit.update({ where: { id: unit.id }, data: { status: "SOLD", sold_at: new Date() } });
+        await prisma.stockLedger.create({
+            data: {
+                item_id: itemId,
+                quantity: amount,
+                direction: "OUT",
+                reason: "SALE",
+                ref_type: "SALE",
+                ref_id: unit.id,
+                location_type: "WAREHOUSE",
+                location_id: await sharedWarehouseId(),
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+        return unit;
+    }
+
+    async function boundUnitOf(lot: string) {
+        const [unit] = await provisionPrinted(1);
+        createdUnitIds.push(unit!.id);
+        return StockUnitService.bind(unit!.id, { purchase_item_id: lot });
+    }
+
+    test("a sold bottle can't be used, moved, disposed or re-statused", async () => {
+        const unit = await soldUnit();
+        // One at a time: run together, a dispose that wrongly succeeded would hide what the others say.
+        const refusals = [
+            () =>
+                StockUnitService.use(unit.id, {
+                    action: "START",
+                    house_id: houseId,
+                    date: new Date(),
+                    recorded_by_id: profileId,
+                }),
+            () => StockUnitService.relocate(unit.id, houseId, crypto.randomUUID()),
+            () => StockUnitService.dispose(unit.id),
+            () => StockUnitService.setStatus(unit.id, "IN_USE"),
+        ];
+        for (const attempt of refusals) {
+            const result = attempt();
+            await expect(result).rejects.toMatchObject({ status: 409 });
+            await expect(result).rejects.toThrow(/sold/);
+        }
+        expect((await prisma.stockUnit.findUniqueOrThrow({ where: { id: unit.id } })).status).toBe("SOLD");
+    });
+
+    test("sold bottles are not in stock anywhere", async () => {
+        const unit = await soldUnit();
+        const here = await StockUnitService.atLocation({
+            location_type: "WAREHOUSE",
+            location_id: await sharedWarehouseId(),
+            item_id: itemId,
+        });
+        expect(here.map((u) => u.id)).not.toContain(unit.id);
+        expect((await StockUnitService.counts()).SOLD).toBeGreaterThan(0);
+    });
+
+    test("a sold bottle leaves its lot's remainder", async () => {
+        // A lot with no bottle count: a bottle's size is the lot's remainder split across live bottles.
+        const lot = await prisma.purchaseItem.create({
+            data: {
+                purchase_id: purchaseId,
+                item_id: itemId,
+                quantity: 10,
+                unit: "BOTTLE",
+                base_quantity: 10,
+                unit_price: 1,
+                total_price: 10,
+            },
+        });
+        const keep = await boundUnitOf(lot.id);
+        await soldUnit(lot.id, 5);
+        const amount = await prisma.$transaction((tx) =>
+            unitAmount(tx, keep.id, { ...lot, item: { category: "MEDICINE" } }),
+        );
+        expect(amount.toNumber()).toBe(5);
     });
 });
