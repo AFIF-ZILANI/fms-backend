@@ -7,6 +7,7 @@ import { MortalityLogService } from "@services/mortality-log.service";
 import type {
     CreateMortalityLogInput,
     ListMortalityLogsQuery,
+    SetMortalityDiseaseCaseInput,
 } from "@validators/mortality-log.validator";
 
 export const MortalityLogController = {
@@ -26,6 +27,18 @@ export const MortalityLogController = {
             };
             const log = await MortalityLogService.create(body);
             return sendSuccess(c, log, "Mortality logged", 201);
+        });
+    },
+
+    async setDiseaseCase(c: Context) {
+        return withHandler(c, async () => {
+            const { disease_case_id } = getValid<SetMortalityDiseaseCaseInput>(c, "json");
+            const log = await MortalityLogService.setDiseaseCase(
+                c.req.param("id") ?? "",
+                disease_case_id,
+                await getActorId(c),
+            );
+            return sendSuccess(c, log, disease_case_id ? "Disease linked" : "Disease unlinked");
         });
     },
 };

@@ -169,4 +169,53 @@ describe("DiseaseCaseService", () => {
             await prisma.auditLog.count({ where: { record_id: created.id, action: "DELETE" } }),
         ).toBe(1);
     });
+
+    test("an admin links a forgotten death only to a case active that day, in that house", async () => {
+        const c = await DiseaseCaseService.create({
+            ...base(),
+            noticed_on: new Date("2026-11-03"),
+        });
+        await DiseaseCaseService.update(c.id, {
+            status: "RESOLVED",
+            resolved_on: new Date("2026-11-05"),
+            outcome: "RECOVERED",
+        });
+        const death = (date: string) =>
+            MortalityLogService.create({
+                batch_id: batchId,
+                house_id: houseA,
+                count_died: 1,
+                date: new Date(date),
+                recorded_by_id: profileId,
+            });
+        const [before, during, after] = await Promise.all([
+            death("2026-11-02T10:00:00Z"),
+            death("2026-11-05T10:00:00Z"),
+            death("2026-11-06T10:00:00Z"),
+        ]);
+
+        for (const log of [before, after])
+            await expect(
+                MortalityLogService.setDiseaseCase(log.id, c.id, profileId),
+            ).rejects.toMatchObject({ status: 400 });
+        expect(
+            (await MortalityLogService.setDiseaseCase(during.id, c.id, profileId)).disease_case_id,
+        ).toBe(c.id);
+
+        const other = await DiseaseCaseService.create({
+            ...base(),
+            batch_id: otherBatchId,
+            house_ids: [],
+        });
+        await expect(
+            MortalityLogService.setDiseaseCase(during.id, other.id, profileId),
+        ).rejects.toMatchObject({ status: 400 });
+
+        expect(
+            (await MortalityLogService.setDiseaseCase(during.id, null, profileId)).disease_case_id,
+        ).toBeNull();
+        expect(
+            await prisma.auditLog.count({ where: { record_id: during.id, action: "UPDATE" } }),
+        ).toBe(2);
+    });
 });

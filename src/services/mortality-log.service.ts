@@ -1,6 +1,8 @@
 import prisma from "@lib/db";
 import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
+import { audit } from "@lib/audit";
+import { farmDay } from "@lib/farm-day";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
 import { assertCaseOfBatch } from "@services/disease-case.service";
 import { toSkipTake, buildMeta } from "@lib/pagination";
@@ -68,5 +70,56 @@ export const MortalityLogService = {
         } catch (err) {
             return handlePrismaWriteError(err);
         }
+    },
+
+    /** Admin fix-up for a death logged without its outbreak. The case must be this batch's, name the
+     * log's house, and have been active on the farm day the birds died (noticed_on to resolved_on). */
+    async setDiseaseCase(id: string, disease_case_id: string | null, actor_id: string) {
+        return prisma.$transaction(async (tx) => {
+            const log = await tx.mortalityLog.findUnique({ where: { id } });
+            if (!log) throw AppError.notFound("Mortality log");
+
+            if (disease_case_id) {
+                const found = await tx.diseaseCase.findUnique({
+                    where: { id: disease_case_id },
+                    select: {
+                        batch_id: true,
+                        noticed_on: true,
+                        resolved_on: true,
+                        houses: { select: { id: true } },
+                    },
+                });
+                if (!found) throw AppError.notFound("Disease case");
+                if (found.batch_id !== log.batch_id)
+                    throw AppError.badRequest("That disease case belongs to another batch");
+                if (!found.houses.some((h) => h.id === log.house_id))
+                    throw AppError.badRequest("That disease case doesn't cover this house");
+                const day = farmDay(log.date);
+                if (
+                    day < farmDay(found.noticed_on) ||
+                    (found.resolved_on && day > farmDay(found.resolved_on))
+                )
+                    throw AppError.badRequest(
+                        "That disease wasn't active on the day these birds died",
+                    );
+            }
+
+            const updated = await tx.mortalityLog.update({
+                where: { id },
+                data: { disease_case_id },
+            });
+            await audit(tx, {
+                table: "MortalityLog",
+                record_id: id,
+                action: "UPDATE",
+                actor_id,
+                note: disease_case_id
+                    ? "Disease linked to mortality log"
+                    : "Disease unlinked from mortality log",
+                before: { disease_case_id: log.disease_case_id },
+                after: { disease_case_id },
+            });
+            return updated;
+        });
     },
 };
