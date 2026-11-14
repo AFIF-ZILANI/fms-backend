@@ -84,6 +84,7 @@ describe("history foreign keys refuse deletes", () => {
         await removeBoundStockUnit(fixture);
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: batchId } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: batchId } });
         await prisma.inventoryAdjustment.deleteMany({ where: { item_id: itemId } });
         await prisma.admins.deleteMany({ where: { profile_id: adminProfileId } });

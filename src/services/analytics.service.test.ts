@@ -62,7 +62,8 @@ describe("AnalyticsService", () => {
                 house_id: houseId,
                 average_wt_grams: 500,
                 sample_size: 30,
-                date: new Date(),
+                // a later day than the start-weight record BatchService.create writes today
+                date: new Date(Date.now() + 86_400_000),
                 measured_by_id: profileId,
                 idempotency_key: crypto.randomUUID(),
             },
@@ -143,6 +144,7 @@ describe("AnalyticsService", () => {
         await prisma.mortalityLog.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: batchId } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.delete({ where: { id: batchId } });
         await prisma.houses.delete({ where: { id: houseId } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });

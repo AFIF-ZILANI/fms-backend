@@ -122,7 +122,7 @@ export const AnalyticsService = {
                 // Several houses can be weighed on one day now that date is a day, not a timestamp;
                 // the most recently entered sample wins the tie.
                 orderBy: [{ date: "desc" }, { created_at: "desc" }],
-                select: { batch_id: true, average_wt_grams: true, date: true },
+                select: { id: true, batch_id: true, average_wt_grams: true, date: true },
             }),
             prisma.consumption.findMany({
                 where: { batch_id: { in: batchIds } },
@@ -219,17 +219,22 @@ export const AnalyticsService = {
         const diedByBatch = new Map(
             mortalityByBatch.map((m) => [m.batch_id, m._sum.count_died ?? 0]),
         );
+        // Newest first: the first record seen per batch is its latest weighing, the last is the placement
+        // weighing written at batch creation. A batch with only that one has no live weight yet.
         const latestWeightByBatch = new Map<string, (typeof weightRecords)[number]>();
+        const startWeightByBatch = new Map<string, (typeof weightRecords)[number]>();
         for (const record of weightRecords) {
-            if (record.batch_id && !latestWeightByBatch.has(record.batch_id)) {
-                latestWeightByBatch.set(record.batch_id, record);
-            }
+            if (!record.batch_id) continue;
+            if (!latestWeightByBatch.has(record.batch_id)) latestWeightByBatch.set(record.batch_id, record);
+            startWeightByBatch.set(record.batch_id, record);
         }
 
         return batches.map((batch) => {
             const liveCount = batch.houseBalances.reduce((sum, b) => sum + b.quantity, 0);
             const died = diedByBatch.get(batch.id) ?? 0;
-            const latestWeight = latestWeightByBatch.get(batch.id);
+            const startWeight = startWeightByBatch.get(batch.id);
+            const latest = latestWeightByBatch.get(batch.id);
+            const latestWeight = latest?.id === startWeight?.id ? undefined : latest;
             // Live weight now (latest sample x birds on hand) + weight already sold. Without a weighing
             // there's no honest figure, so everything weight-based stays null.
             // ponytail: one house's latest sample stands in for the whole batch; weight by house balance if houses diverge.
@@ -240,7 +245,8 @@ export const AnalyticsService = {
             const gainKg =
                 producedKg === null
                     ? null
-                    : producedKg - (batch.initial_chick_count * batch.init_chicks_avg_wt) / 1000;
+                    : producedKg -
+                      (batch.initial_chick_count * (startWeight?.average_wt_grams.toNumber() ?? 0)) / 1000;
             const feedKg = feedKgByBatch.has(batch.id) ? feedKgByBatch.get(batch.id)! : 0;
             const cost = costByBatch.get(batch.id) ?? zero;
             return {

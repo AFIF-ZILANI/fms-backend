@@ -28,7 +28,6 @@ describe("MedicationService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86400_000),
                 initial_chick_count: 500,
-                init_chicks_avg_wt: 40,
             },
         });
         batchId = batch.id;
@@ -36,6 +35,7 @@ describe("MedicationService", () => {
 
     afterAll(async () => {
         await prisma.medications.deleteMany({ where: { id: { in: createdIds } } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.delete({ where: { id: batchId } });
         await prisma.houses.delete({ where: { id: houseId } });
         await prisma.profiles.delete({ where: { id: profileId } });

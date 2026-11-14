@@ -11,6 +11,7 @@ export const createBatchSchema = z.object({
     starting_date: z.coerce.date().optional(),
     expected_selling_date: z.coerce.date(),
     initial_chick_count: z.coerce.number().int().positive("Initial chick count must be positive"),
+    // Not a batch column: stored as the batch's Day-1 WeightRecord (BatchService.create).
     init_chicks_avg_wt: z.coerce.number().positive("Initial average weight must be positive"),
     // Chicks are placed into a house the moment a batch exists -- creates the
     // matching INITIAL BatchHouseAllocation + BatchHouseBalance in one

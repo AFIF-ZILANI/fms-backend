@@ -58,6 +58,7 @@ describe("BatchHouseAllocationService", () => {
         await prisma.batchHouseAllocation.deleteMany({
             where: { batch_id: { in: createdBatchIds } },
         });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: { in: createdBatchIds } } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: [houseAId, houseBId] } } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });

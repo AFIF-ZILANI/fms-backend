@@ -42,7 +42,6 @@ async function makeBatch(code: string, status: "RUNNING" | "SOLD" | "CLOSED", st
             expected_selling_date: new Date(start.getTime() + 30 * DAY),
             actual_end_date: end,
             initial_chick_count: 100,
-            init_chicks_avg_wt: 40,
         },
     });
     batchIds.push(b.id);
@@ -143,6 +142,7 @@ describe("Batch settlement window + stock count", () => {
         await purgeAuditLog({ where: { record_id: { in: batchIds } } });
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: { in: batchIds } } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: batchIds } } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: { in: batchIds } } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: { in: batchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: [houseA, houseB, houseEmpty] } } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });

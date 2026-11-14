@@ -41,7 +41,6 @@ describe("FinanceService", () => {
                 starting_date: d(1),
                 expected_selling_date: d(30),
                 initial_chick_count: 10,
-                init_chicks_avg_wt: 40,
             },
         });
         ids.batch = batch.id;
@@ -206,6 +205,7 @@ describe("FinanceService", () => {
         await prisma.purchaseItem.deleteMany({ where: { purchase_id: { in: ids.purchases } } });
         await prisma.purchase.deleteMany({ where: { id: { in: ids.purchases } } });
         await prisma.item.deleteMany({ where: { id: { in: [ids.feed, ids.chick] } } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: ids.batch } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: ids.batch } });
         await prisma.houses.deleteMany({ where: { id: ids.house } });
         await prisma.profiles.deleteMany({ where: { id: ids.profile } });

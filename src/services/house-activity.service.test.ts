@@ -91,6 +91,7 @@ describe("houseActivity", () => {
         await prisma.mortalityLog.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: batchId } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.delete({ where: { id: batchId } });
         await prisma.houses.delete({ where: { id: houseId } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });
@@ -99,25 +100,28 @@ describe("houseActivity", () => {
 
     test("newest first across every kind, worded, with who did it", async () => {
         const { activity, meta } = await houseActivity(houseId, { page: 1, limit: 20 });
-        expect(meta.total).toBe(5);
+        // 6 = the 5 seeded here + the Day-1 start-weight sample BatchService.create writes.
+        expect(meta.total).toBe(6);
         expect(activity.map((a) => a.kind)).toEqual([
+            "WEIGHT", // the start weight, filed under today
             "MORTALITY",
             "ENVIRONMENT",
             "MORTALITY",
             "BIRDS_IN",
             "WEIGHT",
         ]);
-        expect(activity[0]).toMatchObject({
+        expect(activity[0]).toMatchObject({ title: "Weighed 40 g average", detail: "500 birds sampled" });
+        expect(activity[1]).toMatchObject({
             title: "3 birds died",
             detail: "Heat",
             by: "Activity Recorder",
         });
-        expect(activity[1]).toMatchObject({
+        expect(activity[2]).toMatchObject({
             title: "29.5°C · 61% humidity",
             detail: "Ammonia 12 ppm · CO₂ 900 ppm",
         });
-        expect(activity[3]!.title).toBe("500 birds placed");
-        expect(activity[4]).toMatchObject({ title: "Weighed 250 g average", day_only: true });
+        expect(activity[4]!.title).toBe("500 birds placed");
+        expect(activity[5]).toMatchObject({ title: "Weighed 250 g average", day_only: true });
     });
 
     test("pages slice the same merged order without gaps or repeats", async () => {

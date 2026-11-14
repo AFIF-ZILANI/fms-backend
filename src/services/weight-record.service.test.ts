@@ -28,7 +28,6 @@ describe("WeightRecordService", () => {
                 breed: "KEDERNATH",
                 expected_selling_date: new Date(Date.now() + 30 * 86400_000),
                 initial_chick_count: 500,
-                init_chicks_avg_wt: 40,
             },
         });
         batchId = batch.id;

@@ -45,8 +45,8 @@ export const BatchService = {
 
     /** Chicks fund a batch financially and physically at the same moment
      * (system-design-arc.md "chicks arrive" flow) -- creates the Batch, the
-     * matching INITIAL BatchHouseAllocation, and the starting
-     * BatchHouseBalance in one transaction. */
+     * matching INITIAL BatchHouseAllocation, the starting
+     * BatchHouseBalance and the Day-1 start-weight sample in one transaction. */
     async create(data: CreateBatchInput) {
         try {
             return await prisma.$transaction(async (tx) => {
@@ -56,7 +56,6 @@ export const BatchService = {
                         breed: data.breed,
                         expected_selling_date: data.expected_selling_date,
                         initial_chick_count: data.initial_chick_count,
-                        init_chicks_avg_wt: data.init_chicks_avg_wt,
                         ...(data.starting_date !== undefined && {
                             starting_date: data.starting_date,
                         }),
@@ -71,6 +70,20 @@ export const BatchService = {
                         reason: "INITIAL",
                         recorded_by_id: data.recorded_by_id,
                         idempotency_key: crypto.randomUUID(),
+                    },
+                });
+
+                // The chicks' start weight is the batch's Day-1 weight sample, so the growth curve begins
+                // from it. sample_size = the whole lot: the delivery weight is its total over its count.
+                await tx.weightRecords.create({
+                    data: {
+                        batch_id: batch.id,
+                        house_id: data.house_id,
+                        average_wt_grams: data.init_chicks_avg_wt,
+                        sample_size: data.initial_chick_count,
+                        date: farmDay(batch.starting_date),
+                        measured_by_id: data.recorded_by_id,
+                        idempotency_key: `start-weight-${batch.id}`,
                     },
                 });
 

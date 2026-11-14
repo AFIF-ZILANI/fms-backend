@@ -19,7 +19,6 @@ const newBatch = (code: string) =>
             breed: "CLASSIC",
             expected_selling_date: new Date(Date.now() + 30 * 86400_000),
             initial_chick_count: 500,
-            init_chicks_avg_wt: 40,
         },
     });
 
@@ -66,6 +65,7 @@ describe("DiseaseCaseService", () => {
         await prisma.diseaseCase.deleteMany({ where: { batch_id: { in: batchIds } } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: { in: batchIds } } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: { in: batchIds } } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: { in: batchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: houseIds } } });
         await prisma.disease.delete({ where: { id: diseaseId } });

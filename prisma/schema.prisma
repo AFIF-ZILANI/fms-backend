@@ -728,7 +728,6 @@ model Batches {
   expected_selling_date DateTime
   actual_end_date       DateTime? // set when status → CLOSED/SOLD; drives bird-days + depreciation triggers
   initial_chick_count   Int
-  init_chicks_avg_wt    Float
   created_at            DateTime    @default(now())
   updated_at            DateTime    @updatedAt
 

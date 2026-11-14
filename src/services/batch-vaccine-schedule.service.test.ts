@@ -136,7 +136,6 @@ describe("BatchVaccineScheduleService", () => {
                     starting_date: new Date(Date.now() - 4 * 86_400_000),
                     expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
                     initial_chick_count: 500,
-                    init_chicks_avg_wt: 40,
                 },
             })
         ).id;
@@ -173,6 +172,7 @@ describe("BatchVaccineScheduleService", () => {
         await prisma.vaccinePurpose.deleteMany({ where: { code: PURPOSE } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.delete({ where: { id: batchId } });
         await prisma.item.deleteMany({ where: { id: { in: [vaccineId, otherItemId] } } });
         await prisma.houses.deleteMany({ where: { id: { in: [houseId, houseYId] } } });

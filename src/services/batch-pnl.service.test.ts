@@ -37,7 +37,6 @@ describe("bird-days, shared costs and the batch statement", () => {
                     actual_end_date: end,
                     expected_selling_date: end,
                     initial_chick_count: birds,
-                    init_chicks_avg_wt: 40,
                 },
             });
         ids.a = (await batch("PNL-A", d(6, 1), d(6, 30), 100)).id;
@@ -105,6 +104,7 @@ describe("bird-days, shared costs and the batch statement", () => {
         await prisma.expense.deleteMany({ where: { id: { in: ids.expenses } } });
         await prisma.birdSale.deleteMany({ where: { id: ids.sale } });
         await prisma.mortalityLog.deleteMany({ where: { id: ids.death } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: { in: [ids.a, ids.b] } } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: { in: [ids.a, ids.b] } } });
         await prisma.houses.deleteMany({ where: { id: ids.house } });
         await prisma.profiles.deleteMany({ where: { id: ids.profile } });
