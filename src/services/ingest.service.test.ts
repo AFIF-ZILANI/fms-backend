@@ -144,7 +144,6 @@ describe("IngestService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
                 initial_chick_count: 500,
-                init_chicks_avg_wt: 40,
             },
         });
         await prisma.batchHouseBalance.create({
@@ -197,6 +196,7 @@ describe("IngestService", () => {
         await prisma.payment.deleteMany({ where: { ref_id: birdSale.id } });
         await prisma.birdSale.deleteMany({ where: { id: birdSale.id } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batch.id } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batch.id } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: batch.id } });
         await prisma.houses.deleteMany({ where: { id: house.id } });
     });
@@ -228,7 +228,6 @@ describe("IngestService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
                 initial_chick_count: birdsInHouse,
-                init_chicks_avg_wt: 40,
             },
         });
         await prisma.batchHouseBalance.create({
@@ -269,6 +268,7 @@ describe("IngestService", () => {
             });
             await prisma.birdSale.deleteMany({ where: { batch_id: batch.id } });
             await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batch.id } });
+            await prisma.weightRecords.deleteMany({ where: { batch_id: batch.id } }); // the Day-1 start weight
             await prisma.batches.deleteMany({ where: { id: batch.id } });
             await prisma.houses.deleteMany({ where: { id: house.id } });
         };

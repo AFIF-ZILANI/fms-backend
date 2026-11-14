@@ -77,7 +77,6 @@ describe("paid when recorded", () => {
                     breed: "CLASSIC",
                     expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
                     initial_chick_count: 200,
-                    init_chicks_avg_wt: 40,
                 },
             })
         ).id;
@@ -98,6 +97,7 @@ describe("paid when recorded", () => {
         await prisma.purchaseItem.deleteMany({ where: { purchase_id: { in: purchaseIds } } });
         await prisma.purchase.deleteMany({ where: { id: { in: purchaseIds } } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: batchId } });
         await prisma.houses.deleteMany({ where: { id: houseId } });
         await prisma.item.deleteMany({ where: { id: itemId } });

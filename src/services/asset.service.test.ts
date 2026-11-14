@@ -167,7 +167,6 @@ describe("AssetService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86400_000),
                 initial_chick_count: 100,
-                init_chicks_avg_wt: 40,
             },
         });
         await prisma.assetDepreciation.create({
@@ -178,6 +177,7 @@ describe("AssetService", () => {
         expect(await prisma.asset.findUnique({ where: { id: asset!.id } })).not.toBeNull();
 
         await prisma.assetDepreciation.deleteMany({ where: { asset_id: asset!.id } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batch.id } }); // the Day-1 start weight
         await prisma.batches.delete({ where: { id: batch.id } });
     });
 
@@ -202,7 +202,6 @@ describe("AssetService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86400_000),
                 initial_chick_count: 100,
-                init_chicks_avg_wt: 40,
             },
         });
         await prisma.assetDepreciation.create({
@@ -219,6 +218,7 @@ describe("AssetService", () => {
         expect(detail.depreciations[0]!.batch.batch_code).toBe(batch.batch_code);
 
         await prisma.assetDepreciation.deleteMany({ where: { asset_id: asset!.id } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batch.id } }); // the Day-1 start weight
         await prisma.batches.delete({ where: { id: batch.id } });
     });
 });

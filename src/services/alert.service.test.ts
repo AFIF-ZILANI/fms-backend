@@ -25,6 +25,7 @@ describe("AlertService", () => {
         await prisma.batchHouseAllocation.deleteMany({
             where: { batch_id: { in: createdBatchIds } },
         });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: { in: createdBatchIds } } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.deleteMany({ where: { id: { in: createdHouseIds } } });
         await prisma.performanceScoreEntry.deleteMany({
@@ -116,7 +117,6 @@ describe("AlertService", () => {
                     breed: "CLASSIC",
                     expected_selling_date: new Date(Date.now() + days * 86400_000),
                     initial_chick_count: 100,
-                    init_chicks_avg_wt: 40,
                 },
             });
         const soon = await make(3);
@@ -159,7 +159,6 @@ describe("AlertService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86400_000),
                 initial_chick_count: 100,
-                init_chicks_avg_wt: 40,
             },
         });
         createdBatchIds.push(batch.id);

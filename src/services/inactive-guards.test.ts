@@ -68,7 +68,6 @@ describe("deactivated items and houses", () => {
                     breed: "CLASSIC",
                     expected_selling_date: new Date(Date.now() + 30 * 86_400_000),
                     initial_chick_count: 200,
-                    init_chicks_avg_wt: 40,
                 },
             })
         ).id;
@@ -105,6 +104,7 @@ describe("deactivated items and houses", () => {
         await prisma.stockLedger.deleteMany({ where: { item_id: { in: [itemId, deadItemId] } } });
         await prisma.batchHouseAllocation.deleteMany({ where: { batch_id: batchId } });
         await prisma.batchHouseBalance.deleteMany({ where: { batch_id: batchId } });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: batchId } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: batchId } });
         await prisma.item.deleteMany({ where: { id: { in: [itemId, deadItemId] } } });
         await prisma.warehouses.deleteMany({ where: { id: warehouseId } });

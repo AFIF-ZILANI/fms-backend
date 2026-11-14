@@ -2,6 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import prisma from "@lib/db";
 import { BatchService } from "./batch.service";
 import { AppError } from "@lib/app-error";
+import { farmDay } from "@lib/farm-day";
 import { houseNumber, purgeAuditLog } from "@lib/test-fixtures";
 
 const createdBatchIds: string[] = [];
@@ -31,6 +32,7 @@ describe("BatchService", () => {
         await prisma.batchHouseAllocation.deleteMany({
             where: { batch_id: { in: createdBatchIds } },
         });
+        await prisma.weightRecords.deleteMany({ where: { batch_id: { in: createdBatchIds } } }); // the Day-1 start weight
         await prisma.batches.deleteMany({ where: { id: { in: createdBatchIds } } });
         await prisma.houses.delete({ where: { id: houseId } });
         await purgeAuditLog({ where: { changed_by_id: profileId } });
@@ -60,6 +62,17 @@ describe("BatchService", () => {
         expect(allocation?.reason).toBe("INITIAL");
         expect(allocation?.to_house_id).toBe(houseId);
         expect(allocation?.quantity).toBe(1000);
+
+        // The start weight is the batch's Day-1 weight sample, in the placement house, by the recorder.
+        const start = await prisma.weightRecords.findMany({ where: { batch_id: batch!.id } });
+        expect(start.length).toBe(1);
+        expect(start[0]).toMatchObject({
+            house_id: houseId,
+            measured_by_id: profileId,
+            sample_size: 1000,
+            date: farmDay(batch!.starting_date),
+        });
+        expect(start[0]!.average_wt_grams.toNumber()).toBe(40);
     });
 
     test("duplicate batch_code throws a conflict", async () => {

@@ -240,7 +240,6 @@ describe("ExpenseService", () => {
                 breed: "CLASSIC",
                 expected_selling_date: new Date(Date.now() + 30 * 86400_000),
                 initial_chick_count: 10,
-                init_chicks_avg_wt: 40,
             },
         });
         try {
@@ -257,6 +256,7 @@ describe("ExpenseService", () => {
             createdIds.push(ok.id);
         } finally {
             await prisma.expense.deleteMany({ where: { batch_id: batch.id } });
+            await prisma.weightRecords.deleteMany({ where: { batch_id: batch.id } }); // the Day-1 start weight
             await prisma.batches.delete({ where: { id: batch.id } });
         }
     });

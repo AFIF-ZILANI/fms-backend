@@ -49,7 +49,8 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
         consumed,
         direct,
         depreciation,
-        latestWeight,
+        latestRecord,
+        startRecord,
         categories,
         expenseLabels,
         otherSales,
@@ -97,6 +98,11 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
         prisma.weightRecords.findFirst({
             where: { batch_id: batchId },
             orderBy: [{ date: "desc" }, { created_at: "desc" }],
+        }),
+        // The placement weighing (written at batch creation): the earliest sample.
+        prisma.weightRecords.findFirst({
+            where: { batch_id: batchId },
+            orderBy: [{ date: "asc" }, { created_at: "asc" }],
         }),
         prisma.itemCategory.findMany({ select: { code: true, label: true } }),
         prisma.expenseCategoryLookup.findMany({ select: { code: true, label: true } }),
@@ -176,9 +182,11 @@ async function statementFor(batchId: string, shared: SharedMonth[]) {
     const live = batch.houseBalances.reduce((s, b) => s + b.quantity, 0);
     const kgSold = sales.reduce((s, x) => s + x.net_weight.toNumber(), 0);
     // live birds count at their latest weighing: a running batch's kg so far
+    // The placement weighing isn't a later weighing: with only that one, there is no live weight yet.
+    const latestWeight = latestRecord?.id === startRecord?.id ? null : latestRecord;
     const kgProduced =
         kgSold + (latestWeight ? (latestWeight.average_wt_grams.toNumber() * live) / 1000 : 0);
-    const gainKg = kgProduced - (placed * batch.init_chicks_avg_wt) / 1000;
+    const gainKg = kgProduced - (placed * (startRecord?.average_wt_grams.toNumber() ?? 0)) / 1000;
     const totalCost = costs.plus(sharedTotal);
     const end = batch.actual_end_date ?? new Date();
 
