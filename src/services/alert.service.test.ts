@@ -3,6 +3,7 @@ import prisma from "@lib/db";
 import { AlertService } from "./alert.service";
 import { AppError } from "@lib/app-error";
 import { houseNumber } from "@lib/test-fixtures";
+import { farmDay } from "@lib/farm-day";
 
 const createdAlertIds: string[] = [];
 const createdItemIds: string[] = [];
@@ -138,6 +139,67 @@ describe("AlertService", () => {
         await prisma.batches.update({ where: { id: late.id }, data: { status: "CLOSED" } });
         await AlertService.runScan();
         expect(await find(late.id)).toBeNull();
+    });
+
+    test("scan flags a batch 8+ days since its last weighing, and clears once it is weighed", async () => {
+        const house = await prisma.houses.create({
+            data: { name: "Weigh Due House", type: "BROODER", number: houseNumber() },
+        });
+        createdHouseIds.push(house.id);
+        const profile = await prisma.profiles.create({
+            data: { name: "Weigh Recorder", mobile: `+880${Math.floor(1e9 + Math.random() * 8e9)}`, role: "ADMIN" },
+        });
+        createdProfileIds.push(profile.id);
+        const make = async (daysSinceWeighed: number) => {
+            const batch = await prisma.batches.create({
+                data: {
+                    batch_code: `WEIGH-${crypto.randomUUID()}`,
+                    breed: "CLASSIC",
+                    expected_selling_date: new Date(Date.now() + 40 * 86400_000),
+                    initial_chick_count: 100,
+                },
+            });
+            createdBatchIds.push(batch.id);
+            await prisma.weightRecords.create({
+                data: {
+                    batch_id: batch.id,
+                    house_id: house.id,
+                    average_wt_grams: 50,
+                    sample_size: 10,
+                    date: farmDay(new Date(Date.now() - daysSinceWeighed * 86400_000)),
+                    measured_by_id: profile.id,
+                    idempotency_key: crypto.randomUUID(),
+                },
+            });
+            return batch;
+        };
+        const [fresh, due, overdue] = [await make(3), await make(8), await make(11)];
+
+        await AlertService.runScan();
+        const find = (id: string) =>
+            prisma.alerts.findFirst({ where: { dedupe_key: `WEIGH_DUE:${id}`, status: "ACTIVE" } });
+        const [a, b, c] = await Promise.all([find(fresh.id), find(due.id), find(overdue.id)]);
+        if (b) createdAlertIds.push(b.id);
+        if (c) createdAlertIds.push(c.id);
+        expect(a).toBeNull();
+        expect(b?.level).toBe("INFO");
+        expect(c?.level).toBe("WARNING");
+        expect(c?.audience).toEqual(["WORKER", "MANAGER"]);
+
+        // Weighing it today clears the alert on the next scan.
+        await prisma.weightRecords.create({
+            data: {
+                batch_id: overdue.id,
+                house_id: house.id,
+                average_wt_grams: 400,
+                sample_size: 10,
+                date: farmDay(new Date()),
+                measured_by_id: profile.id,
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
+        await AlertService.runScan();
+        expect(await find(overdue.id)).toBeNull();
     });
 
     test("scan raises a critical mortality alert when the 24h rate exceeds 1%", async () => {

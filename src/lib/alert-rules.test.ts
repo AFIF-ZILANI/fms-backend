@@ -11,6 +11,7 @@ import {
     overdueLabel,
     pastDailyCutoff,
     sellingDateLevel,
+    weighingLevel,
 } from "./alert-rules";
 
 // --- mortality grading ---
@@ -46,6 +47,11 @@ assert.equal(sellingDateLevel(8), null);
 assert.equal(sellingDateLevel(7), "INFO");
 assert.equal(sellingDateLevel(0), "INFO", "selling today is a reminder, not late");
 assert.equal(sellingDateLevel(-1), "WARNING");
+
+// --- weighing every 8 days ---
+assert.equal(weighingLevel(7), null);
+assert.equal(weighingLevel(8), "INFO", "the 8th day is due, not late");
+assert.equal(weighingLevel(9), "WARNING");
 
 // --- audiences ---
 assert.deepEqual([...AUDIENCE.ADMIN], [], "admin-only is the empty list");
