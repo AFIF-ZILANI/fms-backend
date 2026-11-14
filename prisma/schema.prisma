@@ -1321,6 +1321,8 @@ model WeightRecords {
   measured_by      Profiles @relation(fields: [measured_by_id], references: [id])
   created_at       DateTime @default(now())
   idempotency_key  String   @unique // client-generated; prevents double-insert on offline sync retry
+  // Free text on how the figure was got -- e.g. "Estimated, not measured" for a day that was skipped.
+  note             String?
 
   @@unique([batch_id, house_id, date])
   // A composite unique can't see NULLs (each NULL batch_id is "different"), so an empty-house weighing

@@ -8,6 +8,7 @@ export const createWeightRecordSchema = z.object({
     sample_size: z.coerce.number().int().positive("Sample size must be positive"),
     date: z.coerce.date(),
     idempotency_key: z.string().min(1).optional(),
+    note: z.string().trim().min(1).max(200).optional(),
 });
 
 export const listWeightRecordsQuerySchema = paginationQuerySchema.extend({

@@ -50,8 +50,10 @@ describe("WeightRecordService", () => {
             sample_size: 20,
             date,
             measured_by_id: profileId,
+            note: "Estimated, not measured",
         });
         createdIds.push(record!.id);
+        expect(record!.note).toBe("Estimated, not measured");
 
         const { records } = await WeightRecordService.getAll({
             page: 1,
