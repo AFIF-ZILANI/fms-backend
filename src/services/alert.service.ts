@@ -9,6 +9,8 @@ import {
     AUDIENCE,
     TASK_OVERDUE_GRACE_HOURS,
     SELLING_DATE_WARNING_DAYS,
+    WEIGH_EVERY_DAYS,
+    weighingLevel,
     daysUntil,
     sellingDateLevel,
     farmDayStart,
@@ -412,6 +414,42 @@ async function checkSellingDates(): Promise<Raised> {
     return raised;
 }
 
+/** A running batch whose latest weighing is 8+ days old (a batch never weighed counts from its start).
+ *  INFO the day it falls due, WARNING once overdue; clears when a weight is logged or the batch ends.
+ *  Field + admin: the people in the sheds do the weighing. */
+async function checkWeighingDue(): Promise<Raised> {
+    const raised: Raised = new Set();
+    const now = new Date();
+    const batches = await prisma.batches.findMany({
+        where: { status: "RUNNING" },
+        select: {
+            id: true,
+            batch_code: true,
+            starting_date: true,
+            weightRecords: { orderBy: { date: "desc" }, take: 1, select: { date: true } },
+        },
+    });
+    for (const b of batches) {
+        const last = b.weightRecords[0]?.date ?? b.starting_date;
+        const since = daysUntil(now, last);
+        const level = weighingLevel(since);
+        if (!level) continue;
+        await raise(raised, {
+            type: "BATCH",
+            level,
+            title:
+                since === WEIGH_EVERY_DAYS
+                    ? `${b.batch_code}: weighing due today`
+                    : `${b.batch_code}: weighing overdue by ${plural(since - WEIGH_EVERY_DAYS, "day")}`,
+            description: `Last weighed ${last.toISOString().slice(0, 10)} (${plural(since, "day")} ago)`,
+            related_id: b.id,
+            audience: AUDIENCE.FIELD,
+            key: `WEIGH_DUE:${b.id}`,
+        });
+    }
+    return raised;
+}
+
 /** One alert per open disease case on a running batch, so everyone in the sheds knows to take care.
  *  HIGH severity is critical. Clears when the case is resolved or the batch ends. Field + admin. */
 async function checkActiveDiseases(): Promise<Raised> {
@@ -453,6 +491,7 @@ const FAMILIES: [prefix: string, check: () => Promise<Raised>][] = [
     ["TASK_OVERDUE:", checkOverdueTasks],
     ["SELLING_DATE:", checkSellingDates],
     ["DISEASE:", checkActiveDiseases],
+    ["WEIGH_DUE:", checkWeighingDue],
 ];
 
 /** Resolves ACTIVE alerts in a family that this scan no longer raised: the stock came in, the reading

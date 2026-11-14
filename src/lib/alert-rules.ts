@@ -54,6 +54,17 @@ export function sellingDateLevel(daysLeft: number): "INFO" | "WARNING" | null {
     return null;
 }
 
+// ── Weighing ─────────────────────────────────────────────────────────────────
+/** Every batch is weighed every 8 days. Counted from its latest weight record (the Day-1 start weight
+ *  is the first), so a day logged late just moves the next one. */
+export const WEIGH_EVERY_DAYS = 8;
+
+export function weighingLevel(daysSinceLast: number): "INFO" | "WARNING" | null {
+    if (daysSinceLast > WEIGH_EVERY_DAYS) return "WARNING";
+    if (daysSinceLast === WEIGH_EVERY_DAYS) return "INFO";
+    return null;
+}
+
 // ── Tasks ────────────────────────────────────────────────────────────────────
 /** How long past due before a manager is told. The worker already sees it on their Tasks tab. */
 export const TASK_OVERDUE_GRACE_HOURS = 2;
