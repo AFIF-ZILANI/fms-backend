@@ -34,6 +34,7 @@ export const WeightRecordService = {
                     house_id: data.house_id,
                     average_wt_grams: data.average_wt_grams,
                     sample_size: data.sample_size,
+                    ...(data.note !== undefined && { note: data.note }),
                     date: farmDay(data.date),
                     measured_by_id: data.measured_by_id,
                     idempotency_key: data.idempotency_key ?? crypto.randomUUID(),
