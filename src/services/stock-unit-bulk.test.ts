@@ -193,6 +193,16 @@ describe("Stock count: bulk actions", () => {
         expect(msg(await call("DISPOSE"))).toMatch(/already disposed/);
     });
 
+    test("past its time budget the rest are answered 503 untouched, and a retry finishes them", async () => {
+        const ids = await newUnits(2);
+        const units = ids.map((id) => ({ id, idempotency_key: crypto.randomUUID() }));
+        const input = { action: "FINISH" as const, house_id: house, date: new Date(), units, recorded_by_id: profileId };
+        const late = await StockUnitService.bulk(input, -1); // budget already spent
+        expect(late.map((x) => (x.ok ? 0 : x.status))).toEqual([503, 503]);
+        for (const id of ids) expect(await status(id)).toBe("BOUND");
+        expect(oks(await StockUnitService.bulk(input))).toEqual([true, true]);
+    });
+
     test("the request is checked before anything runs", () => {
         const id = crypto.randomUUID();
         const ok = (v: object) => bulkStockUnitActionSchema.safeParse(v).success;

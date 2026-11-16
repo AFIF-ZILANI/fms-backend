@@ -352,10 +352,17 @@ export const StockUnitService = {
      *  dispose a single scan does, in its own transaction, so a unit that is refused (finalised batch,
      *  already disposed, ...) is reported on its own and the others still land.
      *  ponytail: one after another -- units of a lot queue on its lock anyway. */
-    async bulk(input: BulkStockUnitActionInput): Promise<BulkUnitResult[]> {
+    async bulk(input: BulkStockUnitActionInput, budgetMs = BULK_BUDGET_MS): Promise<BulkUnitResult[]> {
         const { action, house_id, date, recorded_by_id } = input;
         const results: BulkUnitResult[] = [];
+        const started = Date.now();
         for (const { id, idempotency_key } of input.units) {
+            // However slow the database is, answer before the request times out: units not started are
+            // reported retryable (the phone keeps them selected and resends with the same keys).
+            if (Date.now() - started > budgetMs) {
+                results.push({ id, ok: false, status: 503, message: "Took too long -- tap again to do the rest" });
+                continue;
+            }
             const key = idempotency_key ?? crypto.randomUUID();
             try {
                 if (action === "FINISH" || action === "START") {
@@ -429,6 +436,9 @@ export const StockUnitService = {
         ]);
     },
 };
+
+/** Stop starting units after this long, well inside the request timeout (TIMEOUT_MS, 30 s). */
+const BULK_BUDGET_MS = 20_000;
 
 /** One unit's outcome in a bulk call: done, or the status and words a single call would have answered with. */
 export type BulkUnitResult = { id: string; ok: true } | { id: string; ok: false; status: number; message: string };
