@@ -9,6 +9,7 @@ import { getAuth } from "@middlewares/authenticate";
 import type { AuthContext } from "../types/app";
 import type {
     AtLocationQuery,
+    BulkStockUnitActionInput,
     ProvisionStockUnitsInput,
     MarkPrintedStockUnitsInput,
     UseStockUnitInput,
@@ -79,6 +80,17 @@ export const StockUnitController = {
             };
             const unit = await StockUnitService.use(c.req.param("id") ?? "", body);
             return sendSuccess(c, unit, body.action === "START" ? "Unit in use" : "Unit used up");
+        });
+    },
+
+    async bulk(c: Context) {
+        return withHandler(c, async () => {
+            const body = {
+                ...getValid<Omit<BulkStockUnitActionInput, "recorded_by_id">>(c, "json"),
+                recorded_by_id: await getActorId(c),
+            };
+            const results = await StockUnitService.bulk(body);
+            return sendSuccess(c, { results }, "Stock units processed");
         });
     },
 

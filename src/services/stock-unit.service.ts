@@ -16,6 +16,7 @@ import { StockLedgerService } from "@services/stock-ledger.service";
 import type {
     AtLocationQuery,
     BindStockUnitInput,
+    BulkStockUnitActionInput,
     ListStockUnitsQuery,
     SetStockUnitStatusInput,
     UseStockUnitInput,
@@ -347,6 +348,38 @@ export const StockUnitService = {
         }
     },
 
+    /** Stock count: one action for several missing units. Each goes through the same use / relocate /
+     *  dispose a single scan does, in its own transaction, so a unit that is refused (finalised batch,
+     *  already disposed, ...) is reported on its own and the others still land.
+     *  ponytail: one after another -- units of a lot queue on its lock anyway. */
+    async bulk(input: BulkStockUnitActionInput): Promise<BulkUnitResult[]> {
+        const { action, house_id, date, recorded_by_id } = input;
+        const results: BulkUnitResult[] = [];
+        for (const { id, idempotency_key } of input.units) {
+            const key = idempotency_key ?? crypto.randomUUID();
+            try {
+                if (action === "FINISH" || action === "START") {
+                    await this.use(id, {
+                        action,
+                        house_id: house_id!,
+                        date: date ?? new Date(),
+                        move_here: true,
+                        idempotency_key: key,
+                        recorded_by_id,
+                    });
+                } else if (action === "MOVE" || action === "RETURN") {
+                    await this.relocate(id, action === "MOVE" ? house_id! : null, key, undefined, recorded_by_id);
+                } else {
+                    await this.dispose(id);
+                }
+                results.push({ id, ok: true });
+            } catch (err) {
+                results.push(failedUnit(id, err));
+            }
+        }
+        return results;
+    },
+
     /** The manual "change status" action. DISPOSED is final and goes through dispose(); CONSUMED can
      *  only go on to DISPOSED, since its leftover has already left the ledger; UNASSIGNED only comes
      *  from a blank code, never from a status pick. */
@@ -396,6 +429,21 @@ export const StockUnitService = {
         ]);
     },
 };
+
+/** One unit's outcome in a bulk call: done, or the status and words a single call would have answered with. */
+export type BulkUnitResult = { id: string; ok: true } | { id: string; ok: false; status: number; message: string };
+
+function failedUnit(id: string, err: unknown): BulkUnitResult {
+    let e = err;
+    try {
+        handlePrismaWriteError(err); // known Prisma failures become AppErrors, as on the single routes
+    } catch (converted) {
+        e = converted;
+    }
+    if (e instanceof AppError) return { id, ok: false, status: e.status, message: e.message };
+    console.error("[stock-unit bulk]", id, e);
+    return { id, ok: false, status: 500, message: "Something went wrong" };
+}
 
 export async function lockedUnit(tx: Prisma.TransactionClient, id: string) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
