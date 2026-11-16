@@ -96,6 +96,8 @@ const RULES: Rule[] = [
     { methods: POST, path: /^\/sale-scans\/[^/]+\/scan$/, level: "manager" },
     // Stock count: a manager writes off a unit that went missing.
     { methods: POST, path: /^\/stock-units\/[^/]+\/dispose$/, level: "manager" },
+    // Stock count: the same fixes for many missing units in one call (it can dispose, so manager like dispose).
+    { methods: POST, path: /^\/stock-units\/bulk$/, level: "manager" },
     // The lot picker on Link items. Manager-only like the bind it feeds: lines carry purchase data.
     { methods: GET, path: /^\/purchase-items$/, level: "manager" },
     { methods: POST, path: /^\/purchase-items\/[^/]+\/complete$/, level: "manager" },

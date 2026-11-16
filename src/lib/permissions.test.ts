@@ -97,6 +97,7 @@ describe("canAccess", () => {
             ["POST", "/alerts"],
             ["POST", "/alerts/abc/resolve"],
             ["POST", "/stock-units/abc/bind"],
+            ["POST", "/stock-units/bulk"],
             ["GET", "/employees"],
             ["GET", "/purchase-items"],
             ["POST", "/purchase-items/abc/complete"],

@@ -6,6 +6,7 @@ import {
     markPrintedStockUnitsSchema,
     useStockUnitSchema,
     bindStockUnitSchema,
+    bulkStockUnitActionSchema,
     relocateStockUnitSchema,
     setStockUnitStatusSchema,
     listStockUnitsQuerySchema,
@@ -31,6 +32,11 @@ stockUnitRoutes.post(
     "/",
     zValidatorRfc7807("json", provisionStockUnitsSchema),
     StockUnitController.provision,
+);
+stockUnitRoutes.post(
+    "/bulk",
+    zValidatorRfc7807("json", bulkStockUnitActionSchema),
+    StockUnitController.bulk,
 );
 stockUnitRoutes.post(
     "/mark-printed",

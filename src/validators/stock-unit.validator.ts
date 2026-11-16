@@ -55,6 +55,39 @@ export const useStockUnitSchema = z.object({
     move_here: z.boolean().optional(),
 });
 
+/** Most units one bulk call takes: each is its own transaction, and the request has to finish inside TIMEOUT_MS. */
+export const BULK_MAX_UNITS = 25;
+
+/**
+ * Stock count: one action for many missing units in one request. Same rules as /use, /relocate and
+ * /dispose, each unit in its own transaction, answered per unit -- one unit refused doesn't undo the rest.
+ * FINISH / START also move the unit into house_id first (the count found it somewhere else).
+ */
+export const bulkStockUnitActionSchema = z
+    .object({
+        action: z.enum(["FINISH", "START", "MOVE", "RETURN", "DISPOSE"]),
+        house_id: z.string().uuid().optional(),
+        // When it was used up (FINISH): an instant; the server files it under the farm day it falls on.
+        date: z.coerce.date().optional(),
+        units: z
+            .array(
+                z.object({
+                    id: z.string().uuid(),
+                    // Kept by the client across retries, so tapping again after a dropped connection can't
+                    // record a unit twice.
+                    idempotency_key: z.string().min(1).optional(),
+                }),
+            )
+            .min(1)
+            .max(BULK_MAX_UNITS),
+    })
+    .superRefine((v, ctx) => {
+        if (["FINISH", "START", "MOVE"].includes(v.action) && !v.house_id)
+            ctx.addIssue({ code: "custom", path: ["house_id"], message: "house_id is required for this action" });
+        if (v.action === "FINISH" && !v.date)
+            ctx.addIssue({ code: "custom", path: ["date"], message: "date is required to mark units used up" });
+    });
+
 /** Stock count: every unit that should be at one place right now. */
 export const atLocationQuerySchema = z.object({
     location_type: z.enum(["WAREHOUSE", "HOUSE"]),
@@ -83,5 +116,6 @@ export type BindStockUnitInput = z.infer<typeof bindStockUnitSchema> & { bound_b
 export type RelocateStockUnitInput = z.infer<typeof relocateStockUnitSchema>;
 export type UseStockUnitInput = z.infer<typeof useStockUnitSchema> & { recorded_by_id: string };
 export type SetStockUnitStatusInput = z.infer<typeof setStockUnitStatusSchema>;
+export type BulkStockUnitActionInput = z.infer<typeof bulkStockUnitActionSchema> & { recorded_by_id: string };
 export type AtLocationQuery = z.infer<typeof atLocationQuerySchema>;
 export type ListStockUnitsQuery = z.infer<typeof listStockUnitsQuerySchema>;
