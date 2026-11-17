@@ -520,6 +520,7 @@ model Profiles {
   mortalityLogsRecorded   MortalityLog[]
   allocationsRecorded     BatchHouseAllocation[]
   consumptionsRecorded    Consumption[]
+  consumptionsFixed       Consumption[]              @relation("ConsumptionFixedBy")
   purchasesRecorded       Purchase[]
   expensesRecorded        Expense[]
   salesRecorded           Sale[]
@@ -1046,6 +1047,11 @@ model Consumption {
   recorded_by     Profiles   @relation(fields: [recorded_by_id], references: [id])
   created_at      DateTime   @default(now())
   idempotency_key String     @unique // client-generated; prevents double-insert on offline sync retry
+  // Set by "Fix usage" (ConsumptionService.fix): the record was corrected in place. AuditLog keeps before/after.
+  fixed_at        DateTime?
+  fixed_by_id     String?
+  fixed_by        Profiles?  @relation("ConsumptionFixedBy", fields: [fixed_by_id], references: [id])
+  fix_reason      String?
 
   medications  Medications[]
   vaccinations Vaccinations[]

@@ -177,6 +177,17 @@ describe("canAccess", () => {
         expect(canAccess(other, "GET", "/houses", none)).toBe(false);
     });
 
+    test("fixing or removing a usage record is a manager action", () => {
+        for (const [method, path] of [
+            ["PATCH", "/consumptions/abc"],
+            ["POST", "/consumptions/abc/remove"],
+        ] as const) {
+            expect(canAccess(manager, method, path, none)).toBe(true);
+            expect(canAccess(worker, method, path, none)).toBe(false);
+            expect(canAccess(admin, method, path, none)).toBe(true);
+        }
+    });
+
     test("a trailing slash does not change the answer", () => {
         expect(canAccess(worker, "GET", "/houses/", none)).toBe(true);
         expect(canAccess(worker, "GET", "/employees/", none)).toBe(false);

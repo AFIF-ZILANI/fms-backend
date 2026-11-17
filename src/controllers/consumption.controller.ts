@@ -6,7 +6,9 @@ import { getValid } from "@lib/valid";
 import { ConsumptionService } from "@services/consumption.service";
 import type {
     CreateConsumptionInput,
+    FixConsumptionInput,
     ListConsumptionsQuery,
+    RemoveConsumptionInput,
 } from "@validators/consumption.validator";
 import type { StockActivitySummaryQuery } from "@validators/stock-activity.validator";
 
@@ -17,6 +19,16 @@ export const ConsumptionController = {
             const { consumptions, meta } = await ConsumptionService.getAll(query);
             return sendList(c, consumptions, meta, "Consumptions fetched successfully");
         });
+    },
+
+    async getById(c: Context) {
+        return withHandler(c, async () =>
+            sendSuccess(
+                c,
+                await ConsumptionService.getById(c.req.param("id")!),
+                "Consumption fetched",
+            ),
+        );
     },
 
     async summary(c: Context) {
@@ -34,6 +46,28 @@ export const ConsumptionController = {
             };
             const consumption = await ConsumptionService.create(body);
             return sendSuccess(c, consumption, "Consumption recorded", 201);
+        });
+    },
+
+    async fix(c: Context) {
+        return withHandler(c, async () => {
+            const body = {
+                ...getValid<FixConsumptionInput>(c, "json"),
+                actor_id: await getActorId(c),
+            };
+            const consumption = await ConsumptionService.fix(c.req.param("id")!, body);
+            return sendSuccess(c, consumption, "Usage fixed");
+        });
+    },
+
+    async remove(c: Context) {
+        return withHandler(c, async () => {
+            const body = {
+                ...getValid<RemoveConsumptionInput>(c, "json"),
+                actor_id: await getActorId(c),
+            };
+            await ConsumptionService.remove(c.req.param("id")!, body);
+            return sendSuccess(c, null, "Usage removed");
         });
     },
 };

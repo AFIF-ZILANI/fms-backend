@@ -28,6 +28,8 @@ export type ActivityEntry = {
     detail: string | null;
     by: string | null;
     batch_code: string | null;
+    /** A usage record corrected through Fix usage. */
+    fixed?: { at: Date; by: string | null; reason: string | null };
 };
 
 const num = (n: Prisma.Decimal | number) =>
@@ -71,7 +73,12 @@ export async function houseActivity(houseId: string, query: PaginationQuery) {
                 where: { house_id: houseId },
                 orderBy: { date: "desc" },
                 take,
-                include: { recorded_by: by, batch, item: { select: { name: true } } },
+                include: {
+                    recorded_by: by,
+                    fixed_by: by,
+                    batch,
+                    item: { select: { name: true } },
+                },
             }),
             prisma.weightRecords.findMany({
                 where: { house_id: houseId },
@@ -170,6 +177,9 @@ export async function houseActivity(houseId: string, query: PaginationQuery) {
             detail: u.note,
             by: u.recorded_by.name,
             batch_code: u.batch?.batch_code ?? null,
+            ...(u.fixed_at && {
+                fixed: { at: u.fixed_at, by: u.fixed_by?.name ?? null, reason: u.fix_reason },
+            }),
         })),
         ...weights.map((w) => {
             // A weighing stores its farm day; the save time is its time only when it was saved that same day.
