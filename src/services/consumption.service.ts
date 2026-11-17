@@ -450,17 +450,24 @@ export async function fixConsumption(
         if (next) await tx.stockUnit.update({ where: { id: unit!.id }, data: { status: next } });
         await settleOldBottle(tx, c.stock_unit!);
     }
-    if (
-        batch_id &&
-        (batch_id !== c.batch_id || date.getTime() !== c.date.getTime() || item.id !== c.item.id)
-    ) {
+    // A bottle swap alone leaves the treatment's own date as it was.
+    const dateChanged = date.getTime() !== c.date.getTime();
+    if (batch_id && (batch_id !== c.batch_id || dateChanged || item.id !== c.item.id)) {
         await tx.medications.updateMany({
             where: { consumption_id: id },
-            data: { batch_id, date, ...(item.id !== c.item.id && { medicine_name: item.name }) },
+            data: {
+                batch_id,
+                ...(dateChanged && { date }),
+                ...(item.id !== c.item.id && { medicine_name: item.name }),
+            },
         });
         await tx.vaccinations.updateMany({
             where: { consumption_id: id },
-            data: { batch_id, date, ...(item.id !== c.item.id && { vaccine_name: item.name }) },
+            data: {
+                batch_id,
+                ...(dateChanged && { date }),
+                ...(item.id !== c.item.id && { vaccine_name: item.name }),
+            },
         });
     }
     // A schedule confirm's dose is the bottle's amount; a typed vaccination keeps the dose it was given.

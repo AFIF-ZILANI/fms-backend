@@ -241,7 +241,23 @@ describe("Fix usage", () => {
         );
         await fix(c.id, { quantity: 100 });
 
+        const given = new Date(Date.now() - 2 * 3_600_000);
+        const med = await prisma.medications.create({
+            data: {
+                batch_id: batchId,
+                consumption_id: c.id,
+                medicine_name: "Fix Med",
+                dosage: "100 ml",
+                administered_by_id: profileId,
+                date: given,
+                idempotency_key: crypto.randomUUID(),
+            },
+        });
         const swapped = await fix(c.id, { stock_unit_id: b2 });
+        // Only the bottle changed: the treatment keeps its own date.
+        expect(
+            (await prisma.medications.findUniqueOrThrow({ where: { id: med.id } })).date,
+        ).toEqual(given);
         expect(swapped.stock_unit_id).toBe(b2);
         expect([await statusOf(b1), await statusOf(b2)]).toEqual(["BOUND", "IN_USE"]);
         expect((await ledgerOf(c.id)).map((l) => Number(l.quantity))).toEqual([100]);
