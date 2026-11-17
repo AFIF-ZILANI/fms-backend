@@ -2,6 +2,7 @@ import prisma from "@lib/db";
 import { Prisma } from "../../prisma/generated/prisma/client";
 import { assertBatchOpen, batchForUsage, batchInHouseOn } from "@lib/batch-guards";
 import { audit } from "@lib/audit";
+import { farmDay } from "@lib/farm-day";
 import { assertHouseActive } from "@lib/active-guards";
 import { AppError } from "@lib/app-error";
 import { handlePrismaWriteError } from "@lib/prisma-errors";
@@ -341,7 +342,8 @@ export async function fixConsumption(
     const date = input.date ?? c.date;
     if (date.getTime() > Date.now()) throw AppError.badRequest("The date can't be in the future");
     let batch_id = c.batch_id;
-    if (input.date !== undefined && input.date.getTime() !== c.date.getTime()) {
+    // Only a different farm day can mean a different batch; a new time on the same day keeps the record's.
+    if (farmDay(date).getTime() !== farmDay(c.date).getTime()) {
         batch_id = (await batchInHouseOn(tx, c.house_id, date))?.id ?? null;
         if (batch_id !== c.batch_id) {
             if (batch_id) await assertBatchOpen(tx, batch_id);
