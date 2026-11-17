@@ -288,7 +288,7 @@ describe("Fix usage", () => {
         expect((log.before_data as { unit: string }).unit).toBe("KG");
 
         // Nothing left: one bag more is refused, one bag less gives 50 kg back.
-        await expect(fix(c.id, { quantity: 3 })).rejects.toThrow("Only 0 more");
+        await expect(fix(c.id, { quantity: 3 })).rejects.toThrow("Only 0 kg more");
         await fix(c.id, { quantity: 1 });
         expect((await ledgerOf(c.id)).map((l) => Number(l.quantity))).toEqual([50]);
 
@@ -322,7 +322,7 @@ describe("Fix usage", () => {
         const c = await use({ item_id: medId, quantity: 30, unit: "ML", stock_unit_id: b1 });
         // 70 left + this record's 30 = the whole 100 ml bottle.
         await expect(fix(c.id, { quantity: 101 })).rejects.toThrow(
-            "Only 100 is left in this bottle",
+            "Only 100 ml is left in this bottle",
         );
         await fix(c.id, { quantity: 100 });
 
@@ -569,7 +569,7 @@ describe("Fix usage", () => {
     test("a lot with no unit count is limited by the lot's total only", async () => {
         const b = await bottle(looseLot);
         const c = await use({ item_id: medId, quantity: 30, unit: "ML", stock_unit_id: b });
-        await expect(fix(c.id, { quantity: 51 })).rejects.toThrow("Only 50 is left in this lot");
+        await expect(fix(c.id, { quantity: 51 })).rejects.toThrow("Only 50 ml is left in this lot");
         await fix(c.id, { quantity: 50 });
         await remove(c.id);
     });

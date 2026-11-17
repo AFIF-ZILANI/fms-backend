@@ -313,6 +313,9 @@ async function settleOldBottle(tx: Prisma.TransactionClient, unit: { id: string;
     if (status) await tx.stockUnit.update({ where: { id: unit.id }, data: { status } });
 }
 
+/** "kg", "ml", "pcs": the base unit as it reads in a sentence. */
+const unitWord = (code: string) => code.toLowerCase().replace(/_/g, " ");
+
 const snapshot = (c: Locked) => JSON.parse(JSON.stringify(c)) as Prisma.InputJsonValue;
 
 export async function fixConsumption(
@@ -407,7 +410,7 @@ export async function fixConsumption(
                 const available = await getItemLocationBalance(tx, item.id, "HOUSE", c.house_id);
                 if (available.lessThan(more))
                     throw AppError.conflict(
-                        `Only ${available.toString()} more of this item is on hand at this house`,
+                        `Only ${available.toString()} ${unitWord(item.unit)} more of this item is on hand at this house`,
                     );
             }
         } else if (!(usedUp && swap) && (amountChange || swap)) {
@@ -419,9 +422,13 @@ export async function fixConsumption(
                 lot.id === c.stock_unit!.purchase_item?.id ? c.base_quantity : 0,
             );
             if (unitLeft !== null && unitLeft.lessThan(base_quantity))
-                throw AppError.conflict(`Only ${unitLeft.toString()} is left in this bottle`);
+                throw AppError.conflict(
+                    `Only ${unitLeft.toString()} ${unitWord(item.unit)} is left in this bottle`,
+                );
             if (lotLeft.lessThan(base_quantity))
-                throw AppError.conflict(`Only ${lotLeft.toString()} is left in this lot`);
+                throw AppError.conflict(
+                    `Only ${lotLeft.toString()} ${unitWord(item.unit)} is left in this lot`,
+                );
         }
     }
 
