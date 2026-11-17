@@ -101,6 +101,9 @@ const RULES: Rule[] = [
     // The lot picker on Link items. Manager-only like the bind it feeds: lines carry purchase data.
     { methods: GET, path: /^\/purchase-items$/, level: "manager" },
     { methods: POST, path: /^\/purchase-items\/[^/]+\/complete$/, level: "manager" },
+    // Fix usage: correct or remove a wrong usage record (docs/usage-fix-design.md).
+    { methods: ["PATCH"], path: /^\/consumptions\/[^/]+$/, level: "manager" },
+    { methods: POST, path: /^\/consumptions\/[^/]+\/remove$/, level: "manager" },
 ];
 
 /** `path` is relative to /api. */
