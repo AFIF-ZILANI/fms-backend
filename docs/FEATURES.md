@@ -418,8 +418,6 @@ offline-writable tables, `PaymentRefType.PAYROLL`, `Sale`/`BirdSale`
 receivables, `Houses.capacity`). What's left is application logic, not data
 model:
 
-- Bird-days shared-cost allocation formula — v2, needs real overlapping-batch
-  data to validate against.
 - Field App offline sync — designed in `mobile/docs/offline-sync.md` and built (outbox, `idempotency_key` retries).
 
 ## 6. Added since this spec was written

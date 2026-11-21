@@ -1028,10 +1028,12 @@ Append-only (§1.10).
 
 A `DIRECT` cost must carry a `batch_id` (**400** otherwise); costs that belong to no batch are `SHARED_PERIOD` or `SHARED_CAPITAL`.
 
-`cost_type = SHARED_PERIOD` expenses currently show as **unallocated** in
-batch P&L (§14.3) — the bird-days formula that would distribute them across
-concurrent batches is still v2, not built. Don't build UI that implies
-shared costs are already split across batches; they aren't yet.
+`cost_type = SHARED_PERIOD` expenses (electricity, rent, internet) are shared out between
+the batches that were on the farm, in proportion to **bird-days** in the expense's calendar
+month. The split is computed on read and never stored, so a late mortality entry or a
+re-dated sale changes it. A month with no birds stays farm overhead. `SHARED_CAPITAL`
+(buildings, big equipment) is not a running cost and is not shared. See
+`GET /api/analytics/shared-costs` and the statement in §14.3.
 
 **Errors**: **404** unknown `:id`. Create → **400** if `batch_id`/
 `recorded_by_id` don't reference real rows (§1.7). No 409s — no unique
@@ -1263,11 +1265,11 @@ GET /api/analytics/batches/:id/performance   → 200, or 404 if :id doesn't exis
 `cumulative_mortality_rate` is a plain float fraction (0.02 = 2%), not a
 percentage or a string. `latest_average_weight_grams`/`latest_weight_date`
 are both `null` if no `WeightRecords` exist for the batch yet. **No FCR
-field** — feed is logged in whatever `Unit` the item uses (`BAG`, `KG`,
-...), and turning that into a true feed-conversion ratio needs a per-unit
-weight table this system doesn't have. Don't compute one client-side either
-without that same missing conversion table — an FCR built on an unstated
-unit assumption is worse than none.
+field here.** Feed-conversion ratio (feed kg ÷ kg gained) is returned per batch by
+`GET /api/analytics/batches/performance` (§14.5) and in the statement below
+(`per_unit.fcr`). It is `null` when any of the batch's feed can't be expressed in kg, because
+a unit with no kg conversion (a bag of unknown weight) would make the ratio meaningless.
+Don't compute one client-side.
 
 ```
 GET /api/analytics/batches/:id/pnl   → 200, or 404 if :id doesn't exist
@@ -1275,18 +1277,25 @@ GET /api/analytics/batches/:id/pnl   → 200, or 404 if :id doesn't exist
 ```json
 {
   "batch_id": "...", "revenue": "118000", "purchase_cost": "15000",
-  "direct_expenses": "2000", "depreciation_share": "4000",
-  "shared_period_expenses_unallocated": "1500", "profit": "97000"
+  "consumption_cost": "10000", "direct_expenses": "2000", "depreciation_share": "4000",
+  "shared_period_expenses_unallocated": "1500", "profit": "87000"
 }
 ```
-`revenue` = sum of `BirdSale.total_amount` for the batch (`Sale`/`SaleItem`
-revenue is **not** included — those aren't batch-linked at all).
-`purchase_cost` = sum of `PurchaseItem.total_price` linked to the batch
-(chicks, and anything else explicitly tagged with this `batch_id`).
-`profit = revenue − purchase_cost − direct_expenses − depreciation_share`.
-`shared_period_expenses_unallocated` is reported but **not** subtracted
-into `profit` — it's shown so the UI can flag "there's N in shared costs
-not yet allocated to this batch," not silently baked into the number.
+This is the compact, original shape, kept for existing callers. `revenue` is bird sales net of
+discount plus any regular sale tagged to the batch (litter and the like). `purchase_cost` is
+the chicks. `consumption_cost` is the feed, medicine and supplies used, costed at the stock's
+average purchase price. `profit = revenue − purchase_cost − consumption_cost −
+direct_expenses − depreciation_share`, which is the batch's **contribution**: it is *before*
+its share of farm-wide costs. `shared_period_expenses_unallocated` sums shared-period
+expenses tagged directly to this batch and is not subtracted.
+
+For the full statement, line by line, use `GET /api/analytics/batches-pnl`. It returns one
+statement per batch, newest first: `revenue` (gross, discounts, other sales, net), `cost_lines`
+by section (chicks, feed, medicine and vaccines, bedding and supplements, direct expenses,
+depreciation), `costs`, `contribution`, `shared_costs` (the batch's bird-days share, by
+category), `net_profit`, `margin`, `birds`, `kg` and `per_unit` (cost per bird and per kg,
+profit per bird, average price per kg, `fcr`). `GET /api/analytics/shared-costs` shows, per
+month, each farm-wide expense and how it was split between batches.
 
 ### 14.4 Analytics — financial dashboard
 
