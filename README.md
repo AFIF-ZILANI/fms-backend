@@ -19,8 +19,8 @@ This API is the single source of truth for the three FMS clients:
 
 | Client | Repo | Who uses it |
 | --- | --- | --- |
-| **Admin dashboard** (React, web) | [`fms-admin-dashboard`](https://github.com/AFIF-ZILANI/fms-admin-dashboard) | Owner / admins: purchasing, sales, finance, payroll, setup |
-| **ZFarm** (Expo, Android) | [`fms-exe-mobile`](https://github.com/AFIF-ZILANI/fms-exe-mobile) | Managers and workers in the barns, offline-first |
+| **Admin dashboard** (React, web) | [`zfarm-dashboard`](https://github.com/AFIF-ZILANI/zfarm-dashboard) | Owner / admins: purchasing, sales, finance, payroll, setup |
+| **ZFarm** (Expo, Android) | [`zfarm-executor`](https://github.com/AFIF-ZILANI/zfarm-executor) | Managers and workers in the barns, offline-first |
 | **Scale app** (device) | — | Weighs and sells birds at the gate; pairs with the API and posts sales |
 
 ## Contents

@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "fms-backend",
+      "name": "zfarm-api",
       "dependencies": {
         "@hono/node-server": "^1.14.3",
         "@hono/zod-validator": "^0.8.0",

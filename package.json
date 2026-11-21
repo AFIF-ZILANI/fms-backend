@@ -1,13 +1,13 @@
 {
-    "name": "fms-backend",
+    "name": "zfarm-api",
     "description": "REST API for the ZeroD Farms Management System: poultry flocks, QR-coded stock, finance and payroll",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/AFIF-ZILANI/fms-backend.git"
+        "url": "git+https://github.com/AFIF-ZILANI/zfarm-api.git"
     },
-    "homepage": "https://github.com/AFIF-ZILANI/fms-backend#readme",
+    "homepage": "https://github.com/AFIF-ZILANI/zfarm-api#readme",
     "bugs": {
-        "url": "https://github.com/AFIF-ZILANI/fms-backend/issues"
+        "url": "https://github.com/AFIF-ZILANI/zfarm-api/issues"
     },
     "keywords": [
         "poultry",
