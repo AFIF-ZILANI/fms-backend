@@ -37,6 +37,7 @@ This API is the single source of truth for the three FMS clients:
 - [Contributing](#contributing)
 - [Deployment](#deployment)
 - [Documentation](#documentation)
+- [License](#license)
 
 ## What it covers
 
@@ -251,3 +252,7 @@ Production `.env` lives only on the server: set `NODE_ENV=production`, `TRUST_PR
 | [`docs/SETUP.md`](docs/SETUP.md) · [`docs/contracts/`](docs/contracts/) | Setup and request lifecycle, response and error contracts |
 | [`docs/audit/`](docs/audit/) | Database audit: findings, fix plan, verification |
 | `docs/*-sim-report.md` | Output of the lifecycle and inventory simulations (see above) |
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Afif Zilani. See [`NOTICE`](NOTICE) for attribution.
