@@ -6,9 +6,10 @@ every field name, enum value, status code, and error condition below matches
 the actual implementation (verified against source at doc-writing time), not
 the original design docs where the two differ.
 
-Companion docs: [`FEATURES.md`](./FEATURES.md) (what each role/page needs),
-[`PROGRESS.md`](./PROGRESS.md) (build order, status, and the reasoning behind
-every deliberate scope decision).
+Companion docs: [`endpoints.md`](./endpoints.md) (every route in one table, with who
+may call it, its status and its inputs; generated from the code, so it is the
+complete list), [`FEATURES.md`](./FEATURES.md) (what each role/page needs),
+[`PROGRESS.md`](./PROGRESS.md) (what is built and what is not).
 
 Base URL (dev): `http://localhost:5085`. Every route below is mounted under
 `/api` (e.g. `/api/admins`) except `GET /health`.
@@ -87,7 +88,7 @@ before parsing the body, or catch the parse failure.
 | Status | When | Body shape |
 |---|---|---|
 | 200 | Every successful response except resource creation — list, get, update, and every action endpoint (`deactivate`, `reactivate`, `resolve`, `close`, `bind`, `relocate`, `dispose`, `scan`, `generate`, `/status`, etc.) | success envelope |
-| 201 | The 35 endpoints that create a brand-new resource — see §1.4 for the exact list | success envelope |
+| 201 | Endpoints that create a brand-new resource — §1.4 lists the original ones; [`endpoints.md`](./endpoints.md) has every route's status | success envelope |
 | 400 | Zod validation failure, OR a business-rule rejection (a computed total exceeded, a cross-field mismatch), OR a client-supplied foreign id that doesn't reference an existing row (P2003 → mapped to 400, not 404 — see §1.7) | RFC 7807 |
 | 404 | Resource not found by `:id`, OR (unrelated to any specific resource) hitting a URL that doesn't match any route at all | RFC 7807 |
 | 409 | Duplicate unique field, invalid state transition, or a business-rule conflict (oversell, insufficient balance, already-in-that-state) | RFC 7807 |
@@ -95,10 +96,12 @@ before parsing the body, or catch the parse failure.
 | 500 | Unhandled exception — shouldn't happen for any documented flow; report as a bug | RFC 7807 |
 | 504 | Request exceeded `TIMEOUT_MS` (30s default) | RFC 7807 |
 
-**Not currently used by anything**: 204 (no endpoint returns an empty body —
-even `DELETE /api/item-organizations/:id` returns `200` with
-`data: null`), 401/403 (no auth yet, §1.6), 422 (the `AppError.unprocessable`
-factory exists in the codebase but nothing currently throws it).
+**Also used**: 401 (no session, or an invalid or expired one; §1.6) and 403 (the signed-in
+employee's role may not call the route; [`endpoints.md`](./endpoints.md) says who may call
+what), both RFC 7807. 204 is returned only by `DELETE /api/batch-vaccine-schedules/:id`;
+every other delete returns `200` with `data: null`.
+
+**Not used**: 422. The `AppError.unprocessable` factory exists, but nothing throws it.
 
 ### 1.4 Endpoints that return 201 (everything else returns 200)
 
@@ -286,7 +289,7 @@ Everything else below is still a real Prisma enum, fixed at deploy time:
 | Enum | Values |
 |---|---|
 | `UserRole` | `ADMIN`, `EMPLOYEE`, `CUSTOMER`, `SUPPLIER`, `DOCTOR` |
-| `EmployeeRoleNames` | `MANAGER`, `WORKER`, `INTERN` |
+| `EmployeeRoleNames` | *Not an enum any more.* Employee roles are a lookup table (`/api/employee-roles`, seeded `MANAGER`, `WORKER`, `INTERN`). Only `MANAGER` and `WORKER` are granted routes in `lib/permissions.ts`; a role with no rules can sign in but gets `403` on everything except `/auth` |
 | `SupplierRoleNames` | `SALES_MAN`, `OWNER`, `DISTRIBUTOR`, `DEALER`, `WHOLESALER`, `RETAILER`, `MANUFACTURER`, `IMPORTER`, `REPRESENTATIVE` |
 | Supplier supply categories | no longer a fixed enum — a string matching an active `SupplierSupplyCategory.code`; fetch valid values from `GET /api/supplier-supply-categories?active=true` (§6.8) |
 | `HouseType` | `BROODER`, `GROWER`, `LAYER` |
@@ -825,7 +828,7 @@ lines **by value** and added to the stock's average cost, so whatever consumes t
 its batch. Computed on read — a charge added later via `/charges` re-costs stock already used.
 `STOCK` expenses are left out of expense cost lines, the monthly expense figure, the expense
 breakdown and revenue-vs-expenses (they're inside stock cost), but still count as money paid and
-owed. Opening-balance purchases can't take charges (**400**).
+owed.
 `total_price` per line and `total_amount` for the purchase are computed
 server-side (`quantity × unit_price`, summed) — don't send them, they're not
 accepted by the request schema at all. `due_amount = total_amount -
@@ -1111,7 +1114,7 @@ employee's *current* `Employees.salary` as `baseline_salary`, computes
 
 ---
 
-### 12.1 Festival bonus
+### 12.3 Festival bonus
 
 All admin-only. Design: `docs/superpowers/specs/2026-09-30-festival-bonus-design.md`.
 The flow is propose, then commit; nothing is written until the second call.
@@ -1138,11 +1141,10 @@ payroll records.
 
 ## 13. Alerts
 
-Built as an **on-demand reconciliation scan**, not live hooks on every
-write — see `PROGRESS.md` Phase 13 for why. `POST /api/alerts/scan` is
-meant to be called periodically (there's no cron yet, so: on dashboard load,
-on a timer, or manually) — call it, don't expect alerts to appear the
-instant a triggering condition becomes true elsewhere in the API.
+Alerts come from a **reconciliation scan**, not live hooks on every write. The server
+runs it in the background every `ALERT_SCAN_INTERVAL_MS` (10 minutes by default, `0` turns
+it off), and `POST /api/alerts/scan` runs it on demand. Don't expect an alert the instant a
+condition becomes true elsewhere in the API: it appears on the next scan.
 
 | Method | Path | Status | Body / Query |
 |---|---|---|---|
@@ -1444,34 +1446,34 @@ unlike most list filters). Create → **400** if `from_instrument_id`,
 
 ## 16. Building the mobile app — role/permission notes
 
-`FEATURES.md` §3 has the full breakdown; the load-bearing points for
-implementation:
+`FEATURES.md` §3 has the full breakdown, and [`endpoints.md`](./endpoints.md) lists who may call
+every route. The server enforces it: `/api` is default-deny, and `lib/permissions.ts` is the
+only place that grants an employee anything. The load-bearing points:
 
-- **Intern**: read-only + environment readings + weight-sample assist. Don't
-  expose `POST /api/mortality-logs`, `/api/consumptions`,
-  `/api/medications`, `/api/vaccinations` in an Intern's UI at all — nothing
-  server-side blocks it today (no Auth/permissions yet, §1.6), but the
-  intended role boundary is enforced client-side until Phase 15 exists.
-- **Worker**: adds mortality/consumption/treatment logging (all of §7.4,
-  §9.1–9.2) on top of Intern.
-- **Manager**: adds `BatchHouseAllocation` (§7.2), `BatchFeedingProgram`
-  (§9.5), `PerformanceScoreEntry` (§12.1, scoring Workers/Interns), and the
-  two Manager-specific writes: `StockUnit.bind`/`relocate` (§6.4, receiving
-  deliveries in the field) and `InventoryAdjustment` (§6.7, reporting a
-  discrepancy found in the field).
-- **Every mobile write should generate `idempotency_key` client-side before
-  the first send attempt** (§1.12) — the whole point is surviving a flaky
-  connection retrying a queued write without double-inserting.
-- Purchases, Sales, Payments, Finance, and Admin/Employee management stay
-  web-dashboard-only — don't build mobile UI for any endpoint in §2, §3,
-  §8, §10, §11, or §15.
-- **Handle the 429 plain-text response** (§1.5) explicitly in the mobile
-  HTTP client's error path — a flaky-connection retry storm hitting the
-  rate limit is exactly the scenario this app's offline queue is built to
-  survive, and a client that assumes every error body is JSON will crash on
-  it.
+- **Worker** reads houses, batches, stock, tasks and alerts, and writes the daily logs
+  (mortality, weight, environment, consumption, treatment), completes tasks, confirms a due
+  vaccine by scanning the bottle (`POST /batch-vaccine-schedules/:id/confirm`), moves or uses
+  coded stock (`/stock-units/:id/relocate`, `/use`) and moves uncoded stock (`/stock-transfers`).
+- **Manager** does everything a Worker does, plus assigns tasks and scores people
+  (`/task-assignments`, `/performance-score-entries`), moves birds between houses
+  (`/batch-house-allocations`), sets feeding programs, files stock adjustments, raises and
+  resolves alerts, links codes to a purchase lot (`/stock-units/:id/bind`, `/purchase-items`),
+  disposes of or bulk-fixes units (`/stock-units/:id/dispose`, `/stock-units/bulk`), scans a QR
+  sale's bottles out (`/sale-scans`), and fixes or removes a wrong usage record (§19.4).
+- **Anything else is Admin only** and stays on the web dashboard: purchases, sales, payments,
+  finance, and admin and employee management (§2, §3, §8, §10, §11, §15). The two exceptions
+  are the money-free `/sale-scans` view and the `/purchase-items` lot picker.
+- A role with no rules (`INTERN` today) can sign in but gets `403` on everything except
+  `/auth`.
+- **Every mobile write should generate `idempotency_key` client-side before the first send
+  attempt** (§1.12): the whole point is surviving a flaky connection retrying a queued write
+  without double-inserting.
+- **Handle the 429 plain-text response** (§1.5) explicitly in the mobile HTTP client's error
+  path. A flaky-connection retry storm hitting the rate limit is exactly the scenario this
+  app's offline queue is built to survive, and a client that assumes every error body is JSON
+  will crash on it.
 
-## Paid at creation, and sales taking stock
+## 17. Paid at creation, and sales taking stock
 
 - `POST /sales`, `/bird-sales`, `/purchases` (and ingest confirm): when `paid_amount > 0` the request must name the
   account — `paid_to_instrument_id` for sales and bird sales, `paid_from_instrument_id` for purchases (**400**
@@ -1483,7 +1485,7 @@ implementation:
   ref `SALE`) in the sale's transaction; lines of one item are checked together. **409** when the warehouse holds
   less than is being sold. Unit-tracked items leave the ledger but their StockUnit status is still manual.
 
-## Account (self-service)
+## 18. Account (self-service)
 
 Any signed-in profile, under `/api/auth`:
 
@@ -1491,3 +1493,122 @@ Any signed-in profile, under `/api/auth`:
 - `PATCH /auth/account` — `name`, `mobile`, `address` (`""` clears it). Email is the login, so it is changed through `PATCH /admins/:id`.
 - `POST /auth/deactivate-account` `{ password }` — deactivates the caller (a profile is never deleted: every record it made points at it)
   and clears the session. **400** on a wrong password, or when the caller is the last active admin. An admin can reactivate.
+
+---
+
+## 19. Newer features, rules at a glance
+
+These areas shipped after the sections above were written. The request and response shapes
+for each route are in [`endpoints.md`](./endpoints.md); this section records the rules.
+
+### 19.1 Farm day and the settlement window
+
+- `GET` / `PATCH /api/farm-settings` (admin). `day_start_hour` (0 to 6) is the hour the farm's
+  day turns, on Dhaka time. Every daily figure goes through the farm-day helpers
+  (`lib/farm-day.ts`), so with a 04:00 start a record made at 02:00 belongs to the previous
+  farm day. The hour stops at 06:00 because a stored date (midnight UTC) is 06:00 in Dhaka.
+- `settlement_days` (0 to 60, default 7) is how long a **SOLD** batch stays open for late costs
+  and income (litter sold, a missed bottle turning up, a late bill). The background scan
+  loop moves a batch to **CLOSED** once `actual_end_date + settlement_days` has passed, and
+  `POST /api/batches/:id/finalize` does it early.
+- A **CLOSED** batch refuses new or changed money rows: consumption, expenses, and sales that
+  name it fail with **409** "Batch X is finalised". Payments against bird-sale dues stay
+  allowed, because that is cash collection, not profit and loss.
+- Equipment depreciation is charged when a batch becomes CLOSED, so equipment used during the
+  window is included.
+- `GET /api/houses/:id/batch-on?date=YYYY-MM-DD` returns the batch that occupied a house on a
+  farm day. The server uses the same lookup when a consumption has a house and date but no
+  batch, instead of trusting the phone.
+
+### 19.2 Vaccine schedules
+
+- Templates (`/api/vaccine-templates`) and purposes (`/api/vaccine-purposes`, a lookup such as
+  Gumboro or Ranikhet) are admin-managed. A schedule row is **day + purpose + method**, never a
+  product, so a template outlives a change of brand. Methods: `EYE_DROP`, `NASAL_DROP`,
+  `DRINKING_WATER`, `MUSCLE_INJECTION`, `NECK_INJECTION`, `SPRAY`.
+- `POST /api/batch-vaccine-schedules/apply` copies a template onto a batch. Planning (add,
+  edit, `reschedule`, `cancel`, delete) is **admin only**, and reschedule and cancel need a
+  `reason`. A row is `PENDING`, `DONE` or `CANCELLED`.
+- **Confirming a dose is floor work** (worker and up): `POST .../:id/confirm` with
+  `{ idempotency_key, house_id, bottles: [{ stock_unit_id }] }`. Every bottle must be in that
+  house, each is used up, and the confirmation is recorded as the consumption. Houses that
+  share a drinking-water line (`shares_water_with` on a house) drank the same water, so they
+  are confirmed together.
+
+### 19.3 Disease cases
+
+- A case is one outbreak of one disease in one batch: `/api/disease-cases`, with the disease
+  picked from the `/api/diseases` lookup. Workers and managers read; **writes are admin only**.
+- Fields: `severity` (`LOW`, `MEDIUM`, `HIGH`), `diagnosis_method` (`FIELD`, `POST_MORTEM`,
+  `LAB`), one or more houses of that batch, optional symptoms, affected count and doctor.
+- Resolving a case (`status: "RESOLVED"`) needs `resolved_on` and an `outcome` (`RECOVERED`,
+  `CULLED`, `SOLD_EARLY`); reopening clears both. Creating a case on a CLOSED batch is refused.
+- `POST /medications` and `POST /mortality-logs` accept an optional `disease_case_id`, which
+  must belong to the same batch. Deleting a case keeps those rows and clears the link, and
+  writes an audit snapshot.
+- Each ACTIVE case raises one alert (`HIGH` is critical, anything else a warning) that
+  resolves with the case.
+
+### 19.4 Fix usage
+
+A wrong consumption is corrected in place, not with a compensating record, so every report
+that reads consumption stays right and the record keeps its id (and its links to treatments
+and the vaccine schedule).
+
+- `PATCH /api/consumptions/:id` with `quantity?`, `unit?`, `stock_unit_id?`, `date?` and a
+  required `reason`; `POST /api/consumptions/:id/remove` with a `reason`. **Manager and admin.**
+  The record is marked as fixed (who, when, why) and the audit log keeps the full before and
+  after. The house cannot be changed: remove the record and record it again.
+- The batch must not be CLOSED. A date fix re-resolves the batch for the new date; if that is a
+  different batch it must be open too, and a use that confirmed a vaccine row cannot change
+  batch.
+- For stock without codes, the house only has to cover the *increase*; a decrease always
+  passes and returns stock to the house. A fix can't date a use in the future.
+- Online only: it checks live stock, so mobile does not queue it.
+
+### 19.5 Sale kinds and sale scans
+
+- `POST /api/sales` takes a `kind`: `CODED` (QR-tracked bottles, recorded as a count), `STOCK`
+  (bought, uncoded stock such as feed or husk; needs `warehouse_id`, and the amount leaves that
+  warehouse when the sale is saved) or `FARM_MADE` (litter and the like, never stocked).
+  A request without `kind` is treated as `STOCK`.
+- `GET /api/sales/sellable?kind=` lists what the form can offer: sealed bottles per item for
+  `CODED`, one warehouse's balance for `STOCK`.
+- A `CODED` sale's bottles leave stock **one scan at a time on mobile**:
+  `GET /api/sale-scans` lists sales still waiting, and `POST /api/sale-scans/:id/scan` takes
+  `{ stock_unit_id }`. Managers see this money-free view; they never read `/sales` itself.
+
+### 19.6 Stock units: counting, bulk fixes and uncoded transfers
+
+- `POST /api/stock-units/bulk` applies one `action` (`FINISH`, `START`, `MOVE`, `RETURN`,
+  `DISPOSE`) to many units, each with its own `idempotency_key`. It is manager-level because it
+  can dispose. This is what the mobile stock count uses to settle missing units in one call.
+- `POST /api/stock-units/:id/use` accepts `move_here` so a unit found in the wrong place is
+  moved and used in one atomic step. `GET /api/stock-units/at-location` returns the units a
+  location is expected to hold (the list a count checks against), and
+  `GET /api/stock-units/:id/profile` returns everything about one code, from purchase to last
+  use (the "look up a code" screen).
+- `POST /api/stock-transfers` is the uncoded counterpart of a relocation: feed, husk and other
+  bulk stock moved or returned by quantity. Worker level.
+
+### 19.7 Devices and PoultryScale ingest
+
+- An admin issues a pairing code for a profile (`POST /api/devices/pairing-codes`). The
+  scale phone redeems it at `POST /api/ingest/v1/pair` with `{ code, device_label, platform? }`
+  and receives a device token. A code is single-use and lasts 10 minutes. The token is stored
+  hashed, and `POST /api/devices/:id/revoke` cuts the device off.
+- The scale posts finished sales to `POST /api/ingest/v1/sales` with the device token. They wait
+  in a staging queue: an admin reads it (`GET /api/ingest/v1/sales?status=`), then **confirms**
+  one into a real bird sale (adding batch, house, grade, weights and price) or **dismisses** it
+  with a reason.
+- The path is versioned (`/v1`) because scale builds in the field cannot be updated over the
+  air. v1 never breaks.
+
+### 19.8 Employee roles
+
+`/api/employee-roles` is a lookup like the others in §6.8 (list, create, update,
+deactivate, reactivate, delete), with one extra required field: `reference_salary`, the
+standard salary for the role. Payroll uses it for anyone in the role who has no personal
+`reference_salary` of their own. The role's `code` is derived from its label once, at create,
+and is never regenerated on rename, because employees point at the code. Creating a role does
+not grant it any route: access comes only from `lib/permissions.ts`.

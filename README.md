@@ -34,6 +34,7 @@ This API is the single source of truth for the three FMS clients:
 - [API conventions](#api-conventions)
 - [Authentication and permissions](#authentication-and-permissions)
 - [Adding a resource](#adding-a-resource)
+- [Contributing](#contributing)
 - [Deployment](#deployment)
 - [Documentation](#documentation)
 
@@ -41,16 +42,16 @@ This API is the single source of truth for the three FMS clients:
 
 | Domain | Highlights |
 | --- | --- |
-| **Flocks** | Batches placed across houses, transfers between houses, mortality, weight, environment, feeding programs, treatments, vaccine schedules from templates, bird sales per house |
+| **Flocks** | Batches placed across houses, transfers between houses, mortality, weight, environment, feeding programs, treatments, vaccine schedules from templates, disease cases, bird sales per house, and a settlement window after the sale for late costs and income |
 | **Inventory** | Item catalog with unit conversions, warehouses, purchases with landed cost (charges split by value), a double-entry stock ledger, transfers, adjustments, consumption |
-| **QR-coded stock** | Every bottle of medicine or vaccine gets a printed code: provision → print → bind to a purchase lot → move to a house → start using → consumed, each step audited |
+| **QR-coded stock** | Every bottle of medicine or vaccine gets a printed code: provision → print → bind to a purchase lot → move to a house → start using → consumed, each step audited. A stock count settles missing units in bulk, and a wrong usage record can be fixed in place |
 | **Assets** | Equipment registered from coded units, depreciated per batch |
 | **Money** | Sales and bird sales, payments against payables/receivables, payment instruments, expenses, a cash book and a cost book |
 | **People** | Employees and roles, tasks and assignments, performance points, monthly payroll (−10% / +20% performance clamp), bonuses, payouts |
 | **Operations** | Rule-based alerts (scanned every 10 minutes) and a notifications inbox, an append-only audit log, analytics endpoints for every dashboard chart |
 | **Farm day** | The farm's day turns at a configurable hour on Dhaka time; all daily logic goes through one set of helpers |
 
-66 Prisma models, 58 migrations, ~60 resource routers under `/api`.
+68 Prisma models, 66 migrations, and 317 endpoints in 63 resource groups under `/api`. The full list, with who may call each route, is in [`docs/endpoints.md`](docs/endpoints.md).
 
 ## Architecture
 
@@ -147,12 +148,16 @@ Every variable is validated at startup ([`src/config/env.ts`](src/config/env.ts)
 | `bun run format` / `format:check` | Prettier |
 | `bun run db:migrate` | Create/apply migrations in development (`prisma migrate dev`) |
 | `bun run db:generate` | Regenerate the Prisma client |
+| `bun run db:push` | Push the schema without a migration (throwaway databases only) |
+| `bun run build` | Bundle to `index.js` for Node (`--target node`) |
+| `bun run dev:node` / `start:node` | Run on Node (via `tsx`) instead of Bun |
 | `bun run auth:set-password <email>` | Issue a temporary password |
+| `bun run docs:endpoints` | Regenerate [`docs/endpoints.md`](docs/endpoints.md) from the routes, validators and permission rules |
 
 ## Testing and simulations
 
 ```bash
-bun test                                # ~640 tests across 80 files
+bun test                                # 700+ tests across 85 files
 bun test src/services/purchase.service.test.ts
 ```
 
@@ -204,7 +209,7 @@ Validation failures are `400` with per-field messages in `extensions`. Services 
 - **Email + password** for admins and employees. New accounts and resets get a temporary password, and a change is forced before anything else works.
 - **Sessions are signed tokens**, sent as the `fms_session` cookie by the dashboard and as `Authorization: Bearer` by the mobile app (web 7 days, mobile 30 days). The profile is re-read on every request, so deactivating someone or changing their password cuts off their existing sessions immediately.
 - **Default deny.** Every `/api` route needs a session except login, logout and the scale-device endpoints, which authenticate with a device key instead.
-- **Roles:** `ADMIN` can do everything. Employees are `MANAGER` or `WORKER`, and [`src/lib/permissions.ts`](src/lib/permissions.ts) lists exactly which routes each may call.
+- **Roles:** `ADMIN` can do everything. Employee roles are a lookup (`/api/employee-roles`), and [`src/lib/permissions.ts`](src/lib/permissions.ts) lists exactly which routes `MANAGER` and `WORKER` may call. A role with no rules (such as `INTERN`) can sign in but is denied everything else. [`docs/endpoints.md`](docs/endpoints.md) shows the result per route.
 
 ## Adding a resource
 
@@ -214,6 +219,10 @@ Validation failures are `400` with per-field messages in `extensions`. Services 
 4. **Routes** `src/routes/thing.routes.ts`: `thingRoutes.post("/", zValidatorRfc7807("json", createThingSchema), ThingController.create)`.
 5. **Mount** it in `src/routes/index.ts`, and **grant** employee access in `src/lib/permissions.ts` if field staff need it.
 6. **Schema change?** Edit `prisma/schema.prisma`, then `bun run db:migrate --name what_changed`.
+
+## Contributing
+
+Work on a branch, not on `main`. Before merging, run `bun run typecheck` and the tests for what you changed, against a local database. Commit messages follow [Conventional Commits](https://www.conventionalcommits.org): `feat(scope): …`, `fix(scope): …`, `docs: …`. If you add or change a route, run `bun run docs:endpoints` and commit the result.
 
 ## Deployment
 
@@ -231,10 +240,14 @@ Production `.env` lives only on the server: set `NODE_ENV=production`, `TRUST_PR
 | --- | --- |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | Feature set by role and page, and the permission matrix |
 | [`docs/system-design-arc.md`](docs/system-design-arc.md) | System design and the reasoning behind the schema |
-| [`docs/api.md`](docs/api.md) | Endpoint reference with examples |
+| [`docs/endpoints.md`](docs/endpoints.md) | Every route: who may call it, its status and its inputs (generated) |
+| [`docs/api.md`](docs/api.md) | API conventions, field meanings, error cases and the rules of each feature |
+| [`docs/PROGRESS.md`](docs/PROGRESS.md) | What is built, and what is deliberately not |
 | [`docs/inventory-tracking-design.md`](docs/inventory-tracking-design.md) | QR-coded units, lots and the stock ledger |
 | [`docs/batch-management-design.md`](docs/batch-management-design.md) | Batches, houses, transfers, mortality |
 | [`docs/employee-payroll-design.md`](docs/employee-payroll-design.md) · [`docs/payroll-ledger-bridge.md`](docs/payroll-ledger-bridge.md) | Points, payroll, payouts and the ledgers |
 | [`docs/finance-page-design.md`](docs/finance-page-design.md) · [`docs/analytics-dashboard-design.md`](docs/analytics-dashboard-design.md) | What the dashboard's finance and analytics endpoints compute |
-| [`docs/SETUP.md`](docs/SETUP.md) · [`docs/contracts/`](docs/contracts/) | Setup details, response and error contracts |
+| [`docs/batches-redesign-design.md`](docs/batches-redesign-design.md) · [`docs/full-schema-analysis.md`](docs/full-schema-analysis.md) | The batches page redesign, and the schema deltas and why |
+| [`docs/SETUP.md`](docs/SETUP.md) · [`docs/contracts/`](docs/contracts/) | Setup and request lifecycle, response and error contracts |
 | [`docs/audit/`](docs/audit/) | Database audit: findings, fix plan, verification |
+| `docs/*-sim-report.md` | Output of the lifecycle and inventory simulations (see above) |
