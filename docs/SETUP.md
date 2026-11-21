@@ -13,9 +13,9 @@ bun run dev          # http://localhost:5085
 ### Node.js
 
 ```bash
-npm install          # installs deps + runs prisma generate (postinstall)
-npm run db:migrate   # run migrations
-npm run dev:node     # http://localhost:5085
+npm install                # installs deps + runs prisma generate (postinstall)
+npx prisma migrate dev     # run migrations (the `db:migrate` script calls bunx)
+npm run dev:node           # http://localhost:5085
 ```
 
 ---
@@ -31,44 +31,17 @@ const port = env.PORT; // ✅ typed, validated
 
 ### Variables
 
-| Variable               | Type                                      | Default                                               | Description                  |
-| ---------------------- | ----------------------------------------- | ----------------------------------------------------- | ---------------------------- |
-| `PORT`                 | `number`                                  | `5085`                                                | Server port                  |
-| `NODE_ENV`             | `"development" \| "production" \| "test"` | `"development"`                                       | Runtime environment          |
-| `DATABASE_URL`         | `string`                                  | `postgresql://postgres:postgres@localhost:5432/bhaze` | PostgreSQL connection string |
-| `ALLOWED_ORIGINS`      | `string`                                  | `http://localhost:5085,http://localhost:5173`         | Comma-separated CORS origins |
-| `CORS_CREDENTIALS`     | `boolean`                                 | `true`                                                | Allow credentials            |
-| `RATE_LIMIT_MAX`       | `number`                                  | `120`                                                 | Max requests per window      |
-| `RATE_LIMIT_WINDOW_MS` | `number`                                  | `60000`                                               | Window duration (ms)         |
-| `TIMEOUT_MS`           | `number`                                  | `30000`                                               | Request timeout (ms)         |
-| `CSRF_ENABLED`         | `boolean`                                 | `true`                                                | CSRF protection (off in dev) |
-| `SESSION_SECRET`       | `string` (32+ chars)                      | _required_                                            | Signs login tokens. Generate with `openssl rand -base64 48` |
-| `TRUST_PROXY`          | `boolean`                                 | `false`                                               | Believe `X-Forwarded-For` for rate limiting. Only behind a proxy that overwrites it |
+The full list, with the default and purpose of each, is the Configuration table in the
+[README](../README.md#configuration). [`.env.example`](../.env.example) is a ready-to-copy
+template:
 
-### .env File
-
-```env
-# ─── Server ────────────────────────────────────────────────────────────────────
-PORT=5085
-NODE_ENV=development
-
-# ─── Database ──────────────────────────────────────────────────────────────────
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bhaze
-
-# ─── CORS ──────────────────────────────────────────────────────────────────────
-ALLOWED_ORIGINS=http://localhost:5085,http://localhost:5173
-CORS_CREDENTIALS=true
-
-# ─── Rate Limiting ─────────────────────────────────────────────────────────────
-RATE_LIMIT_MAX=120
-RATE_LIMIT_WINDOW_MS=60000
-
-# ─── Security ──────────────────────────────────────────────────────────────────
-TIMEOUT_MS=30000
-CSRF_ENABLED=true
-SESSION_SECRET=<openssl rand -base64 48>
-TRUST_PROXY=false
+```bash
+cp .env.example .env
 ```
+
+Fill in `DATABASE_URL` and `SESSION_SECRET` (32+ characters: `openssl rand -base64 48`). The five
+`CLOUDINARY_*` values are also required, because the server exits at startup without them.
+Everything else has a development default.
 
 ### Adding a New Variable
 
@@ -81,7 +54,7 @@ const envSchema = z.object({
 });
 ```
 
-2. Add it to `.env`:
+2. Add it to `.env` and to `.env.example`:
 
 ```env
 MY_NEW_VAR=default-value
@@ -122,7 +95,7 @@ If a required variable is missing or invalid, the server exits immediately:
 
 - **Never commit `.env` to version control** — it's in `.gitignore`
 - **Use `.env.local`** for local overrides (also gitignored)
-- **Use platform env vars** in production (Vercel, Railway, etc.)
+- **In production** the `.env` lives only on the server and is never copied from the repo (see the README's Deployment section)
 - **Secrets** — `DATABASE_URL` contains credentials; treat as sensitive
 
 ---

@@ -12,18 +12,20 @@ current source of truth, not just a reference.
 | Role               | Client        | Schema role(s)                                      |
 | ------------------ | ------------- | --------------------------------------------------- |
 | Owner/Admin        | Web dashboard | `UserRole.ADMIN` (flat — no owner/admin tier split) |
-| Employee — Manager | Mobile app    | `UserRole.EMPLOYEE` + `EmployeeRoleNames.MANAGER`   |
-| Employee — Worker  | Mobile app    | `UserRole.EMPLOYEE` + `EmployeeRoleNames.WORKER`    |
-| Employee — Intern  | Mobile app    | `UserRole.EMPLOYEE` + `EmployeeRoleNames.INTERN`    |
+| Employee — Manager | Mobile app    | `UserRole.EMPLOYEE` + role `MANAGER`   |
+| Employee — Worker  | Mobile app    | `UserRole.EMPLOYEE` + role `WORKER`    |
+| Employee — Intern  | Mobile app    | `UserRole.EMPLOYEE` + role `INTERN`    |
 
 Suppliers, Customers, and Doctors have **no login/portal** — they are records
 managed by Admins/Employees (purchase counterparties, sale counterparties,
 treatment prescribers). Revisit if a self-service supplier/customer portal
 becomes a real need.
 
-Auth/permission enforcement is not yet built (schema-ready only, per
-`system-design-arc.md` §7) — the role/permission breakdown below is the spec
-for that layer, not a description of what exists today.
+Sign-in and permissions are built. Everyone signs in with email and password, and
+`src/lib/permissions.ts` enforces the matrix in §3.5 (default deny); the result per route is
+generated in [`endpoints.md`](./endpoints.md). Employee roles are a lookup table, and only
+Manager and Worker are granted routes today, so an Intern can sign in but cannot yet do
+anything (§3.4).
 
 ---
 
@@ -125,7 +127,8 @@ module.
   status (ACTIVE/RETIRED/DISPOSED), per-batch `AssetDepreciation` history,
   assign to a batch/house.
 - **Stock ledger** (aggregate items — feed at warehouse level): IN/OUT
-  movement log filtered by item/date/reason; record an opening balance.
+  movement log filtered by item/date/reason. Stock enters only through purchases; there are
+  no opening balances.
 - **Inventory adjustments**: correction entries (`quantity_before/after`,
   `reason`, `note`) — audited.
 - **Warehouses**: CRUD storage locations.
@@ -294,7 +297,8 @@ exist and who can use them.
 
 ### 3.1 Common to all Employees (Worker, Intern, Manager)
 
-- **Login** by mobile number (`Profiles.mobile`, unique).
+- **Login** by email and password. New accounts and resets get a temporary password, and a
+  change is forced at first sign-in.
 - **Home**: today's assigned houses/batches, unresolved alerts relevant to
   them, quick-action shortcuts.
 - **QR scan**: camera scan of a `StockUnit` code → resolves to bind/consume
@@ -350,6 +354,10 @@ Supervisory + structural actions:
 
 ### 3.4 Intern (subset of §3.1 — entry-level, supervised)
 
+> **Not granted yet.** The role exists and an Intern can sign in, but `lib/permissions.ts` has
+> no rules for it, so every route except `/auth` answers `403`. What follows is the intended
+> scope.
+
 Deliberately the most restricted, since mortality/consumption/treatment
 entries carry financial and accountability weight an unsupervised new hire
 shouldn't own yet:
@@ -361,6 +369,9 @@ shouldn't own yet:
 - Everything else is read-only (§3.1).
 
 ### 3.5 Permission matrix
+
+The Intern column is the intended scope; the server grants an Intern nothing today. For the
+exact per-route result, see [`endpoints.md`](./endpoints.md).
 
 | Action                                 | Intern | Worker | Manager | Admin |
 | -------------------------------------- | ------ | ------ | ------- | ----- |
@@ -386,15 +397,19 @@ shouldn't own yet:
 
 - **Accountability**: every entry-level table names its actor
   (`recorded_by_id` / `given_by_id` / `administered_by_id` / `bound_by_id`).
-  Append-only tables (`Consumption`, `MortalityLog`, `BatchHouseAllocation`,
-  `PerformanceScoreEntry`, `StockLedger`, `Purchase`/`PurchaseItem`, sales,
-  payments) are never edited at the application layer — a correction is a
-  new offsetting row, not a mutation.
+  Append-only tables (`MortalityLog`, `BatchHouseAllocation`,
+  `PerformanceScoreEntry`, `StockLedger`, sales, payments) are not edited at
+  the application layer — a correction is a new offsetting row, not a
+  mutation. The exceptions are deliberate and audited: a wrong purchase is
+  removed with a full snapshot in the audit log (refused once its stock has
+  been used), and a wrong `Consumption` is fixed in place by a manager, marked
+  as fixed with a reason, because every report reads it directly
+  (`api.md` §19.4).
 - **Soft-delete only**: `is_active` flags on `Profiles`/`Item`/`Customers`/
   `Suppliers` — nothing with history attached gets hard-deleted.
-- **Audit trail**: `AuditLog` covers the mutable tables (Item, Batches,
-  Employees, StockUnit status/location); a Prisma middleware writing it
-  automatically is the recommended mechanism over scattered manual calls.
+- **Audit trail**: `AuditLog` is append-only at the database. Services write it
+  explicitly through `lib/audit.ts` when they change a sensitive row; the
+  coverage is listed in `PROGRESS.md`.
 
 ## 5. Open items (tracked, not blocking this doc)
 
@@ -405,6 +420,34 @@ model:
 
 - Bird-days shared-cost allocation formula — v2, needs real overlapping-batch
   data to validate against.
-- Auth/role enforcement layer — schema and this permission matrix are ready;
-  no middleware/guard code exists yet.
 - Field App offline sync — designed in `mobile/docs/offline-sync.md` and built (outbox, `idempotency_key` retries).
+
+## 6. Added since this spec was written
+
+Built after the sections above, with the rules in [`api.md`](./api.md) §19 and the routes in
+[`endpoints.md`](./endpoints.md):
+
+- **Vaccine schedules.** Templates of day + purpose + method, applied to a batch. A worker
+  confirms a due dose by scanning the bottle, which records the consumption. Planning is
+  admin only (§19.2).
+- **Disease cases.** One outbreak of one disease in one batch, linked to the treatments and
+  deaths it caused, with an alert while it is active. Admins record, workers read (§19.3).
+- **Settlement window.** A sold batch stays open for late costs and income (default 7 days), then
+  closes and its numbers are final. A closed batch refuses new money rows (§19.1).
+- **Farm day.** The day turns at a configurable hour (0 to 6) on Dhaka time (§19.1).
+- **Fix usage.** A manager or admin corrects or removes a wrong usage record in place, with a
+  reason (§19.4).
+- **Sale kinds and sale scans.** A sale is for QR bottles, bought stock or farm-made goods. QR
+  bottles are scanned out on mobile one at a time (§19.5). Sales and purchases take flat or
+  percent discounts, and purchases split extra charges across their lines (landed cost).
+- **Stock count and bulk fixes.** A manager counts a location by scanning and settles the
+  missing units in one call. Uncoded stock moves through `/stock-transfers` (§19.6).
+- **Shared water line.** Houses on one drinker line share a batch and are vaccinated together.
+- **Start weight.** A batch's start weight is its Day-1 weight record; there is no separate
+  field.
+- **Notifications inbox.** Each person's alerts and notices, with read and unread counts.
+- **PoultryScale ingest.** A paired scale device posts finished sales into a staging queue that
+  an admin confirms or dismisses (§19.7).
+- **Employee roles as data.** Roles and their standard salary are managed in Settings (§19.8).
+- **Festival bonus and payout accounts.** Bonus events with a propose-then-commit flow, and
+  per-employee payout accounts with a fee schedule (§12.3).

@@ -1,7 +1,8 @@
 # Full Schema — Analysis
 
-Companion to `codes/schema.prisma` (validated with `prisma validate`). Base is
-`codes/previous_schema.prisma`; this documents every delta and why.
+Companion to `prisma/schema.prisma`. This documents every delta from the original schema and
+why. It is the design-time analysis from August 2026; the live schema has moved on since (see
+`git log -- prisma/schema.prisma`).
 
 ## Removed (dead or superseded)
 

@@ -1,6 +1,6 @@
 # Inventory Unit Tracking — Design Doc
 
-Status: Approved. Standalone — no need to cross-reference `codes/previous_schema.prisma`.
+Status: Approved and built. Standalone. The live schema is `prisma/schema.prisma`; where this doc and the schema differ, the schema wins.
 
 ## Problem
 
@@ -112,8 +112,10 @@ enum StockReason {
   CONSUMPTION
   WASTAGE
   EXPIRED
+  SALE
   ADJUSTMENT
-  OPENING_BALANCE
+  // The original design also had OPENING_BALANCE. It was removed on 2026-11-01:
+  // stock now enters only through purchases.
 }
 
 enum LocationType {
