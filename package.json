@@ -21,6 +21,7 @@
         "prisma",
         "postgresql"
     ],
+    "license": "Apache-2.0",
     "module": "index.ts",
     "main": "index.js",
     "type": "module",
